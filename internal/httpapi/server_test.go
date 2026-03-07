@@ -303,7 +303,7 @@ func setupHTTPHandler(t *testing.T, authCfg ...AuthConfig) (http.Handler, string
 	workspaceManager := workspaceadapter.NewLocalManager(workspaceRoot)
 	catalog := tooladapter.NewCatalog(tooladapter.DefaultCapabilities())
 	commandRunner := tooladapter.NewLocalCommandRunner()
-	handlers := []tooladapter.Handler{
+	handlers := []tooladapter.Handler{ //nolint:prealloc // k8s handlers appended conditionally via build tags
 		tooladapter.NewFSListHandler(commandRunner),
 		tooladapter.NewFSReadHandler(commandRunner),
 		tooladapter.NewFSWriteHandler(commandRunner),

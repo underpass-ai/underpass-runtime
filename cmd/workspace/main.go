@@ -86,7 +86,7 @@ func main() {
 		logger.Error("failed to initialize command runner", "error", err)
 		os.Exit(1)
 	}
-	handlers := []tooladapter.Handler{
+	handlers := []tooladapter.Handler{ //nolint:prealloc // k8s handlers appended conditionally via build tags
 		tooladapter.NewFSListHandler(commandRunner),
 		tooladapter.NewFSReadHandler(commandRunner),
 		tooladapter.NewFSWriteHandler(commandRunner),
