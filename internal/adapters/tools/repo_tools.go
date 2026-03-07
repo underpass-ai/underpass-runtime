@@ -65,7 +65,7 @@ func (h *RepoDetectProjectTypeHandler) Name() string {
 func (h *RepoDetectProjectTypeHandler) Invoke(ctx context.Context, session domain.Session, args json.RawMessage) (app.ToolRunResult, *domain.Error) {
 	if len(args) > 0 {
 		var payload map[string]any
-		if err := json.Unmarshal(args, &payload); err != nil {
+		if json.Unmarshal(args, &payload) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.detect_project_type args",
@@ -114,7 +114,7 @@ func (h *RepoBuildHandler) Invoke(ctx context.Context, session domain.Session, a
 		ExtraArgs []string `json:"extra_args"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.build args",
@@ -199,7 +199,7 @@ func (h *RepoRunTestsHandler) Invoke(ctx context.Context, session domain.Session
 		ExtraArgs []string `json:"extra_args"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.run_tests args",

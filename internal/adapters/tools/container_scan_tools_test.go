@@ -27,24 +27,16 @@ const (
 	testExpected2FindingsFmt   = "expected 2 findings, got %d"
 )
 
-func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testing.T) {
-	root := t.TempDir()
-	dockerfile := "FROM alpine:latest\nRUN curl -sSL https://example.com/install.sh | sh\n"
-	if err := os.WriteFile(filepath.Join(root, testDockerfileName), []byte(dockerfile), 0o644); err != nil {
-		t.Fatalf(testWriteDockerfileFailed, err)
-	}
-
-	runner := &fakeSWERuntimeCommandRunner{
+func trivyFallbackRunner(t *testing.T, trivyResult app.CommandResult, trivyErr error, dockerfile string) *fakeSWERuntimeCommandRunner {
+	t.Helper()
+	return &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, spec app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0:
 				if spec.Command != testCommandTrivy {
 					t.Fatalf("expected first command trivy, got %q", spec.Command)
 				}
-				return app.CommandResult{
-					ExitCode: 127,
-					Output:   "sh: 1: trivy: not found",
-				}, errors.New("exit 127")
+				return trivyResult, trivyErr
 			case 1:
 				if spec.Command != "find" {
 					t.Fatalf("expected second command find, got %q", spec.Command)
@@ -61,6 +53,37 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testi
 			}
 		},
 	}
+}
+
+func assertHeuristicFallbackResult(t *testing.T, runner *fakeSWERuntimeCommandRunner, result app.ToolRunResult, err *domain.Error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("unexpected security.scan_container error: %#v", err)
+	}
+	if len(runner.calls) != 3 {
+		t.Fatalf("expected three runner calls, got %d", len(runner.calls))
+	}
+	output := result.Output.(map[string]any)
+	if output[testOutputKeyScanner] != testScannerHeuristic {
+		t.Fatalf("expected heuristic scanner, got %#v", output[testOutputKeyScanner])
+	}
+	if output[testOutputKeyFindings] == 0 {
+		t.Fatalf("expected findings_count > 0, got %#v", output[testOutputKeyFindings])
+	}
+}
+
+func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testing.T) {
+	root := t.TempDir()
+	dockerfile := "FROM alpine:latest\nRUN curl -sSL https://example.com/install.sh | sh\n"
+	if err := os.WriteFile(filepath.Join(root, testDockerfileName), []byte(dockerfile), 0o644); err != nil {
+		t.Fatalf(testWriteDockerfileFailed, err)
+	}
+
+	runner := trivyFallbackRunner(t,
+		app.CommandResult{ExitCode: 127, Output: "sh: 1: trivy: not found"},
+		errors.New("exit 127"),
+		dockerfile,
+	)
 	handler := NewSecurityScanContainerHandler(runner)
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
@@ -69,20 +92,7 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testi
 		"max_findings":        10,
 		testSeverityThreshold: testSeverityMedium,
 	}))
-	if err != nil {
-		t.Fatalf("unexpected security.scan_container error: %#v", err)
-	}
-	if len(runner.calls) != 3 {
-		t.Fatalf("expected three runner calls, got %d", len(runner.calls))
-	}
-
-	output := result.Output.(map[string]any)
-	if output[testOutputKeyScanner] != testScannerHeuristic {
-		t.Fatalf("expected heuristic scanner, got %#v", output[testOutputKeyScanner])
-	}
-	if output[testOutputKeyFindings] == 0 {
-		t.Fatalf("expected findings_count > 0, got %#v", output[testOutputKeyFindings])
-	}
+	assertHeuristicFallbackResult(t, runner, result, err)
 }
 
 func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t *testing.T) {
@@ -93,33 +103,11 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t 
 	}
 
 	trivyNoFindings := `{"Results":[{"Target":"go.mod","Class":"lang-pkgs","Type":"gomod"}]}`
-	runner := &fakeSWERuntimeCommandRunner{
-		run: func(callIndex int, spec app.CommandSpec) (app.CommandResult, error) {
-			switch callIndex {
-			case 0:
-				if spec.Command != testCommandTrivy {
-					t.Fatalf("expected first command trivy, got %q", spec.Command)
-				}
-				return app.CommandResult{
-					ExitCode: 0,
-					Output:   trivyNoFindings,
-				}, nil
-			case 1:
-				if spec.Command != "find" {
-					t.Fatalf("expected second command find, got %q", spec.Command)
-				}
-				return app.CommandResult{ExitCode: 0, Output: testFindDockerfileOut}, nil
-			case 2:
-				if spec.Command != "cat" {
-					t.Fatalf("expected third command cat, got %q", spec.Command)
-				}
-				return app.CommandResult{ExitCode: 0, Output: dockerfile}, nil
-			default:
-				t.Fatalf("unexpected command call index %d", callIndex)
-				return app.CommandResult{}, nil
-			}
-		},
-	}
+	runner := trivyFallbackRunner(t,
+		app.CommandResult{ExitCode: 0, Output: trivyNoFindings},
+		nil,
+		dockerfile,
+	)
 	handler := NewSecurityScanContainerHandler(runner)
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
@@ -128,20 +116,7 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t 
 		"max_findings":        10,
 		testSeverityThreshold: testSeverityMedium,
 	}))
-	if err != nil {
-		t.Fatalf("unexpected security.scan_container error: %#v", err)
-	}
-	if len(runner.calls) != 3 {
-		t.Fatalf("expected three runner calls, got %d", len(runner.calls))
-	}
-
-	output := result.Output.(map[string]any)
-	if output[testOutputKeyScanner] != testScannerHeuristic {
-		t.Fatalf("expected heuristic scanner, got %#v", output[testOutputKeyScanner])
-	}
-	if output[testOutputKeyFindings] == 0 {
-		t.Fatalf("expected findings_count > 0, got %#v", output[testOutputKeyFindings])
-	}
+	assertHeuristicFallbackResult(t, runner, result, err)
 }
 
 func TestSecurityScanContainerHandler_InvalidSeverity(t *testing.T) {

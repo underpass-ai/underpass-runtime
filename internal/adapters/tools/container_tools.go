@@ -205,7 +205,7 @@ func (h *ContainerPSHandler) Invoke(ctx context.Context, session domain.Session,
 		Limit: containerPSDefaultLimit,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid container.ps args",
@@ -332,7 +332,7 @@ func (h *ContainerRunHandler) Invoke(ctx context.Context, session domain.Session
 		Remove: false,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid container.run args",
@@ -552,7 +552,7 @@ func (h *ContainerLogsHandler) Invoke(ctx context.Context, session domain.Sessio
 		MaxBytes:  containerDefaultMaxLogBytes,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid container.logs args",
@@ -635,7 +635,7 @@ func (h *ContainerExecHandler) Invoke(ctx context.Context, session domain.Sessio
 		MaxOutputBytes: containerDefaultMaxExecBytes,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid container.exec args",

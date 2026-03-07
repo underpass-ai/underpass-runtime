@@ -77,7 +77,7 @@ func (h *NATSRequestHandler) Invoke(ctx context.Context, session domain.Session,
 		MaxBytes:        65536,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid nats.request args",
@@ -164,7 +164,7 @@ func (h *NATSPublishHandler) Invoke(ctx context.Context, session domain.Session,
 		MaxBytes:        65536,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid nats.publish args",
@@ -260,7 +260,7 @@ func (h *NATSSubscribePullHandler) Invoke(ctx context.Context, session domain.Se
 		TimeoutMS:   2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid nats.subscribe_pull args",

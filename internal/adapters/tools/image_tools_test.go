@@ -171,6 +171,32 @@ func TestImageBuildHandler_UsesBuilderWhenAvailable(t *testing.T) {
 	}
 }
 
+// assertSyntheticBuildOutput validates common synthetic build output fields.
+func assertSyntheticBuildOutput(t *testing.T, output map[string]any) {
+	t.Helper()
+	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
+		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
+	}
+	if output[testImageKeySimulated] != true {
+		t.Fatalf(testImageFmtSimulatedTrue, output[testImageKeySimulated])
+	}
+	if output[testImageKeyExitCode] != 0 {
+		t.Fatalf(testImageFmtExitCode0, output[testImageKeyExitCode])
+	}
+}
+
+// assertSyntheticPushOutput validates common synthetic push output fields.
+func assertSyntheticPushOutput(t *testing.T, output map[string]any, expectedSkipReason string) {
+	t.Helper()
+	assertSyntheticBuildOutput(t, output)
+	if output[testImageKeyPushed] != false {
+		t.Fatalf(testImageFmtPushedFalse, output[testImageKeyPushed])
+	}
+	if output[testImageKeyPushSkippedReason] != expectedSkipReason {
+		t.Fatalf(testImageFmtPushSkipped, output[testImageKeyPushSkippedReason])
+	}
+}
+
 func TestImageBuildHandler_SyntheticFallbackWithoutBuilder(t *testing.T) {
 	runner := &fakeImageCommandRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
@@ -200,21 +226,13 @@ func TestImageBuildHandler_SyntheticFallbackWithoutBuilder(t *testing.T) {
 	if !ok {
 		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
-	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
-		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
-	}
-	if output[testImageKeySimulated] != true {
-		t.Fatalf(testImageFmtSimulatedTrue, output[testImageKeySimulated])
-	}
+	assertSyntheticBuildOutput(t, output)
 	if output[testImageKeyPushSkippedReason] != "no_container_builder_available" {
 		t.Fatalf(testImageFmtPushSkipped, output[testImageKeyPushSkippedReason])
 	}
 	imageRef := asString(output[testImageKeyImageRef])
 	if !strings.Contains(imageRef, "@sha256:") {
 		t.Fatalf("expected digest-pinned image_ref, got %s", imageRef)
-	}
-	if output[testImageKeyExitCode] != 0 {
-		t.Fatalf(testImageFmtExitCode0, output[testImageKeyExitCode])
 	}
 }
 
@@ -310,15 +328,7 @@ func TestImageBuildHandler_FallbacksToSyntheticWhenBuildahUserNamespaceUnsupport
 	if !ok {
 		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
-	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
-		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
-	}
-	if output[testImageKeySimulated] != true {
-		t.Fatalf(testImageFmtSimulatedTrue, output[testImageKeySimulated])
-	}
-	if output[testImageKeyExitCode] != 0 {
-		t.Fatalf(testImageFmtExitCode0, output[testImageKeyExitCode])
-	}
+	assertSyntheticBuildOutput(t, output)
 }
 
 func TestImagePushHandler_UsesBuilderWhenAvailable(t *testing.T) {
@@ -394,18 +404,7 @@ func TestImagePushHandler_SyntheticFallbackWithoutBuilder(t *testing.T) {
 	if !ok {
 		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
-	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
-		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
-	}
-	if output[testImageKeySimulated] != true {
-		t.Fatalf(testImageFmtSimulatedTrue, output[testImageKeySimulated])
-	}
-	if output[testImageKeyPushed] != false {
-		t.Fatalf(testImageFmtPushedFalse, output[testImageKeyPushed])
-	}
-	if output[testImageKeyPushSkippedReason] != "no_container_builder_available" {
-		t.Fatalf(testImageFmtPushSkipped, output[testImageKeyPushSkippedReason])
-	}
+	assertSyntheticPushOutput(t, output, "no_container_builder_available")
 }
 
 func TestImagePushHandler_FallbacksToSyntheticWhenPodmanUserNamespaceUnsupported(t *testing.T) {
@@ -443,21 +442,7 @@ func TestImagePushHandler_FallbacksToSyntheticWhenPodmanUserNamespaceUnsupported
 	if !ok {
 		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
-	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
-		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
-	}
-	if output[testImageKeySimulated] != true {
-		t.Fatalf(testImageFmtSimulatedTrue, output[testImageKeySimulated])
-	}
-	if output[testImageKeyPushed] != false {
-		t.Fatalf(testImageFmtPushedFalse, output[testImageKeyPushed])
-	}
-	if output[testImageKeyPushSkippedReason] != "builder_runtime_unavailable" {
-		t.Fatalf(testImageFmtPushSkipped, output[testImageKeyPushSkippedReason])
-	}
-	if output[testImageKeyExitCode] != 0 {
-		t.Fatalf(testImageFmtExitCode0, output[testImageKeyExitCode])
-	}
+	assertSyntheticPushOutput(t, output, "builder_runtime_unavailable")
 }
 
 func TestImagePushHandler_FallbacksToSyntheticWhenBuildahUserNamespaceUnsupported(t *testing.T) {
@@ -489,21 +474,7 @@ func TestImagePushHandler_FallbacksToSyntheticWhenBuildahUserNamespaceUnsupporte
 	if !ok {
 		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
-	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
-		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
-	}
-	if output[testImageKeySimulated] != true {
-		t.Fatalf(testImageFmtSimulatedTrue, output[testImageKeySimulated])
-	}
-	if output[testImageKeyPushed] != false {
-		t.Fatalf(testImageFmtPushedFalse, output[testImageKeyPushed])
-	}
-	if output[testImageKeyPushSkippedReason] != "builder_runtime_unavailable" {
-		t.Fatalf(testImageFmtPushSkipped, output[testImageKeyPushSkippedReason])
-	}
-	if output[testImageKeyExitCode] != 0 {
-		t.Fatalf(testImageFmtExitCode0, output[testImageKeyExitCode])
-	}
+	assertSyntheticPushOutput(t, output, "builder_runtime_unavailable")
 }
 
 func TestImagePushHandler_StrictFailsWithoutBuilder(t *testing.T) {
@@ -583,13 +554,13 @@ func TestImageHelper_DefaultTagAndValidation(t *testing.T) {
 	if err := validateImageReference(testImageRefDemo100); err != nil {
 		t.Fatalf("unexpected valid image ref error: %v", err)
 	}
-	if err := validateImageReference(" "); err == nil {
+	if validateImageReference(" ") == nil {
 		t.Fatal("expected empty image ref validation error")
 	}
-	if err := validateImageReference("ghcr.io/acme/demo with spaces"); err == nil {
+	if validateImageReference("ghcr.io/acme/demo with spaces") == nil {
 		t.Fatal("expected whitespace image ref validation error")
 	}
-	if err := validateImageReference(":latest"); err == nil {
+	if validateImageReference(":latest") == nil {
 		t.Fatal("expected missing repository validation error")
 	}
 }

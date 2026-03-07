@@ -110,38 +110,44 @@ func TestKubernetesManager_SessionPodSecurityDefaultsAndGitSecret(t *testing.T) 
 		t.Fatalf("unexpected sessionPod error: %v", err)
 	}
 
-	if pod.Spec.SecurityContext == nil || pod.Spec.SecurityContext.RunAsUser == nil {
-		t.Fatal("expected pod security runAsUser to be set")
-	}
-	if *pod.Spec.SecurityContext.RunAsUser != defaultK8sRunAsUser {
-		t.Fatalf("unexpected runAsUser: %d", *pod.Spec.SecurityContext.RunAsUser)
-	}
-	if pod.Spec.AutomountServiceAccountToken == nil || *pod.Spec.AutomountServiceAccountToken {
-		t.Fatal("expected automount service account token to default false")
-	}
-
-	initContainer := pod.Spec.InitContainers[0]
-	foundGitAuthMount := false
-	for _, mount := range initContainer.VolumeMounts {
-		if mount.Name == "git-auth" && mount.MountPath == gitAuthMountPath {
-			foundGitAuthMount = true
-			break
+	t.Run("security_context", func(t *testing.T) {
+		if pod.Spec.SecurityContext == nil || pod.Spec.SecurityContext.RunAsUser == nil {
+			t.Fatal("expected pod security runAsUser to be set")
 		}
-	}
-	if !foundGitAuthMount {
-		t.Fatal("expected git auth mount on init container")
-	}
-
-	foundGitAuthVolume := false
-	for _, volume := range pod.Spec.Volumes {
-		if volume.Name == "git-auth" && volume.Secret != nil && volume.Secret.SecretName == "tenant-git-auth" {
-			foundGitAuthVolume = true
-			break
+		if *pod.Spec.SecurityContext.RunAsUser != defaultK8sRunAsUser {
+			t.Fatalf("unexpected runAsUser: %d", *pod.Spec.SecurityContext.RunAsUser)
 		}
-	}
-	if !foundGitAuthVolume {
-		t.Fatal("expected git auth secret volume")
-	}
+		if pod.Spec.AutomountServiceAccountToken == nil || *pod.Spec.AutomountServiceAccountToken {
+			t.Fatal("expected automount service account token to default false")
+		}
+	})
+
+	t.Run("git_auth_mount", func(t *testing.T) {
+		initContainer := pod.Spec.InitContainers[0]
+		foundGitAuthMount := false
+		for _, mount := range initContainer.VolumeMounts {
+			if mount.Name == "git-auth" && mount.MountPath == gitAuthMountPath {
+				foundGitAuthMount = true
+				break
+			}
+		}
+		if !foundGitAuthMount {
+			t.Fatal("expected git auth mount on init container")
+		}
+	})
+
+	t.Run("git_auth_volume", func(t *testing.T) {
+		foundGitAuthVolume := false
+		for _, volume := range pod.Spec.Volumes {
+			if volume.Name == "git-auth" && volume.Secret != nil && volume.Secret.SecretName == "tenant-git-auth" {
+				foundGitAuthVolume = true
+				break
+			}
+		}
+		if !foundGitAuthVolume {
+			t.Fatal("expected git auth secret volume")
+		}
+	})
 }
 
 func TestKubernetesManager_SessionPodUsesRunnerBundle(t *testing.T) {

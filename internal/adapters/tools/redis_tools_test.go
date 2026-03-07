@@ -435,7 +435,7 @@ func TestLiveRedisClientMethods_EndpointValidation(t *testing.T) {
 	if _, err := client.Exists(ctx, "", []string{"k"}); err == nil {
 		t.Fatal("expected exists endpoint validation error")
 	}
-	if err := client.Set(ctx, "", "k", []byte("v"), time.Second); err == nil {
+	if client.Set(ctx, "", "k", []byte("v"), time.Second) == nil {
 		t.Fatal("expected set endpoint validation error")
 	}
 	if _, err := client.Del(ctx, "", []string{"k"}); err == nil {

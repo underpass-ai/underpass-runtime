@@ -199,9 +199,10 @@ func TestContainerExecHandler_UsesRuntime(t *testing.T) {
 	}
 }
 
-func TestContainerPSHandler_StrictByDefaultEnvFailsWithoutRuntime(t *testing.T) {
-	t.Setenv("WORKSPACE_CONTAINER_STRICT_BY_DEFAULT", "true")
-	runner := &fakeContainerRunner{
+// noRuntimeRunner returns a fakeContainerRunner that always fails runtime
+// detection (info command) with a connection error.
+func noRuntimeRunner() *fakeContainerRunner {
+	return &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
 			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
 				return app.CommandResult{ExitCode: 1, Output: testContainerErrCannotConnect}, errors.New(testContainerErrExitStatus1)
@@ -209,8 +210,11 @@ func TestContainerPSHandler_StrictByDefaultEnvFailsWithoutRuntime(t *testing.T) 
 			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
+}
 
-	handler := NewContainerPSHandler(runner)
+func TestContainerPSHandler_StrictByDefaultEnvFailsWithoutRuntime(t *testing.T) {
+	t.Setenv("WORKSPACE_CONTAINER_STRICT_BY_DEFAULT", "true")
+	handler := NewContainerPSHandler(noRuntimeRunner())
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"limit":25}`))
 	if err == nil {
 		t.Fatal("expected strict-by-default runtime failure")
@@ -222,16 +226,7 @@ func TestContainerPSHandler_StrictByDefaultEnvFailsWithoutRuntime(t *testing.T) 
 
 func TestContainerPSHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testing.T) {
 	t.Setenv("WORKSPACE_CONTAINER_ALLOW_SYNTHETIC_FALLBACK", "false")
-	runner := &fakeContainerRunner{
-		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
-				return app.CommandResult{ExitCode: 1, Output: testContainerErrCannotConnect}, errors.New(testContainerErrExitStatus1)
-			}
-			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
-		},
-	}
-
-	handler := NewContainerPSHandler(runner)
+	handler := NewContainerPSHandler(noRuntimeRunner())
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"limit":25,"strict":false}`))
 	if err == nil {
 		t.Fatal("expected runtime failure when synthetic fallback disabled")
@@ -243,16 +238,7 @@ func TestContainerPSHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testing.
 
 func TestContainerLogsHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testing.T) {
 	t.Setenv("WORKSPACE_CONTAINER_ALLOW_SYNTHETIC_FALLBACK", "false")
-	runner := &fakeContainerRunner{
-		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
-				return app.CommandResult{ExitCode: 1, Output: testContainerErrCannotConnect}, errors.New(testContainerErrExitStatus1)
-			}
-			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
-		},
-	}
-
-	handler := NewContainerLogsHandler(runner)
+	handler := NewContainerLogsHandler(noRuntimeRunner())
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"container_id":"sim-123456","strict":false}`))
 	if err == nil {
 		t.Fatal("expected runtime failure when synthetic fallback disabled")

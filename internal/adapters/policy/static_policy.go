@@ -165,7 +165,7 @@ func argsWithinAllowedPaths(raw json.RawMessage, allowedPaths []string, pathFiel
 	}
 
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return false, invalidArgsPayload
 	}
 
@@ -207,7 +207,7 @@ func argsAllowedByPolicy(raw json.RawMessage, argFields []domain.PolicyArgField)
 	}
 
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return false, invalidArgsPayload
 	}
 
@@ -343,7 +343,7 @@ func argsAllowedByProfilePolicy(raw json.RawMessage, metadata map[string]string,
 	}
 
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return false, invalidArgsPayload
 	}
 
@@ -425,7 +425,7 @@ func argsAllowedBySubjectPolicy(raw json.RawMessage, metadata map[string]string,
 	}
 
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return false, invalidArgsPayload
 	}
 
@@ -492,7 +492,7 @@ func argsAllowedByTopicPolicy(raw json.RawMessage, metadata map[string]string, t
 	}
 
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return false, invalidArgsPayload
 	}
 	for _, field := range topicFields {
@@ -529,7 +529,7 @@ func argsAllowedByQueuePolicy(raw json.RawMessage, metadata map[string]string, q
 	}
 
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return false, invalidArgsPayload
 	}
 	for _, field := range queueFields {
@@ -566,7 +566,7 @@ func argsAllowedByKeyPrefixPolicy(raw json.RawMessage, metadata map[string]strin
 	}
 
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return false, invalidArgsPayload
 	}
 	for _, field := range keyPrefixFields {
@@ -603,7 +603,7 @@ func argsAllowedByNamespacePolicy(raw json.RawMessage, metadata map[string]strin
 	}
 
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return false, invalidArgsPayload
 	}
 
@@ -648,7 +648,7 @@ func argsAllowedByRegistryPolicy(raw json.RawMessage, metadata map[string]string
 	}
 
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if json.Unmarshal(raw, &payload) != nil {
 		return false, invalidArgsPayload
 	}
 

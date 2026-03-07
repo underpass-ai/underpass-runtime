@@ -128,7 +128,7 @@ func (h *KafkaConsumeHandler) Invoke(ctx context.Context, session domain.Session
 		TimeoutMS:   2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid kafka.consume args",
@@ -297,7 +297,7 @@ func (h *KafkaProduceHandler) Invoke(ctx context.Context, session domain.Session
 		MaxBytes:      1024 * 1024,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid kafka.produce args",
@@ -409,7 +409,7 @@ func (h *KafkaTopicMetadataHandler) Invoke(ctx context.Context, session domain.S
 		Topic     string `json:"topic"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid kafka.topic_metadata args",

@@ -91,7 +91,7 @@ func (h *RepoDetectToolchainHandler) Name() string {
 func (h *RepoDetectToolchainHandler) Invoke(ctx context.Context, session domain.Session, args json.RawMessage) (app.ToolRunResult, *domain.Error) {
 	if len(args) > 0 {
 		var payload map[string]any
-		if err := json.Unmarshal(args, &payload); err != nil {
+		if json.Unmarshal(args, &payload) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.detect_toolchain args",
@@ -137,7 +137,7 @@ func (h *RepoValidateHandler) Invoke(ctx context.Context, session domain.Session
 		Target string `json:"target"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.validate args",
@@ -222,7 +222,7 @@ func (h *GoModTidyHandler) Invoke(ctx context.Context, session domain.Session, a
 		Check bool `json:"check"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid go.mod.tidy args",
@@ -272,7 +272,7 @@ func (h *GoGenerateHandler) Invoke(ctx context.Context, session domain.Session, 
 		Target string `json:"target"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid go.generate args",
@@ -325,7 +325,7 @@ func (h *GoBuildHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Race       bool   `json:"race"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid go.build args",
@@ -401,7 +401,7 @@ func (h *GoTestHandler) Invoke(ctx context.Context, session domain.Session, args
 		RunPattern string `json:"run_pattern"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid go.test args",

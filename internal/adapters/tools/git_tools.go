@@ -120,7 +120,7 @@ func (h *GitStatusHandler) Invoke(ctx context.Context, session domain.Session, a
 		Short bool `json:"short"`
 	}{Short: true}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.status args", Retryable: false}
 		}
 	}
@@ -156,7 +156,7 @@ func (h *GitDiffHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Base   string   `json:"base"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.diff args", Retryable: false}
 		}
 	}
@@ -197,7 +197,7 @@ func (h *GitApplyPatchHandler) Invoke(ctx context.Context, session domain.Sessio
 		Patch string `json:"patch"`
 		Check bool   `json:"check"`
 	}{}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.apply_patch args", Retryable: false}
 	}
 	if strings.TrimSpace(request.Patch) == "" {
@@ -251,7 +251,7 @@ func (h *GitCheckoutHandler) Invoke(ctx context.Context, session domain.Session,
 		StartPoint string `json:"start_point"`
 		Force      bool   `json:"force"`
 	}{}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.checkout args", Retryable: false}
 	}
 
@@ -311,7 +311,7 @@ func (h *GitLogHandler) Invoke(ctx context.Context, session domain.Session, args
 		MaxCount: 20,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.log args", Retryable: false}
 		}
 	}
@@ -367,7 +367,7 @@ func (h *GitShowHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Patch: true,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.show args", Retryable: false}
 		}
 	}
@@ -427,7 +427,7 @@ func (h *GitBranchListHandler) Invoke(ctx context.Context, session domain.Sessio
 		Remotes bool `json:"remotes"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.branch_list args", Retryable: false}
 		}
 	}
@@ -466,7 +466,7 @@ func (h *GitCommitHandler) Invoke(ctx context.Context, session domain.Session, a
 		All     bool     `json:"all"`
 		Paths   []string `json:"paths"`
 	}{}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.commit args", Retryable: false}
 	}
 
@@ -584,7 +584,7 @@ func (h *GitPushHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Remote: gitRemoteOrigin,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.push args", Retryable: false}
 		}
 	}
@@ -620,7 +620,7 @@ func (h *GitFetchHandler) Invoke(ctx context.Context, session domain.Session, ar
 		Remote: gitRemoteOrigin,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.fetch args", Retryable: false}
 		}
 	}
@@ -655,7 +655,7 @@ func (h *GitPullHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Remote: gitRemoteOrigin,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.pull args", Retryable: false}
 		}
 	}

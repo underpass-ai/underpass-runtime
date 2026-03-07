@@ -43,16 +43,7 @@ func TestSecurityLicenseCheckHandler_DeniedLicenseFailsStatus(t *testing.T) {
 			if spec.Command != "npm" {
 				t.Fatalf("expected npm command, got %q", spec.Command)
 			}
-			if callIndex == 0 {
-				if len(spec.Args) != 3 || spec.Args[0] != "ls" || spec.Args[1] != "--json" || spec.Args[2] != "--all" {
-					t.Fatalf("unexpected dependency inventory args: %#v", spec.Args)
-				}
-			}
-			if callIndex == 1 {
-				if len(spec.Args) != 4 || spec.Args[3] != "--long" {
-					t.Fatalf("unexpected license enrichment args: %#v", spec.Args)
-				}
-			}
+			assertNpmLicenseArgs(t, callIndex, spec)
 			return app.CommandResult{ExitCode: 0, Output: npmOutput}, nil
 		},
 	}
@@ -80,6 +71,20 @@ func TestSecurityLicenseCheckHandler_DeniedLicenseFailsStatus(t *testing.T) {
 	}
 	if output["denied_count"] != 1 {
 		t.Fatalf("expected denied_count=1, got %#v", output["denied_count"])
+	}
+}
+
+func assertNpmLicenseArgs(t *testing.T, callIndex int, spec app.CommandSpec) {
+	t.Helper()
+	if callIndex == 0 {
+		if len(spec.Args) != 3 || spec.Args[0] != "ls" || spec.Args[1] != "--json" || spec.Args[2] != "--all" {
+			t.Fatalf("unexpected dependency inventory args: %#v", spec.Args)
+		}
+	}
+	if callIndex == 1 {
+		if len(spec.Args) != 4 || spec.Args[3] != "--long" {
+			t.Fatalf("unexpected license enrichment args: %#v", spec.Args)
+		}
 	}
 }
 
@@ -123,75 +128,82 @@ func TestRuntimeLicenseParsingAndEnrichment(t *testing.T) {
     {"name":"tokio","version":"1.0.0","license":""}
   ]
 }`
-	rustMap, err := parseRustLicenseMap(metadata, 50)
-	if err != nil {
-		t.Fatalf("parseRustLicenseMap failed: %v", err)
-	}
-	if len(rustMap) != 1 {
-		t.Fatalf("unexpected rust license map size: %d", len(rustMap))
-	}
 
-	nodeRunner := &fakeSWERuntimeCommandRunner{
-		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command != "npm" {
-				t.Fatalf("expected npm command, got %q", spec.Command)
-			}
-			return app.CommandResult{
-				ExitCode: 0,
-				Output:   `{"dependencies":{"left-pad":{"version":"1.3.0","license":"MIT"}}}`,
-			}, nil
-		},
-	}
-	nodeEntries := []dependencyEntry{{Name: testLicenseNameLeftPad, Version: "1.3.0", Ecosystem: "node", License: testLicenseUnknown}}
-	enrichedNode, command, _, err := enrichDependencyLicenses(
-		context.Background(),
-		nodeRunner,
-		domain.Session{WorkspacePath: t.TempDir()},
-		licenseEnrichmentInput{
-			detected: projectType{Name: "node"}, scanPath: ".",
-			entries: nodeEntries, maxDependencies: 100,
-		},
-	)
-	if err != nil {
-		t.Fatalf("enrichDependencyLicenses node failed: %v", err)
-	}
-	if len(command) == 0 || command[0] != "npm" {
-		t.Fatalf("unexpected node enrichment command: %#v", command)
-	}
-	if len(enrichedNode) != 1 || enrichedNode[0].License != "MIT" {
-		t.Fatalf("unexpected node enriched entries: %#v", enrichedNode)
-	}
+	t.Run("parse_rust_license_map", func(t *testing.T) {
+		rustMap, err := parseRustLicenseMap(metadata, 50)
+		if err != nil {
+			t.Fatalf("parseRustLicenseMap failed: %v", err)
+		}
+		if len(rustMap) != 1 {
+			t.Fatalf("unexpected rust license map size: %d", len(rustMap))
+		}
+	})
 
-	rustRunner := &fakeSWERuntimeCommandRunner{
-		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command != testLicenseCommandCargo {
-				t.Fatalf("expected cargo command, got %q", spec.Command)
-			}
-			return app.CommandResult{
-				ExitCode: 0,
-				Output:   metadata,
-			}, nil
-		},
-	}
-	rustEntries := []dependencyEntry{{Name: "serde", Version: testLicenseVersion100, Ecosystem: "rust", License: testLicenseUnknown}}
-	enrichedRust, rustCommand, _, err := enrichDependencyLicenses(
-		context.Background(),
-		rustRunner,
-		domain.Session{WorkspacePath: t.TempDir()},
-		licenseEnrichmentInput{
-			detected: projectType{Name: "rust"}, scanPath: ".",
-			entries: rustEntries, maxDependencies: 100,
-		},
-	)
-	if err != nil {
-		t.Fatalf("enrichDependencyLicenses rust failed: %v", err)
-	}
-	if len(rustCommand) == 0 || rustCommand[0] != testLicenseCommandCargo {
-		t.Fatalf("unexpected rust enrichment command: %#v", rustCommand)
-	}
-	if len(enrichedRust) != 1 || enrichedRust[0].License != "MIT" {
-		t.Fatalf("unexpected rust enriched entries: %#v", enrichedRust)
-	}
+	t.Run("enrich_node", func(t *testing.T) {
+		nodeRunner := &fakeSWERuntimeCommandRunner{
+			run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
+				if spec.Command != "npm" {
+					t.Fatalf("expected npm command, got %q", spec.Command)
+				}
+				return app.CommandResult{
+					ExitCode: 0,
+					Output:   `{"dependencies":{"left-pad":{"version":"1.3.0","license":"MIT"}}}`,
+				}, nil
+			},
+		}
+		nodeEntries := []dependencyEntry{{Name: testLicenseNameLeftPad, Version: "1.3.0", Ecosystem: "node", License: testLicenseUnknown}}
+		enrichedNode, command, _, err := enrichDependencyLicenses(
+			context.Background(),
+			nodeRunner,
+			domain.Session{WorkspacePath: t.TempDir()},
+			licenseEnrichmentInput{
+				detected: projectType{Name: "node"}, scanPath: ".",
+				entries: nodeEntries, maxDependencies: 100,
+			},
+		)
+		if err != nil {
+			t.Fatalf("enrichDependencyLicenses node failed: %v", err)
+		}
+		if len(command) == 0 || command[0] != "npm" {
+			t.Fatalf("unexpected node enrichment command: %#v", command)
+		}
+		if len(enrichedNode) != 1 || enrichedNode[0].License != "MIT" {
+			t.Fatalf("unexpected node enriched entries: %#v", enrichedNode)
+		}
+	})
+
+	t.Run("enrich_rust", func(t *testing.T) {
+		rustRunner := &fakeSWERuntimeCommandRunner{
+			run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
+				if spec.Command != testLicenseCommandCargo {
+					t.Fatalf("expected cargo command, got %q", spec.Command)
+				}
+				return app.CommandResult{
+					ExitCode: 0,
+					Output:   metadata,
+				}, nil
+			},
+		}
+		rustEntries := []dependencyEntry{{Name: "serde", Version: testLicenseVersion100, Ecosystem: "rust", License: testLicenseUnknown}}
+		enrichedRust, rustCommand, _, err := enrichDependencyLicenses(
+			context.Background(),
+			rustRunner,
+			domain.Session{WorkspacePath: t.TempDir()},
+			licenseEnrichmentInput{
+				detected: projectType{Name: "rust"}, scanPath: ".",
+				entries: rustEntries, maxDependencies: 100,
+			},
+		)
+		if err != nil {
+			t.Fatalf("enrichDependencyLicenses rust failed: %v", err)
+		}
+		if len(rustCommand) == 0 || rustCommand[0] != testLicenseCommandCargo {
+			t.Fatalf("unexpected rust enrichment command: %#v", rustCommand)
+		}
+		if len(enrichedRust) != 1 || enrichedRust[0].License != "MIT" {
+			t.Fatalf("unexpected rust enriched entries: %#v", enrichedRust)
+		}
+	})
 }
 
 func TestSecurityLicenseCheckHandler_InvalidArgs(t *testing.T) {

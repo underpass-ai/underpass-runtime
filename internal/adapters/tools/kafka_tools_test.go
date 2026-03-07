@@ -207,17 +207,29 @@ func TestKafkaConsumeHandler_MapsExecutionErrors(t *testing.T) {
 }
 
 func TestKafkaConsumeHandler_OffsetModes(t *testing.T) {
-	absoluteChecked := false
-	timestampChecked := false
-	handler := NewKafkaConsumeHandler(&fakeKafkaClient{
-		consume: func(req kafkaConsumeRequest) ([]kafkaConsumedMessage, error) {
-			switch req.Topic {
-			case "sandbox.absolute":
+	session := domain.Session{Metadata: map[string]string{}}
+
+	t.Run("absolute", func(t *testing.T) {
+		handler := NewKafkaConsumeHandler(&fakeKafkaClient{
+			consume: func(req kafkaConsumeRequest) ([]kafkaConsumedMessage, error) {
 				if req.OffsetMode != "absolute" || req.OffsetStart != 42 || req.OffsetAt != nil {
 					t.Fatalf("unexpected absolute offset consume request: %#v", req)
 				}
-				absoluteChecked = true
-			case "sandbox.timestamp":
+				return []kafkaConsumedMessage{}, nil
+			},
+		})
+		_, err := handler.Invoke(
+			context.Background(), session,
+			json.RawMessage(`{"profile_id":"dev.kafka","topic":"sandbox.absolute","partition":0,"offset_mode":"absolute","offset":42,"max_messages":1}`),
+		)
+		if err != nil {
+			t.Fatalf("unexpected absolute mode consume error: %#v", err)
+		}
+	})
+
+	t.Run("timestamp", func(t *testing.T) {
+		handler := NewKafkaConsumeHandler(&fakeKafkaClient{
+			consume: func(req kafkaConsumeRequest) ([]kafkaConsumedMessage, error) {
 				if req.OffsetMode != "timestamp" || req.OffsetAt == nil || req.OffsetStart != 0 {
 					t.Fatalf("unexpected timestamp offset consume request: %#v", req)
 				}
@@ -225,39 +237,17 @@ func TestKafkaConsumeHandler_OffsetModes(t *testing.T) {
 				if !req.OffsetAt.Equal(expected) {
 					t.Fatalf("unexpected timestamp offset value: got=%s expected=%s", req.OffsetAt.UTC(), expected)
 				}
-				timestampChecked = true
-			default:
-				t.Fatalf("unexpected topic: %s", req.Topic)
-			}
-			return []kafkaConsumedMessage{}, nil
-		},
+				return []kafkaConsumedMessage{}, nil
+			},
+		})
+		_, err := handler.Invoke(
+			context.Background(), session,
+			json.RawMessage(`{"profile_id":"dev.kafka","topic":"sandbox.timestamp","partition":0,"offset_mode":"timestamp","timestamp_ms":1730000000000,"max_messages":1}`),
+		)
+		if err != nil {
+			t.Fatalf("unexpected timestamp mode consume error: %#v", err)
+		}
 	})
-
-	session := domain.Session{
-		Metadata: map[string]string{},
-	}
-
-	_, err := handler.Invoke(
-		context.Background(),
-		session,
-		json.RawMessage(`{"profile_id":"dev.kafka","topic":"sandbox.absolute","partition":0,"offset_mode":"absolute","offset":42,"max_messages":1}`),
-	)
-	if err != nil {
-		t.Fatalf("unexpected absolute mode consume error: %#v", err)
-	}
-
-	_, err = handler.Invoke(
-		context.Background(),
-		session,
-		json.RawMessage(`{"profile_id":"dev.kafka","topic":"sandbox.timestamp","partition":0,"offset_mode":"timestamp","timestamp_ms":1730000000000,"max_messages":1}`),
-	)
-	if err != nil {
-		t.Fatalf("unexpected timestamp mode consume error: %#v", err)
-	}
-
-	if !absoluteChecked || !timestampChecked {
-		t.Fatalf("expected both offset-mode branches to be exercised: absolute=%v timestamp=%v", absoluteChecked, timestampChecked)
-	}
 }
 
 func TestKafkaHandlers_NamesAndLiveClientErrors(t *testing.T) {
@@ -310,126 +300,139 @@ func TestKafkaHandlers_NamesAndLiveClientErrors(t *testing.T) {
 }
 
 func TestKafkaHelpers_ProfileResolutionAndPatterning(t *testing.T) {
-	_, _, err := resolveKafkaProfile(domain.Session{}, "")
-	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected profile_id validation error, got %#v", err)
-	}
+	t.Run("profile_resolution", func(t *testing.T) {
+		_, _, err := resolveKafkaProfile(domain.Session{}, "")
+		if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("expected profile_id validation error, got %#v", err)
+		}
 
-	sessionWrongKind := domain.Session{
-		Metadata: map[string]string{
-			"connection_profiles_json": `[{"id":"x","kind":"nats","read_only":true,"scopes":{"topics":["sandbox."]}}]`,
-		},
-	}
-	_, _, err = resolveKafkaProfile(sessionWrongKind, "x")
-	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected wrong kind error, got %#v", err)
-	}
+		sessionWrongKind := domain.Session{
+			Metadata: map[string]string{
+				"connection_profiles_json": `[{"id":"x","kind":"nats","read_only":true,"scopes":{"topics":["sandbox."]}}]`,
+			},
+		}
+		_, _, err = resolveKafkaProfile(sessionWrongKind, "x")
+		if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("expected wrong kind error, got %#v", err)
+		}
+	})
 
-	brokers := splitKafkaBrokers("kafka://broker-a:9092, tcp://broker-b:9092, broker-c:9092")
-	if len(brokers) != 3 || brokers[0] != "broker-a:9092" || brokers[1] != "broker-b:9092" || brokers[2] != "broker-c:9092" {
-		t.Fatalf("unexpected splitKafkaBrokers output: %#v", brokers)
-	}
+	t.Run("split_brokers", func(t *testing.T) {
+		brokers := splitKafkaBrokers("kafka://broker-a:9092, tcp://broker-b:9092, broker-c:9092")
+		if len(brokers) != 3 || brokers[0] != "broker-a:9092" || brokers[1] != "broker-b:9092" || brokers[2] != "broker-c:9092" {
+			t.Fatalf("unexpected splitKafkaBrokers output: %#v", brokers)
+		}
+	})
 
-	profile := connectionProfile{Scopes: map[string]any{"topics": []any{"sandbox.", "dev.>"}}}
-	if !topicAllowedByProfile("sandbox.jobs", profile) {
-		t.Fatal("expected topicAllowedByProfile allow")
-	}
-	if topicAllowedByProfile("prod.jobs", profile) {
-		t.Fatal("expected topicAllowedByProfile deny")
-	}
+	t.Run("topic_allowed_by_profile", func(t *testing.T) {
+		profile := connectionProfile{Scopes: map[string]any{"topics": []any{"sandbox.", "dev.>"}}}
+		if !topicAllowedByProfile("sandbox.jobs", profile) {
+			t.Fatal("expected topicAllowedByProfile allow")
+		}
+		if topicAllowedByProfile("prod.jobs", profile) {
+			t.Fatal("expected topicAllowedByProfile deny")
+		}
+	})
 
-	offsetSpec, offsetErr := resolveKafkaConsumeOffset("", "earliest", nil)
-	if offsetErr != nil || offsetSpec.OffsetStart != kafkago.FirstOffset || offsetSpec.Mode != "earliest" {
-		t.Fatalf("unexpected earliest offset parse: offset=%+v err=%v", offsetSpec, offsetErr)
-	}
-	offsetSpec, offsetErr = resolveKafkaConsumeOffset("", float64(77), nil)
-	if offsetErr != nil || offsetSpec.Mode != "absolute" || offsetSpec.OffsetStart != 77 {
-		t.Fatalf("unexpected absolute offset parse: offset=%+v err=%v", offsetSpec, offsetErr)
-	}
-	timestamp := int64(1730000000000)
-	offsetSpec, offsetErr = resolveKafkaConsumeOffset("timestamp", nil, &timestamp)
-	if offsetErr != nil || offsetSpec.Mode != "timestamp" || offsetSpec.OffsetAt == nil || !offsetSpec.OffsetAt.Equal(time.UnixMilli(timestamp).UTC()) {
-		t.Fatalf("unexpected timestamp offset parse: offset=%+v err=%v", offsetSpec, offsetErr)
-	}
-	if _, offsetErr = resolveKafkaConsumeOffset("middle", nil, nil); offsetErr == nil {
-		t.Fatal("expected resolveKafkaConsumeOffset validation error")
-	}
-	if _, offsetErr = resolveKafkaConsumeOffset("absolute", nil, nil); offsetErr == nil {
-		t.Fatal("expected absolute offset missing value error")
-	}
-	if _, offsetErr = resolveKafkaConsumeOffset("timestamp", nil, nil); offsetErr == nil {
-		t.Fatal("expected timestamp offset missing value error")
-	}
+	t.Run("resolve_consume_offset", func(t *testing.T) {
+		offsetSpec, offsetErr := resolveKafkaConsumeOffset("", "earliest", nil)
+		if offsetErr != nil || offsetSpec.OffsetStart != kafkago.FirstOffset || offsetSpec.Mode != "earliest" {
+			t.Fatalf("unexpected earliest offset parse: offset=%+v err=%v", offsetSpec, offsetErr)
+		}
+		offsetSpec, offsetErr = resolveKafkaConsumeOffset("", float64(77), nil)
+		if offsetErr != nil || offsetSpec.Mode != "absolute" || offsetSpec.OffsetStart != 77 {
+			t.Fatalf("unexpected absolute offset parse: offset=%+v err=%v", offsetSpec, offsetErr)
+		}
+		timestamp := int64(1730000000000)
+		offsetSpec, offsetErr = resolveKafkaConsumeOffset("timestamp", nil, &timestamp)
+		if offsetErr != nil || offsetSpec.Mode != "timestamp" || offsetSpec.OffsetAt == nil || !offsetSpec.OffsetAt.Equal(time.UnixMilli(timestamp).UTC()) {
+			t.Fatalf("unexpected timestamp offset parse: offset=%+v err=%v", offsetSpec, offsetErr)
+		}
+		if _, offsetErr = resolveKafkaConsumeOffset("middle", nil, nil); offsetErr == nil {
+			t.Fatal("expected resolveKafkaConsumeOffset validation error")
+		}
+		if _, offsetErr = resolveKafkaConsumeOffset("absolute", nil, nil); offsetErr == nil {
+			t.Fatal("expected absolute offset missing value error")
+		}
+		if _, offsetErr = resolveKafkaConsumeOffset("timestamp", nil, nil); offsetErr == nil {
+			t.Fatal("expected timestamp offset missing value error")
+		}
+	})
 
-	if !topicPatternMatch("sandbox.>", "sandbox.jobs.created") {
-		t.Fatal("expected topicPatternMatch with .> wildcard")
-	}
-	if !topicPatternMatch("sandbox.*.created", "sandbox.jobs.created") {
-		t.Fatal("expected topicPatternMatch with * wildcard")
-	}
-	if topicPatternMatch("sandbox.", "prod.jobs") {
-		t.Fatal("did not expect topicPatternMatch for disallowed topic")
-	}
+	t.Run("topic_pattern_match", func(t *testing.T) {
+		if !topicPatternMatch("sandbox.>", "sandbox.jobs.created") {
+			t.Fatal("expected topicPatternMatch with .> wildcard")
+		}
+		if !topicPatternMatch("sandbox.*.created", "sandbox.jobs.created") {
+			t.Fatal("expected topicPatternMatch with * wildcard")
+		}
+		if topicPatternMatch("sandbox.", "prod.jobs") {
+			t.Fatal("did not expect topicPatternMatch for disallowed topic")
+		}
+	})
 }
 
 func TestParseKafkaOffsetInput_AllBranches(t *testing.T) {
-	// nil → nothing provided
-	mode, absOff, provided, err := parseKafkaOffsetInput(nil)
-	if err != nil || mode != "" || absOff != nil || provided {
-		t.Fatalf("expected nil result for nil input, got mode=%q provided=%v err=%v", mode, provided, err)
-	}
-
-	// empty string → nothing provided
-	mode, absOff, provided, err = parseKafkaOffsetInput("")
-	if err != nil || mode != "" || absOff != nil || provided {
-		t.Fatalf("expected empty result for empty string, got mode=%q provided=%v err=%v", mode, provided, err)
-	}
-
-	// "latest" / "earliest"
-	mode, absOff, provided, err = parseKafkaOffsetInput("latest")
-	if err != nil || mode != "latest" || absOff != nil || !provided {
-		t.Fatalf("unexpected latest result: mode=%q provided=%v err=%v", mode, provided, err)
-	}
-	mode, absOff, provided, err = parseKafkaOffsetInput("earliest")
-	if err != nil || mode != "earliest" || absOff != nil || !provided {
-		t.Fatalf("unexpected earliest result: mode=%q provided=%v err=%v", mode, provided, err)
-	}
-
-	// numeric string "100" → absolute offset 100
-	mode, absOff, provided, err = parseKafkaOffsetInput("100")
-	if err != nil || mode != "" || absOff == nil || *absOff != 100 || !provided {
-		t.Fatalf("unexpected numeric string result: mode=%q off=%v provided=%v err=%v", mode, absOff, provided, err)
-	}
-
-	// negative numeric string → error
-	_, _, _, err = parseKafkaOffsetInput("-5")
-	if err == nil {
-		t.Fatal("expected error for negative numeric string")
-	}
-
-	// valid float64 → absolute offset
-	mode, absOff, provided, err = parseKafkaOffsetInput(float64(42))
-	if err != nil || mode != "" || absOff == nil || *absOff != 42 || !provided {
-		t.Fatalf("unexpected float64 result: mode=%q off=%v provided=%v err=%v", mode, absOff, provided, err)
-	}
-
-	// non-integer float64 → error
-	_, _, _, err = parseKafkaOffsetInput(float64(1.5))
-	if err == nil {
-		t.Fatal("expected error for non-integer float64")
-	}
-
-	// negative float64 → error
-	_, _, _, err = parseKafkaOffsetInput(float64(-1))
-	if err == nil {
-		t.Fatal("expected error for negative float64")
-	}
-
-	// unknown type (e.g. bool) → error
-	_, _, _, err = parseKafkaOffsetInput(true)
-	if err == nil {
-		t.Fatal("expected error for unsupported offset type")
-	}
+	t.Run("nil_input", func(t *testing.T) {
+		mode, absOff, provided, err := parseKafkaOffsetInput(nil)
+		if err != nil || mode != "" || absOff != nil || provided {
+			t.Fatalf("expected nil result for nil input, got mode=%q provided=%v err=%v", mode, provided, err)
+		}
+	})
+	t.Run("empty_string", func(t *testing.T) {
+		mode, absOff, provided, err := parseKafkaOffsetInput("")
+		if err != nil || mode != "" || absOff != nil || provided {
+			t.Fatalf("expected empty result for empty string, got mode=%q provided=%v err=%v", mode, provided, err)
+		}
+	})
+	t.Run("latest", func(t *testing.T) {
+		mode, absOff, provided, err := parseKafkaOffsetInput("latest")
+		if err != nil || mode != "latest" || absOff != nil || !provided {
+			t.Fatalf("unexpected latest result: mode=%q provided=%v err=%v", mode, provided, err)
+		}
+	})
+	t.Run("earliest", func(t *testing.T) {
+		mode, absOff, provided, err := parseKafkaOffsetInput("earliest")
+		if err != nil || mode != "earliest" || absOff != nil || !provided {
+			t.Fatalf("unexpected earliest result: mode=%q provided=%v err=%v", mode, provided, err)
+		}
+	})
+	t.Run("numeric_string_100", func(t *testing.T) {
+		mode, absOff, provided, err := parseKafkaOffsetInput("100")
+		if err != nil || mode != "" || absOff == nil || *absOff != 100 || !provided {
+			t.Fatalf("unexpected numeric string result: mode=%q off=%v provided=%v err=%v", mode, absOff, provided, err)
+		}
+	})
+	t.Run("negative_numeric_string", func(t *testing.T) {
+		_, _, _, err := parseKafkaOffsetInput("-5")
+		if err == nil {
+			t.Fatal("expected error for negative numeric string")
+		}
+	})
+	t.Run("float64_42", func(t *testing.T) {
+		mode, absOff, provided, err := parseKafkaOffsetInput(float64(42))
+		if err != nil || mode != "" || absOff == nil || *absOff != 42 || !provided {
+			t.Fatalf("unexpected float64 result: mode=%q off=%v provided=%v err=%v", mode, absOff, provided, err)
+		}
+	})
+	t.Run("non_integer_float64", func(t *testing.T) {
+		_, _, _, err := parseKafkaOffsetInput(float64(1.5))
+		if err == nil {
+			t.Fatal("expected error for non-integer float64")
+		}
+	})
+	t.Run("negative_float64", func(t *testing.T) {
+		_, _, _, err := parseKafkaOffsetInput(float64(-1))
+		if err == nil {
+			t.Fatal("expected error for negative float64")
+		}
+	})
+	t.Run("unsupported_type", func(t *testing.T) {
+		_, _, _, err := parseKafkaOffsetInput(true)
+		if err == nil {
+			t.Fatal("expected error for unsupported offset type")
+		}
+	})
 }
 
 func TestKafkaTopicMetadataHandler_ErrorPaths(t *testing.T) {

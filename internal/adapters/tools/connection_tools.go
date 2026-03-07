@@ -41,7 +41,7 @@ func (h *ConnListProfilesHandler) Name() string {
 func (h *ConnListProfilesHandler) Invoke(_ context.Context, session domain.Session, args json.RawMessage) (app.ToolRunResult, *domain.Error) {
 	if len(args) > 0 {
 		var payload map[string]any
-		if err := json.Unmarshal(args, &payload); err != nil {
+		if json.Unmarshal(args, &payload) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid conn.list_profiles args",
@@ -78,7 +78,7 @@ func (h *ConnDescribeProfileHandler) Invoke(_ context.Context, session domain.Se
 		ProfileID string `json:"profile_id"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid conn.describe_profile args",
@@ -247,27 +247,7 @@ func resolveTypedProfile(session domain.Session, requestedID string,
 		if p.ID != profileID {
 			continue
 		}
-		kindLower := strings.ToLower(strings.TrimSpace(p.Kind))
-		if !slices.Contains(allowedKinds, kindLower) {
-			return connectionProfile{}, "", &domain.Error{
-				Code:      app.ErrorCodeInvalidArgument,
-				Message:   "profile kind does not match expected type",
-				Retryable: false,
-			}
-		}
-
-		endpoint := resolveProfileEndpoint(session.Metadata, profileID)
-		if endpoint == "" && defaultID != "" && profileID == defaultID {
-			endpoint = defaultEndpoint
-		}
-		if strings.TrimSpace(endpoint) == "" {
-			return connectionProfile{}, "", &domain.Error{
-				Code:      app.ErrorCodeExecutionFailed,
-				Message:   "profile endpoint not configured",
-				Retryable: false,
-			}
-		}
-		return p, endpoint, nil
+		return validateAndResolveProfileEndpoint(p, profileID, allowedKinds, session.Metadata, defaultID, defaultEndpoint)
 	}
 
 	return connectionProfile{}, "", &domain.Error{
@@ -275,6 +255,34 @@ func resolveTypedProfile(session domain.Session, requestedID string,
 		Message:   "connection profile not found",
 		Retryable: false,
 	}
+}
+
+// validateAndResolveProfileEndpoint checks the profile kind against allowed
+// kinds and resolves the endpoint, returning the profile and endpoint on success.
+func validateAndResolveProfileEndpoint(p connectionProfile, profileID string,
+	allowedKinds []string, metadata map[string]string, defaultID, defaultEndpoint string,
+) (connectionProfile, string, *domain.Error) {
+	kindLower := strings.ToLower(strings.TrimSpace(p.Kind))
+	if !slices.Contains(allowedKinds, kindLower) {
+		return connectionProfile{}, "", &domain.Error{
+			Code:      app.ErrorCodeInvalidArgument,
+			Message:   "profile kind does not match expected type",
+			Retryable: false,
+		}
+	}
+
+	endpoint := resolveProfileEndpoint(metadata, profileID)
+	if endpoint == "" && defaultID != "" && profileID == defaultID {
+		endpoint = defaultEndpoint
+	}
+	if strings.TrimSpace(endpoint) == "" {
+		return connectionProfile{}, "", &domain.Error{
+			Code:      app.ErrorCodeExecutionFailed,
+			Message:   "profile endpoint not configured",
+			Retryable: false,
+		}
+	}
+	return p, endpoint, nil
 }
 
 func clampInt(value, min, max, fallback int) int {
@@ -297,7 +305,7 @@ func resolveProfileEndpoint(_ map[string]string, profileID string) string {
 	}
 
 	var parsed map[string]string
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+	if json.Unmarshal([]byte(raw), &parsed) != nil {
 		return ""
 	}
 	endpoint := strings.TrimSpace(parsed[profileID])
@@ -317,7 +325,7 @@ func profileEndpointAllowed(profileID, endpoint string) bool {
 	}
 
 	var allowlist map[string][]string
-	if err := json.Unmarshal([]byte(raw), &allowlist); err != nil {
+	if json.Unmarshal([]byte(raw), &allowlist) != nil {
 		return false
 	}
 	rules, found := allowlist[strings.TrimSpace(profileID)]

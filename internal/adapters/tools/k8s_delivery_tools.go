@@ -258,7 +258,7 @@ func (h *K8sApplyManifestHandler) applyConfigMap(
 	document k8sManifestDocument,
 ) (string, *domain.Error) {
 	var configMap corev1.ConfigMap
-	if err := json.Unmarshal(document.RawJSON, &configMap); err != nil {
+	if json.Unmarshal(document.RawJSON, &configMap) != nil {
 		return "", k8sInvalidArgument("manifest configmap is invalid")
 	}
 	configMap.Namespace = namespace
@@ -295,7 +295,7 @@ func (h *K8sApplyManifestHandler) applyDeployment(
 	document k8sManifestDocument,
 ) (string, *domain.Error) {
 	var deployment appsv1.Deployment
-	if err := json.Unmarshal(document.RawJSON, &deployment); err != nil {
+	if json.Unmarshal(document.RawJSON, &deployment) != nil {
 		return "", k8sInvalidArgument("manifest deployment is invalid")
 	}
 	deployment.Namespace = namespace
@@ -332,7 +332,7 @@ func (h *K8sApplyManifestHandler) applyService(
 	document k8sManifestDocument,
 ) (string, *domain.Error) {
 	var service corev1.Service
-	if err := json.Unmarshal(document.RawJSON, &service); err != nil {
+	if json.Unmarshal(document.RawJSON, &service) != nil {
 		return "", k8sInvalidArgument("manifest service is invalid")
 	}
 	service.Namespace = namespace
@@ -568,7 +568,7 @@ func parseK8sManifestPayload(payload map[string]any) (k8sManifestDocument, *doma
 			Namespace string `json:"namespace"`
 		} `json:"metadata"`
 	}{}
-	if unmarshalErr := json.Unmarshal(rawJSON, &header); unmarshalErr != nil {
+	if json.Unmarshal(rawJSON, &header) != nil {
 		return k8sManifestDocument{}, k8sInvalidArgument("manifest object is invalid")
 	}
 

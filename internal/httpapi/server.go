@@ -65,7 +65,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request app.CreateSessionRequest
-	if err := decodeBody(r, &request); err != nil {
+	if decodeBody(r, &request) != nil {
 		writeServiceError(w, app.ErrorCodeInvalidArgument, "invalid request body", http.StatusBadRequest)
 		return
 	}
@@ -151,7 +151,7 @@ func (s *Server) handleSessionInvokeTool(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	var request app.InvokeToolRequest
-	if err := decodeBody(r, &request); err != nil {
+	if decodeBody(r, &request) != nil {
 		writeServiceError(w, app.ErrorCodeInvalidArgument, "invalid request body", http.StatusBadRequest)
 		return
 	}

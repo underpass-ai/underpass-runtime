@@ -226,7 +226,7 @@ func TestNATSHandlers_NamesAndLiveClientErrors(t *testing.T) {
 	if _, err := client.Request(ctx, testNATSBadURL, testNATSSubjectEcho, []byte("x"), 5*time.Millisecond); err == nil {
 		t.Fatal("expected live NATS request error for invalid url")
 	}
-	if err := client.Publish(ctx, testNATSBadURL, testNATSSubjectEcho, []byte("x"), 5*time.Millisecond); err == nil {
+	if client.Publish(ctx, testNATSBadURL, testNATSSubjectEcho, []byte("x"), 5*time.Millisecond) == nil {
 		t.Fatal("expected live NATS publish error for invalid url")
 	}
 	if _, err := client.SubscribePull(ctx, testNATSBadURL, testNATSSubjectEcho, 5*time.Millisecond, 1); err == nil {

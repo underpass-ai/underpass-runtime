@@ -22,7 +22,7 @@ func TestValidateOutputAgainstSchema_RejectsWrongType(t *testing.T) {
 		"exit_code": "0",
 	}
 
-	if err := validateOutputAgainstSchema(schema, output); err == nil {
+	if validateOutputAgainstSchema(schema, output) == nil {
 		t.Fatal("expected validation error for wrong field type")
 	}
 }

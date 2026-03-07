@@ -53,90 +53,34 @@ func TestDefaultCapabilities_Metadata(t *testing.T) {
 		}
 	}
 
-	if !seen["fs.write_file"] ||
-		!seen["fs.mkdir"] ||
-		!seen["fs.move"] ||
-		!seen["fs.copy"] ||
-		!seen["fs.delete"] ||
-		!seen["fs.stat"] ||
-		!seen["conn.list_profiles"] ||
-		!seen["conn.describe_profile"] ||
-		!seen["api.benchmark"] ||
-		!seen["nats.request"] ||
-		!seen["nats.publish"] ||
-		!seen["nats.subscribe_pull"] ||
-		!seen["kafka.consume"] ||
-		!seen["kafka.produce"] ||
-		!seen["kafka.topic_metadata"] ||
-		!seen["rabbit.consume"] ||
-		!seen["rabbit.publish"] ||
-		!seen["rabbit.queue_info"] ||
-		!seen["redis.get"] ||
-		!seen["redis.mget"] ||
-		!seen["redis.scan"] ||
-		!seen["redis.ttl"] ||
-		!seen["redis.exists"] ||
-		!seen["redis.set"] ||
-		!seen["redis.del"] ||
-		!seen["mongo.find"] ||
-		!seen["mongo.aggregate"] ||
-		!seen["git.status"] ||
-		!seen["git.diff"] ||
-		!seen["git.apply_patch"] ||
-		!seen["git.checkout"] ||
-		!seen["git.log"] ||
-		!seen["git.show"] ||
-		!seen["git.branch_list"] ||
-		!seen["git.commit"] ||
-		!seen["git.push"] ||
-		!seen["git.fetch"] ||
-		!seen["git.pull"] ||
-		!seen["repo.detect_project_type"] ||
-		!seen["repo.detect_toolchain"] ||
-		!seen["repo.validate"] ||
-		!seen["repo.build"] ||
-		!seen["repo.test"] ||
-		!seen["repo.run_tests"] ||
-		!seen["repo.test_failures_summary"] ||
-		!seen["repo.stacktrace_summary"] ||
-		!seen["repo.changed_files"] ||
-		!seen["repo.symbol_search"] ||
-		!seen["repo.find_references"] ||
-		!seen["repo.coverage_report"] ||
-		!seen["repo.static_analysis"] ||
-		!seen["repo.package"] ||
-		!seen["artifact.upload"] ||
-		!seen["artifact.download"] ||
-		!seen["artifact.list"] ||
-		!seen["image.build"] ||
-		!seen["image.push"] ||
-		!seen["image.inspect"] ||
-		!seen["container.ps"] ||
-		!seen["container.logs"] ||
-		!seen["container.run"] ||
-		!seen["container.exec"] ||
-		!seen["k8s.get_pods"] ||
-		!seen["k8s.get_services"] ||
-		!seen["k8s.get_deployments"] ||
-		!seen["k8s.get_images"] ||
-		!seen["k8s.get_logs"] ||
-		!seen["k8s.apply_manifest"] ||
-		!seen["k8s.rollout_status"] ||
-		!seen["k8s.restart_deployment"] ||
-		!seen["security.scan_dependencies"] ||
-		!seen["sbom.generate"] ||
-		!seen["security.scan_secrets"] ||
-		!seen["security.scan_container"] ||
-		!seen["security.license_check"] ||
-		!seen["quality.gate"] ||
-		!seen["ci.run_pipeline"] ||
-		!seen["go.mod.tidy"] ||
-		!seen["go.build"] ||
-		!seen["go.test"] ||
-		!seen["rust.build"] ||
-		!seen["node.typecheck"] ||
-		!seen["python.validate"] ||
-		!seen["c.build"] {
-		t.Fatalf("expected critical capabilities missing: %#v", seen)
+	requiredCapabilities := []string{
+		"fs.write_file", "fs.mkdir", "fs.move", "fs.copy", "fs.delete", "fs.stat",
+		"conn.list_profiles", "conn.describe_profile", "api.benchmark",
+		"nats.request", "nats.publish", "nats.subscribe_pull",
+		"kafka.consume", "kafka.produce", "kafka.topic_metadata",
+		"rabbit.consume", "rabbit.publish", "rabbit.queue_info",
+		"redis.get", "redis.mget", "redis.scan", "redis.ttl", "redis.exists", "redis.set", "redis.del",
+		"mongo.find", "mongo.aggregate",
+		"git.status", "git.diff", "git.apply_patch", "git.checkout", "git.log", "git.show",
+		"git.branch_list", "git.commit", "git.push", "git.fetch", "git.pull",
+		"repo.detect_project_type", "repo.detect_toolchain", "repo.validate",
+		"repo.build", "repo.test", "repo.run_tests", "repo.test_failures_summary",
+		"repo.stacktrace_summary", "repo.changed_files", "repo.symbol_search",
+		"repo.find_references", "repo.coverage_report", "repo.static_analysis", "repo.package",
+		"artifact.upload", "artifact.download", "artifact.list",
+		"image.build", "image.push", "image.inspect",
+		"container.ps", "container.logs", "container.run", "container.exec",
+		"k8s.get_pods", "k8s.get_services", "k8s.get_deployments", "k8s.get_images",
+		"k8s.get_logs", "k8s.apply_manifest", "k8s.rollout_status", "k8s.restart_deployment",
+		"security.scan_dependencies", "sbom.generate", "security.scan_secrets",
+		"security.scan_container", "security.license_check",
+		"quality.gate", "ci.run_pipeline",
+		"go.mod.tidy", "go.build", "go.test", "rust.build", "node.typecheck",
+		"python.validate", "c.build",
+	}
+	for _, name := range requiredCapabilities {
+		if !seen[name] {
+			t.Fatalf("expected critical capability missing: %s", name)
+		}
 	}
 }

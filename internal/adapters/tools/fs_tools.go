@@ -144,7 +144,7 @@ func (h *FSListHandler) Invoke(ctx context.Context, session domain.Session, args
 	}{Path: ".", MaxEntries: 200}
 
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.list args", Retryable: false}
 		}
 	}
@@ -338,7 +338,7 @@ func (h *FSReadHandler) Invoke(ctx context.Context, session domain.Session, args
 		MaxBytes int    `json:"max_bytes"`
 	}{MaxBytes: 64 * 1024}
 
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.read_file args", Retryable: false}
 	}
 	if request.Path == "" {
@@ -449,7 +449,7 @@ func (h *FSWriteHandler) Invoke(ctx context.Context, session domain.Session, arg
 		CreateParents bool   `json:"create_parents"`
 	}{Encoding: "utf8", CreateParents: true}
 
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.write_file args", Retryable: false}
 	}
 	if request.Path == "" {
@@ -555,7 +555,7 @@ func (h *FSMkdirHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Mode:          "0755",
 		ExistOk:       true,
 	}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.mkdir args", Retryable: false}
 	}
 	if strings.TrimSpace(request.Path) == "" {
@@ -662,7 +662,7 @@ func (h *FSMoveHandler) Invoke(ctx context.Context, session domain.Session, args
 		Overwrite       bool   `json:"overwrite"`
 		CreateParents   bool   `json:"create_parents"`
 	}{CreateParents: true}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.move args", Retryable: false}
 	}
 	if strings.TrimSpace(request.SourcePath) == "" || strings.TrimSpace(request.DestinationPath) == "" {
@@ -789,7 +789,7 @@ func (h *FSCopyHandler) Invoke(ctx context.Context, session domain.Session, args
 		Overwrite       bool   `json:"overwrite"`
 		CreateParents   bool   `json:"create_parents"`
 	}{CreateParents: true}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.copy args", Retryable: false}
 	}
 	if strings.TrimSpace(request.SourcePath) == "" || strings.TrimSpace(request.DestinationPath) == "" {
@@ -949,7 +949,7 @@ func (h *FSDeleteHandler) Invoke(ctx context.Context, session domain.Session, ar
 		Recursive bool   `json:"recursive"`
 		Force     bool   `json:"force"`
 	}{}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.delete args", Retryable: false}
 	}
 	if strings.TrimSpace(request.Path) == "" {
@@ -1044,7 +1044,7 @@ func (h *FSStatHandler) Invoke(ctx context.Context, session domain.Session, args
 	request := struct {
 		Path string `json:"path"`
 	}{}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.stat args", Retryable: false}
 	}
 	if strings.TrimSpace(request.Path) == "" {
@@ -1156,7 +1156,7 @@ func (h *FSPatchHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Strategy    string `json:"strategy"`
 	}{Strategy: fsKeyRejectConflict}
 
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.patch args", Retryable: false}
 	}
 	if strings.TrimSpace(request.UnifiedDiff) == "" {
@@ -1234,7 +1234,7 @@ func (h *FSSearchHandler) Invoke(ctx context.Context, session domain.Session, ar
 		MaxResults int    `json:"max_results"`
 	}{Path: ".", MaxResults: 200}
 
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.search args", Retryable: false}
 	}
 	if strings.TrimSpace(request.Pattern) == "" {

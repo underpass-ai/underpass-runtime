@@ -89,7 +89,7 @@ func (h *ImageBuildHandler) Invoke(ctx context.Context, session domain.Session, 
 		IncludeRecommendations: true,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid image.build args",
@@ -391,7 +391,7 @@ func (h *ImagePushHandler) Invoke(ctx context.Context, session domain.Session, a
 		IncludeRecommendations: true,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid image.push args",
@@ -648,7 +648,7 @@ func (h *ImageInspectHandler) Invoke(ctx context.Context, session domain.Session
 		MaxIssues:              200,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid image.inspect args",
@@ -1110,7 +1110,7 @@ func parseImageReference(ref string) (string, string, string, string) {
 	}
 
 	tag := ""
-	if lastSlash := strings.LastIndex(namePart, "/"); strings.LastIndex(namePart, ":") > lastSlash {
+	if strings.LastIndex(namePart, ":") > strings.LastIndex(namePart, "/") {
 		tagIndex := strings.LastIndex(namePart, ":")
 		tag = strings.TrimSpace(namePart[tagIndex+1:])
 		namePart = strings.TrimSpace(namePart[:tagIndex])

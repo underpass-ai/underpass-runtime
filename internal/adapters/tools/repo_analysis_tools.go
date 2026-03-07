@@ -147,7 +147,7 @@ func (h *RepoTestFailuresSummaryHandler) Invoke(ctx context.Context, session dom
 		MaxDiagnostics: 30,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.test_failures_summary args",
@@ -228,7 +228,7 @@ func (h *RepoStacktraceSummaryHandler) Invoke(ctx context.Context, session domai
 		MaxFrames: 20,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.stacktrace_summary args",
@@ -305,7 +305,7 @@ func (h *RepoChangedFilesHandler) Invoke(ctx context.Context, session domain.Ses
 		IncludeUntracked: true,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.changed_files args",
@@ -423,7 +423,7 @@ func (h *RepoSymbolSearchHandler) Invoke(ctx context.Context, session domain.Ses
 		UseRegex:      false,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.symbol_search args",
@@ -530,7 +530,7 @@ func (h *RepoFindReferencesHandler) Invoke(ctx context.Context, session domain.S
 		IncludeDeclarations: true,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.find_references args",

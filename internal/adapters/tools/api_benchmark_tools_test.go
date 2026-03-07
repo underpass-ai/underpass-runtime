@@ -48,30 +48,7 @@ func TestAPIBenchmarkHandler_Success(t *testing.T) {
 				t.Fatalf("expected constant-vus script, got: %q", string(spec.Stdin))
 			}
 
-			summary := `{
-  "metrics": {
-    "http_req_duration": {
-      "min": 2.1,
-      "avg": 10.4,
-      "med": 9.0,
-      "p(95)": 20.7,
-      "p(99)": 31.2,
-      "max": 40.1,
-      "thresholds": {"p(95)<300": true}
-    },
-    "http_reqs": {"count": 80, "rate": 8.0},
-    "http_req_failed": {"rate": 0.0125, "fails": 1, "passes": 79, "thresholds": {"rate<0.05": true}},
-    "checks": {"value": 0.99, "passes": 79, "fails": 1, "thresholds": {"rate>0.95": true}},
-    "bench_http_code_200": {"count": 79, "rate": 7.9},
-    "bench_http_code_500": {"count": 1, "rate": 0.1}
-  }
-}`
-			if err := os.MkdirAll(filepath.Join(workspace, ".bench"), 0o755); err != nil {
-				t.Fatalf("mkdir .bench: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(workspace, ".bench", "summary.json"), []byte(summary), 0o644); err != nil {
-				t.Fatalf("write summary: %v", err)
-			}
+			writeBenchmarkSummary(t, workspace)
 			return app.CommandResult{ExitCode: 0, Output: "k6 completed"}, nil
 		},
 	}
@@ -99,6 +76,35 @@ func TestAPIBenchmarkHandler_Success(t *testing.T) {
 	if !ok {
 		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
+	assertBenchmarkOutputFields(t, output)
+	assertBenchmarkArtifacts(t, result)
+}
+
+func writeBenchmarkSummary(t *testing.T, workspace string) {
+	t.Helper()
+	summary := `{
+  "metrics": {
+    "http_req_duration": {
+      "min": 2.1, "avg": 10.4, "med": 9.0, "p(95)": 20.7, "p(99)": 31.2, "max": 40.1,
+      "thresholds": {"p(95)<300": true}
+    },
+    "http_reqs": {"count": 80, "rate": 8.0},
+    "http_req_failed": {"rate": 0.0125, "fails": 1, "passes": 79, "thresholds": {"rate<0.05": true}},
+    "checks": {"value": 0.99, "passes": 79, "fails": 1, "thresholds": {"rate>0.95": true}},
+    "bench_http_code_200": {"count": 79, "rate": 7.9},
+    "bench_http_code_500": {"count": 1, "rate": 0.1}
+  }
+}`
+	if err := os.MkdirAll(filepath.Join(workspace, ".bench"), 0o755); err != nil {
+		t.Fatalf("mkdir .bench: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, ".bench", "summary.json"), []byte(summary), 0o644); err != nil {
+		t.Fatalf("write summary: %v", err)
+	}
+}
+
+func assertBenchmarkOutputFields(t *testing.T, output map[string]any) {
+	t.Helper()
 	if output["requests"] != 80 {
 		t.Fatalf("unexpected requests: %#v", output["requests"])
 	}
@@ -116,7 +122,10 @@ func TestAPIBenchmarkHandler_Success(t *testing.T) {
 	if codes["200"] != 79 || codes["500"] != 1 {
 		t.Fatalf("unexpected http codes: %#v", codes)
 	}
+}
 
+func assertBenchmarkArtifacts(t *testing.T, result app.ToolRunResult) {
+	t.Helper()
 	artifactNames := make([]string, 0, len(result.Artifacts))
 	for _, artifact := range result.Artifacts {
 		artifactNames = append(artifactNames, artifact.Name)

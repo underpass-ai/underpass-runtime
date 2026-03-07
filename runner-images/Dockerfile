@@ -65,13 +65,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     ripgrep \
     sed \
-    && rm -rf /var/lib/apt/lists/*
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain ${RUST_TOOLCHAIN} && \
-    rustup component add rustfmt clippy rust-src
-RUN groupadd -g 1000 runner && \
-    useradd -m -u 1000 -g 1000 -s /bin/bash runner && \
-    mkdir -p /workspace/repo && \
-    chown -R runner:runner /workspace
+    && rm -rf /var/lib/apt/lists/* \
+    && curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain ${RUST_TOOLCHAIN} \
+    && rustup component add rustfmt clippy rust-src \
+    && groupadd -g 1000 runner \
+    && useradd -m -u 1000 -g 1000 -s /bin/bash runner \
+    && mkdir -p /workspace/repo \
+    && chown -R runner:runner /workspace
 WORKDIR /workspace/repo
 USER runner
 CMD ["sh", "-lc", "sleep infinity"]
