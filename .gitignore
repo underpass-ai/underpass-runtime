@@ -1,0 +1,7 @@
+bin/
+coverage*.out
+cover*.out
+/workspace
+*.exe
+*.test
+*.prof

@@ -1,0 +1,37 @@
+# UnderPass Runtime — Full deployment with event bus
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.full.yml up
+#
+# Extends the minimal deployment with NATS JetStream for event-driven integration.
+
+services:
+  runtime:
+    environment:
+      - EVENT_BUS=nats
+      - EVENT_BUS_NATS_URL=nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+
+  nats:
+    image: docker.io/library/nats:2.10-alpine
+    container_name: underpass-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command:
+      - --jetstream
+      - --store_dir=/data
+      - --max_memory_store=256Mi
+      - --max_file_store=1Gi
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  nats-data:

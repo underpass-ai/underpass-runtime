@@ -1,0 +1,50 @@
+# UnderPass Runtime — Minimal standalone deployment
+#
+# Usage:
+#   docker compose up
+#
+# This starts the runtime with local backend (no K8s required).
+# Valkey provides persistent session/invocation storage.
+
+services:
+  runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: underpass-runtime
+    ports:
+      - "50053:50053"
+    environment:
+      - PORT=50053
+      - WORKSPACE_ROOT=/tmp/workspaces
+      - ARTIFACT_ROOT=/tmp/artifacts
+      - LOG_LEVEL=info
+      - WORKSPACE_BACKEND=local
+      - SESSION_STORE_BACKEND=valkey
+      - INVOCATION_STORE_BACKEND=valkey
+      - VALKEY_HOST=valkey
+    volumes:
+      - workspace-data:/tmp/workspaces
+      - workspace-artifacts:/tmp/artifacts
+    depends_on:
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  valkey:
+    image: docker.io/valkey/valkey:8-alpine
+    container_name: underpass-valkey
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  workspace-data:
+  workspace-artifacts:
+  valkey-data:

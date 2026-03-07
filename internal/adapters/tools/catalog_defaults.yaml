@@ -1,0 +1,2513 @@
+# Tool catalog — source of truth for workspace capabilities.
+# Generated from DefaultCapabilities(), then maintained as YAML.
+# Loaded at startup via go:embed.
+
+_anchors:
+  shell_deny_chars: &shell_deny
+    - ;
+    - "|"
+    - "&"
+    - "`"
+    - $(
+    - ">"
+    - <
+    - "\n"
+    - "\r"
+  shell_deny_chars_space: &shell_deny_space
+    - ;
+    - "|"
+    - "&"
+    - "`"
+    - $(
+    - ">"
+    - <
+    - "\n"
+    - "\r"
+    - " "
+  test_allowed_prefix: &test_allowed
+    - "-v"
+    - "-q"
+    - "-race"
+    - "-cover"
+    - "-coverprofile="
+    - "-run="
+    - "-count="
+    - "-timeout="
+    - "--if-present"
+    - "--silent"
+    - "--maxfail="
+    - "--disable-warnings"
+    - "--release"
+    - "--locked"
+    - "--offline"
+    - "--features="
+    - "--all-features"
+    - "--no-default-features"
+    - "--package="
+    - "--tests"
+    - "-P"
+    - "--no-daemon"
+    - "-D"
+  test_denied_prefix: &test_denied
+    - "-exec"
+    - "-toolexec"
+    - "-mod=mod"
+    - "-modfile"
+    - "-buildmode=plugin"
+    - "-f"
+    - "--file"
+    - "--require"
+    - "--import"
+    - "--project-cache-dir"
+  build_allowed_prefix: &build_allowed
+    - "-v"
+    - "-q"
+    - "-race"
+    - "-trimpath"
+    - "-tags="
+    - "-cover"
+    - "-coverprofile="
+    - "-run="
+    - "-count="
+    - "-timeout="
+    - "--if-present"
+    - "--silent"
+    - "--maxfail="
+    - "--disable-warnings"
+    - "--release"
+    - "--locked"
+    - "--offline"
+    - "--features="
+    - "--all-features"
+    - "--no-default-features"
+    - "--package="
+    - "--tests"
+    - "-P"
+    - "--no-daemon"
+    - "-D"
+  lang_tool_output: &lang_tool_output '{"type":"object","properties":{"exit_code":{"type":"integer"},"compiled_binary_path":{"type":"string"},"coverage_percent":{"type":"number"},"diagnostics":{"type":"array","items":{"type":"string"}}}}'
+
+  policy_extra_args_test: &policy_extra_args_test
+    arg_fields:
+      - field: extra_args
+        multi: true
+        max_items: 8
+        max_length: 64
+        allowed_prefix: *test_allowed
+        denied_prefix: *test_denied
+        deny_characters: *shell_deny
+
+  policy_extra_args_build: &policy_extra_args_build
+    arg_fields:
+      - field: extra_args
+        multi: true
+        max_items: 8
+        max_length: 64
+        allowed_prefix: *build_allowed
+        denied_prefix: *test_denied
+        deny_characters: *shell_deny
+
+  policy_git_remote: &policy_git_remote
+    arg_fields:
+      - field: remote
+        max_length: 128
+        deny_characters: *shell_deny_space
+      - field: refspec
+        max_length: 512
+        deny_characters: *shell_deny_space
+
+capabilities:
+  - name: fs.list
+    description: List files/directories under the session workspace.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"recursive":{"type":"boolean"},"max_entries":{"type":"integer","minimum":1,"maximum":1000}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"entries":{"type":"array"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 256
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":".","recursive":false}'
+
+  - name: fs.read_file
+    description: Read a text or binary file from workspace.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"content":{"type":"string"},"encoding":{"type":"string"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 1024
+    preconditions:
+      - path must be inside allowed_paths and point to a regular file
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"README.md"}'
+
+  - name: fs.write_file
+    description: Write a file in workspace using UTF-8 or base64 payload.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"encoding":{"type":"string","enum":["utf8","base64"]},"create_parents":{"type":"boolean"}},"required":["path","content"]}'
+    output_schema: '{"type":"object","properties":{"bytes_written":{"type":"integer"},"sha256":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 256
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - target file updated
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"notes/todo.txt","content":"hello","create_parents":true}'
+
+  - name: fs.mkdir
+    description: Create a directory inside workspace.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"create_parents":{"type":"boolean"},"mode":{"type":"string"},"exist_ok":{"type":"boolean"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"created":{"type":"boolean"},"mode":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 64
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - directory may be created
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"tmp/output","create_parents":true,"mode":"0755","exist_ok":true}'
+
+  - name: fs.move
+    description: Move or rename a file/directory inside workspace.
+    input_schema: '{"type":"object","properties":{"source_path":{"type":"string"},"destination_path":{"type":"string"},"overwrite":{"type":"boolean"},"create_parents":{"type":"boolean"}},"required":["source_path","destination_path"]}'
+    output_schema: '{"type":"object","properties":{"source_path":{"type":"string"},"destination_path":{"type":"string"},"moved":{"type":"boolean"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 64
+    preconditions:
+      - source and destination must be inside allowed_paths
+    postconditions:
+      - source path may be relocated
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: source_path
+          workspace_relative: true
+        - field: destination_path
+          workspace_relative: true
+    examples:
+      - '{"source_path":"tmp/file.txt","destination_path":"tmp/archive/file.txt","overwrite":true,"create_parents":true}'
+
+  - name: fs.copy
+    description: Copy a file/directory inside workspace.
+    input_schema: '{"type":"object","properties":{"source_path":{"type":"string"},"destination_path":{"type":"string"},"recursive":{"type":"boolean"},"overwrite":{"type":"boolean"},"create_parents":{"type":"boolean"}},"required":["source_path","destination_path"]}'
+    output_schema: '{"type":"object","properties":{"source_path":{"type":"string"},"destination_path":{"type":"string"},"copied":{"type":"boolean"},"type":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 25
+      output_limit_kb: 64
+    preconditions:
+      - source and destination must be inside allowed_paths
+    postconditions:
+      - destination path may be created/updated
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: source_path
+          workspace_relative: true
+        - field: destination_path
+          workspace_relative: true
+    examples:
+      - '{"source_path":"notes/todo.txt","destination_path":"notes/todo.copy.txt","overwrite":true}'
+
+  - name: fs.delete
+    description: Delete a file/directory inside workspace.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"recursive":{"type":"boolean"},"force":{"type":"boolean"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"deleted":{"type":"boolean"},"existed":{"type":"boolean"}}}'
+    scope: workspace
+    side_effects: irreversible
+    risk_level: high
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 64
+    preconditions:
+      - path must be inside allowed_paths and must not be workspace root
+    postconditions:
+      - target path may be removed
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"tmp/old.log","recursive":false,"force":true}'
+
+  - name: fs.stat
+    description: "Get metadata (type, size, mode, mtime) for a workspace path."
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"exists":{"type":"boolean"},"type":{"type":"string"},"size_bytes":{"type":"integer"},"mode":{"type":"string"},"modified_at":{"type":"string"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 64
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"README.md"}'
+
+  - name: fs.patch
+    description: Apply a unified diff patch to files in the workspace.
+    input_schema: '{"type":"object","properties":{"unified_diff":{"type":"string"},"strategy":{"type":"string","enum":["apply","reject_on_conflict"]}},"required":["unified_diff"]}'
+    output_schema: '{"type":"object","properties":{"applied":{"type":"boolean"},"strategy":{"type":"string"},"changed_paths":{"type":"array","items":{"type":"string"}},"output":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 45
+      output_limit_kb: 1024
+    preconditions:
+      - patch paths must be inside allowed_paths
+    postconditions:
+      - workspace files may change
+    cost_hint: medium
+    examples:
+      - '{"unified_diff":"diff --git a/file b/file\n...","strategy":"reject_on_conflict"}'
+
+  - name: fs.search
+    description: Search file contents using regex pattern.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"pattern":{"type":"string"},"max_results":{"type":"integer","minimum":1,"maximum":2000}},"required":["pattern"]}'
+    output_schema: '{"type":"object","properties":{"matches":{"type":"array"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 512
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: medium
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":".","pattern":"TODO","max_results":50}'
+
+  - name: conn.list_profiles
+    description: List governable external connection profiles visible to the session principal.
+    input_schema: '{"type":"object","properties":{},"required":[]}'
+    output_schema: '{"type":"object","properties":{"profiles":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string"},"description":{"type":"string"},"read_only":{"type":"boolean"},"scopes":{"type":"object"}}}},"count":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 10
+      output_limit_kb: 256
+    preconditions:
+      - session metadata may restrict allowed profiles
+    postconditions:
+      - no state mutation
+    cost_hint: low
+    examples:
+      - '{}'
+
+  - name: conn.describe_profile
+    description: Describe a specific connection profile (without exposing credentials).
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"}},"required":["profile_id"]}'
+    output_schema: '{"type":"object","properties":{"profile":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string"},"description":{"type":"string"},"read_only":{"type":"boolean"},"scopes":{"type":"object"}}}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 10
+      output_limit_kb: 128
+    preconditions:
+      - profile_id must refer to a visible profile
+    postconditions:
+      - no state mutation
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+    examples:
+      - '{"profile_id":"dev.redis"}'
+
+  - name: api.benchmark
+    description: Run a bounded k6 benchmark against an allowlisted HTTP profile route.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"request":{"type":"object","properties":{"method":{"type":"string","enum":["GET","HEAD","OPTIONS","POST","PUT","PATCH","DELETE"]},"path":{"type":"string"},"headers":{"type":"object","additionalProperties":{"type":"string"}},"body":{"type":"string"}},"required":["path"]},"load":{"type":"object","properties":{"mode":{"type":"string","enum":["constant_vus","arrival_rate"]},"duration_ms":{"type":"integer","minimum":100,"maximum":60000},"vus":{"type":"integer","minimum":1,"maximum":50},"rps":{"type":"integer","minimum":1,"maximum":200}}},"thresholds":{"type":"object","properties":{"p95_ms":{"type":"number","minimum":1},"error_rate":{"type":"number","minimum":0,"maximum":1},"checks":{"type":"number","minimum":0,"maximum":1}}},"include_raw_metrics":{"type":"boolean"}},"required":["profile_id","request"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"target_url":{"type":"string"},"request":{"type":"object"},"load":{"type":"object"},"latency_ms":{"type":"object","properties":{"min":{"type":"number"},"avg":{"type":"number"},"p50":{"type":"number"},"p95":{"type":"number"},"p99":{"type":"number"},"max":{"type":"number"}}},"rps_observed":{"type":"number"},"requests":{"type":"integer"},"failed_requests":{"type":"integer"},"error_rate":{"type":"number"},"http_codes":{"type":"object"},"thresholds":{"type":"object","properties":{"passed":{"type":"boolean"},"violations":{"type":"array","items":{"type":"string"}}}},"artifacts":{"type":"object"}}}'
+    scope: external
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 120
+      output_limit_kb: 4096
+    preconditions:
+      - profile_id must be an allowlisted http/api profile
+      - request.path must be allowlisted by profile routes
+    postconditions:
+      - k6 benchmark executed with bounded load
+      - benchmark artifacts may be generated
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: request.path
+          max_length: 2048
+          allowed_prefix:
+            - /
+          denied_prefix:
+            - "http://"
+            - "https://"
+          deny_characters:
+            - "\n"
+            - "\r"
+      profile_fields:
+        - field: profile_id
+    examples:
+      - '{"profile_id":"bench.workspace","request":{"method":"GET","path":"/healthz","headers":{"accept":"application/json"}},"load":{"mode":"constant_vus","duration_ms":10000,"vus":5},"thresholds":{"p95_ms":1000,"error_rate":0.05,"checks":0.95}}'
+
+  - name: nats.request
+    description: Send NATS request/reply call with profile-governed subject limits.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"subject":{"type":"string"},"payload":{"type":"string"},"payload_encoding":{"type":"string","enum":["utf8","base64"]},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576}},"required":["profile_id","subject"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"subject":{"type":"string"},"response_base64":{"type":"string"},"response_bytes":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: external
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 1024
+    preconditions:
+      - profile_id and subject must be allowlisted
+    postconditions:
+      - request-reply interaction completed
+    cost_hint: medium
+    policy:
+      profile_fields:
+        - field: profile_id
+      subject_fields:
+        - field: subject
+    examples:
+      - '{"profile_id":"dev.nats","subject":"sandbox.echo","payload":"hello","payload_encoding":"utf8","timeout_ms":2000}'
+
+  - name: nats.publish
+    description: Publish NATS message to an allowlisted subject.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"subject":{"type":"string"},"payload":{"type":"string"},"payload_encoding":{"type":"string","enum":["utf8","base64"]},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576}},"required":["profile_id","subject"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"subject":{"type":"string"},"payload_bytes":{"type":"integer"},"payload_encoding":{"type":"string"},"published":{"type":"boolean"}}}'
+    scope: external
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 256
+    preconditions:
+      - profile_id and subject must be allowlisted
+    postconditions:
+      - message may be published
+    cost_hint: medium
+    policy:
+      profile_fields:
+        - field: profile_id
+      subject_fields:
+        - field: subject
+    examples:
+      - '{"profile_id":"dev.nats","subject":"sandbox.events","payload":"hello","payload_encoding":"utf8","timeout_ms":2000}'
+
+  - name: nats.subscribe_pull
+    description: Pull messages from NATS subject with deterministic limits.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"subject":{"type":"string"},"max_messages":{"type":"integer","minimum":1,"maximum":100},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","subject"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"subject":{"type":"string"},"messages":{"type":"array","items":{"type":"object","properties":{"subject":{"type":"string"},"data_base64":{"type":"string"},"size_bytes":{"type":"integer"},"data_trimmed":{"type":"boolean"}}}},"message_count":{"type":"integer"},"total_bytes":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: external
+    side_effects: none
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 2048
+    preconditions:
+      - profile_id and subject must be allowlisted
+    postconditions:
+      - bounded message batch returned
+    cost_hint: medium
+    policy:
+      profile_fields:
+        - field: profile_id
+      subject_fields:
+        - field: subject
+    examples:
+      - '{"profile_id":"dev.nats","subject":"sandbox.events","max_messages":20,"timeout_ms":2000}'
+
+  - name: kafka.consume
+    description: Consume Kafka messages from an allowlisted topic with bounded output.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"topic":{"type":"string"},"partition":{"type":"integer","minimum":0},"offset_mode":{"type":"string","enum":["earliest","latest","absolute","timestamp"]},"offset":{"oneOf":[{"type":"integer","minimum":0},{"type":"string","enum":["earliest","latest"]}]},"timestamp_ms":{"type":"integer","minimum":0},"max_messages":{"type":"integer","minimum":1,"maximum":200},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","topic"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"topic":{"type":"string"},"offset_mode":{"type":"string"},"offset":{"type":"integer"},"timestamp_ms":{"type":"integer"},"messages":{"type":"array","items":{"type":"object","properties":{"partition":{"type":"integer"},"offset":{"type":"integer"},"timestamp_unix":{"type":"integer"},"key_base64":{"type":"string"},"value_base64":{"type":"string"},"size_bytes":{"type":"integer"},"key_trimmed":{"type":"boolean"},"value_trimmed":{"type":"boolean"}}}},"message_count":{"type":"integer"},"total_bytes":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: external
+    side_effects: none
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 2048
+    preconditions:
+      - profile_id and topic must be allowlisted
+    postconditions:
+      - bounded message batch returned
+    cost_hint: medium
+    policy:
+      profile_fields:
+        - field: profile_id
+      topic_fields:
+        - field: topic
+    examples:
+      - '{"profile_id":"dev.kafka","topic":"sandbox.events","partition":0,"offset_mode":"latest","max_messages":20,"timeout_ms":2000}'
+      - '{"profile_id":"dev.kafka","topic":"sandbox.events","partition":0,"offset_mode":"absolute","offset":42,"max_messages":20,"timeout_ms":2000}'
+      - '{"profile_id":"dev.kafka","topic":"sandbox.events","partition":0,"offset_mode":"timestamp","timestamp_ms":1730000000000,"max_messages":20,"timeout_ms":2000}'
+
+  - name: kafka.produce
+    description: Produce Kafka message to an allowlisted topic.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"topic":{"type":"string"},"partition":{"type":"integer","minimum":0},"key":{"type":"string"},"key_encoding":{"type":"string","enum":["utf8","base64"]},"value":{"type":"string"},"value_encoding":{"type":"string","enum":["utf8","base64"]},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576}},"required":["profile_id","topic"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"topic":{"type":"string"},"partition":{"type":"integer"},"key_bytes":{"type":"integer"},"value_bytes":{"type":"integer"},"produced":{"type":"boolean"}}}'
+    scope: external
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 256
+    preconditions:
+      - profile_id and topic must be allowlisted
+    postconditions:
+      - message may be produced
+    cost_hint: medium
+    policy:
+      profile_fields:
+        - field: profile_id
+      topic_fields:
+        - field: topic
+    examples:
+      - '{"profile_id":"dev.kafka","topic":"sandbox.events","partition":0,"key":"k1","value":"hello","value_encoding":"utf8","timeout_ms":2000}'
+
+  - name: kafka.topic_metadata
+    description: Describe Kafka topic metadata for an allowlisted topic.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"topic":{"type":"string"}},"required":["profile_id","topic"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"topic":{"type":"string"},"partition_count":{"type":"integer"},"partitions":{"type":"array","items":{"type":"object","properties":{"partition":{"type":"integer"},"leader_host":{"type":"string"},"leader_port":{"type":"integer"},"replica_ids":{"type":"array","items":{"type":"integer"}},"isr_ids":{"type":"array","items":{"type":"integer"}},"replica_count":{"type":"integer"},"isr_count":{"type":"integer"}}}}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 512
+    preconditions:
+      - profile_id and topic must be allowlisted
+    postconditions:
+      - no state mutation
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+      topic_fields:
+        - field: topic
+    examples:
+      - '{"profile_id":"dev.kafka","topic":"sandbox.events"}'
+
+  - name: rabbit.consume
+    description: Consume RabbitMQ messages from an allowlisted queue with bounded output.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"queue":{"type":"string"},"max_messages":{"type":"integer","minimum":1,"maximum":200},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","queue"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"queue":{"type":"string"},"messages":{"type":"array","items":{"type":"object","properties":{"exchange":{"type":"string"},"routing_key":{"type":"string"},"redelivered":{"type":"boolean"},"timestamp_unix":{"type":"integer"},"body_base64":{"type":"string"},"size_bytes":{"type":"integer"},"body_trimmed":{"type":"boolean"}}}},"message_count":{"type":"integer"},"total_bytes":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: external
+    side_effects: none
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 2048
+    preconditions:
+      - profile_id and queue must be allowlisted
+    postconditions:
+      - bounded message batch returned
+    cost_hint: medium
+    policy:
+      profile_fields:
+        - field: profile_id
+      queue_fields:
+        - field: queue
+    examples:
+      - '{"profile_id":"dev.rabbit","queue":"sandbox.jobs","max_messages":20,"timeout_ms":2000}'
+
+  - name: rabbit.publish
+    description: Publish RabbitMQ message to an allowlisted queue/routing key.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"queue":{"type":"string"},"exchange":{"type":"string"},"routing_key":{"type":"string"},"payload":{"type":"string"},"payload_encoding":{"type":"string","enum":["utf8","base64"]},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576}},"required":["profile_id","queue"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"queue":{"type":"string"},"exchange":{"type":"string"},"routing_key":{"type":"string"},"payload_bytes":{"type":"integer"},"published":{"type":"boolean"}}}'
+    scope: external
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 256
+    preconditions:
+      - profile_id and queue must be allowlisted
+    postconditions:
+      - message may be published
+    cost_hint: medium
+    policy:
+      profile_fields:
+        - field: profile_id
+      queue_fields:
+        - field: queue
+    examples:
+      - '{"profile_id":"dev.rabbit","queue":"sandbox.jobs","payload":"hello","payload_encoding":"utf8","timeout_ms":2000}'
+
+  - name: rabbit.queue_info
+    description: Inspect RabbitMQ queue metrics for an allowlisted queue.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"queue":{"type":"string"},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","queue"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"queue":{"type":"string"},"messages":{"type":"integer"},"consumers":{"type":"integer"}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 256
+    preconditions:
+      - profile_id and queue must be allowlisted
+    postconditions:
+      - no state mutation
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+      queue_fields:
+        - field: queue
+    examples:
+      - '{"profile_id":"dev.rabbit","queue":"sandbox.jobs"}'
+
+  - name: redis.get
+    description: Read a single Redis key from an allowlisted key prefix.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"key":{"type":"string"},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","key"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"key":{"type":"string"},"found":{"type":"boolean"},"value_base64":{"type":"string"},"value_bytes":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 1024
+    preconditions:
+      - profile_id and key prefix must be allowlisted
+    postconditions:
+      - no state mutation
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+      key_prefix_fields:
+        - field: key
+    examples:
+      - '{"profile_id":"dev.redis","key":"sandbox:todo:1","max_bytes":4096}'
+
+  - name: redis.mget
+    description: Read multiple Redis keys from allowlisted key prefixes.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"keys":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":200},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","keys"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"entries":{"type":"array","items":{"type":"object","properties":{"key":{"type":"string"},"found":{"type":"boolean"},"value_base64":{"type":"string"},"value_bytes":{"type":"integer"},"value_trimmed":{"type":"boolean"}}}},"key_count":{"type":"integer"},"found_count":{"type":"integer"},"total_bytes":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 2048
+    preconditions:
+      - profile_id and all key prefixes must be allowlisted
+    postconditions:
+      - no state mutation
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+      key_prefix_fields:
+        - field: keys
+          multi: true
+    examples:
+      - '{"profile_id":"dev.redis","keys":["sandbox:todo:1","sandbox:todo:2"]}'
+
+  - name: redis.scan
+    description: Scan Redis keys under an allowlisted prefix with deterministic bounds.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"prefix":{"type":"string"},"cursor":{"type":"integer","minimum":0},"max_keys":{"type":"integer","minimum":1,"maximum":1000},"count_hint":{"type":"integer","minimum":1,"maximum":1000},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","prefix"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"prefix":{"type":"string"},"keys":{"type":"array","items":{"type":"string"}},"count":{"type":"integer"},"next_cursor":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 2048
+    preconditions:
+      - profile_id and prefix must be allowlisted
+    postconditions:
+      - no state mutation
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+      key_prefix_fields:
+        - field: prefix
+    examples:
+      - '{"profile_id":"dev.redis","prefix":"sandbox:todo:","max_keys":100}'
+
+  - name: redis.ttl
+    description: Get TTL metadata for a Redis key in an allowlisted prefix.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"key":{"type":"string"},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","key"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"key":{"type":"string"},"exists":{"type":"boolean"},"status":{"type":"string"},"ttl_seconds":{"type":"integer"}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 128
+    preconditions:
+      - profile_id and key prefix must be allowlisted
+    postconditions:
+      - no state mutation
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+      key_prefix_fields:
+        - field: key
+    examples:
+      - '{"profile_id":"dev.redis","key":"sandbox:todo:1"}'
+
+  - name: redis.exists
+    description: Check existence for Redis keys in allowlisted prefixes.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"keys":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":200},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","keys"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"keys_checked":{"type":"integer"},"exists_count":{"type":"integer"}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 128
+    preconditions:
+      - profile_id and key prefixes must be allowlisted
+    postconditions:
+      - no state mutation
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+      key_prefix_fields:
+        - field: keys
+          multi: true
+    examples:
+      - '{"profile_id":"dev.redis","keys":["sandbox:todo:1","sandbox:todo:2"]}'
+
+  - name: redis.set
+    description: Set a Redis key with mandatory TTL in an allowlisted prefix.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"key":{"type":"string"},"value":{"type":"string"},"value_encoding":{"type":"string","enum":["utf8","base64"]},"ttl_seconds":{"type":"integer","minimum":1,"maximum":604800},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","key","value","ttl_seconds"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"key":{"type":"string"},"ttl_seconds":{"type":"integer"},"value_bytes":{"type":"integer"},"value_format":{"type":"string"},"written":{"type":"boolean"}}}'
+    scope: external
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 128
+    preconditions:
+      - profile_id and key prefix must be allowlisted
+      - ttl_seconds is required
+      - explicit approval required
+    postconditions:
+      - key value updated with ttl
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+      key_prefix_fields:
+        - field: key
+    examples:
+      - '{"profile_id":"dev.redis","key":"sandbox:todo:1","value":"{\"title\":\"demo\"}","ttl_seconds":3600}'
+
+  - name: redis.del
+    description: Delete Redis keys from allowlisted prefixes.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"keys":{"type":"array","items":{"type":"string"},"minItems":1,"maxItems":200},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","keys"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"keys_requested":{"type":"integer"},"deleted":{"type":"integer"}}}'
+    scope: external
+    side_effects: irreversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 128
+    preconditions:
+      - profile_id and key prefixes must be allowlisted
+      - explicit approval required
+    postconditions:
+      - keys may be deleted
+    cost_hint: low
+    policy:
+      profile_fields:
+        - field: profile_id
+      key_prefix_fields:
+        - field: keys
+          multi: true
+    examples:
+      - '{"profile_id":"dev.redis","keys":["sandbox:todo:1","sandbox:todo:2"]}'
+
+  - name: mongo.find
+    description: Find MongoDB documents from an allowlisted database with a hard result limit.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"database":{"type":"string"},"collection":{"type":"string"},"filter":{"type":"object"},"projection":{"type":"object"},"sort":{"type":"object"},"limit":{"type":"integer","minimum":1,"maximum":200},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","database","collection"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"database":{"type":"string"},"collection":{"type":"string"},"documents":{"type":"array","items":{"type":"object"}},"document_count":{"type":"integer"},"effective_limit":{"type":"integer"},"total_bytes":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: external
+    side_effects: none
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 2048
+    preconditions:
+      - profile_id and database must be allowlisted
+    postconditions:
+      - no state mutation
+    cost_hint: medium
+    policy:
+      profile_fields:
+        - field: profile_id
+    examples:
+      - '{"profile_id":"dev.mongo","database":"sandbox","collection":"todos","filter":{"status":"open"},"limit":50}'
+
+  - name: mongo.aggregate
+    description: Run MongoDB aggregation with a server-side hard result limit.
+    input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"database":{"type":"string"},"collection":{"type":"string"},"pipeline":{"type":"array","items":{"type":"object"}},"limit":{"type":"integer","minimum":1,"maximum":200},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","database","collection"]}'
+    output_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"database":{"type":"string"},"collection":{"type":"string"},"documents":{"type":"array","items":{"type":"object"}},"document_count":{"type":"integer"},"effective_limit":{"type":"integer"},"total_bytes":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: external
+    side_effects: none
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 2048
+    preconditions:
+      - profile_id and database must be allowlisted
+    postconditions:
+      - no state mutation
+    cost_hint: medium
+    policy:
+      profile_fields:
+        - field: profile_id
+    examples:
+      - '{"profile_id":"dev.mongo","database":"sandbox","collection":"todos","pipeline":[{"$match":{"status":"done"}}],"limit":50}'
+
+  - name: git.status
+    description: Run git status in the workspace repository.
+    input_schema: '{"type":"object","properties":{"short":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"status":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 20
+      max_retries: 1
+      output_limit_kb: 256
+    preconditions:
+      - workspace must contain a git repository
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    examples:
+      - '{"short":true}'
+
+  - name: git.diff
+    description: Return unified diff from git workspace.
+    input_schema: '{"type":"object","properties":{"staged":{"type":"boolean"},"paths":{"type":"array","items":{"type":"string"}},"base":{"type":"string"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"diff":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      max_retries: 1
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain a git repository
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: paths
+          multi: true
+          workspace_relative: true
+    examples:
+      - '{"staged":false}'
+
+  - name: git.apply_patch
+    description: Apply a unified diff patch using git apply.
+    input_schema: '{"type":"object","properties":{"patch":{"type":"string"},"check":{"type":"boolean"}},"required":["patch"]}'
+    output_schema: '{"type":"object","properties":{"applied":{"type":"boolean"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 45
+      output_limit_kb: 512
+    preconditions:
+      - workspace must contain a git repository
+    postconditions:
+      - working tree may change
+    cost_hint: medium
+    examples:
+      - '{"patch":"diff --git ...","check":true}'
+
+  - name: git.checkout
+    description: "Checkout a branch or ref, optionally creating a new branch."
+    input_schema: '{"type":"object","properties":{"ref":{"type":"string"},"create":{"type":"boolean"},"start_point":{"type":"string"},"force":{"type":"boolean"}},"required":["ref"]}'
+    output_schema: '{"type":"object","properties":{"ref":{"type":"string"},"created":{"type":"boolean"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 512
+    preconditions:
+      - workspace must contain a git repository
+    postconditions:
+      - checked out ref may change working tree
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: ref
+          max_length: 256
+          deny_characters:
+            - ;
+            - "|"
+            - "&"
+            - "`"
+            - $(
+            - ">"
+            - <
+            - "\n"
+            - "\r"
+        - field: start_point
+          max_length: 256
+          deny_characters:
+            - ;
+            - "|"
+            - "&"
+            - "`"
+            - $(
+            - ">"
+            - <
+            - "\n"
+            - "\r"
+    examples:
+      - '{"ref":"feature/new-api"}'
+      - '{"ref":"release-2026-02","create":true,"start_point":"origin/main"}'
+
+  - name: git.log
+    description: List commit history for a ref with bounded output.
+    input_schema: '{"type":"object","properties":{"ref":{"type":"string"},"max_count":{"type":"integer","minimum":1,"maximum":200}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"ref":{"type":"string"},"count":{"type":"integer"},"entries":{"type":"array","items":{"type":"object","properties":{"hash":{"type":"string"},"author_name":{"type":"string"},"author_email":{"type":"string"},"date":{"type":"string"},"subject":{"type":"string"},"parents":{"type":"array","items":{"type":"string"}}}}}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 20
+      max_retries: 1
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain a git repository
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: ref
+          max_length: 256
+          deny_characters:
+            - ;
+            - "|"
+            - "&"
+            - "`"
+            - $(
+            - ">"
+            - <
+            - "\n"
+            - "\r"
+    examples:
+      - '{"ref":"HEAD","max_count":20}'
+
+  - name: git.show
+    description: Show commit details or file content at a ref.
+    input_schema: '{"type":"object","properties":{"ref":{"type":"string"},"path":{"type":"string"},"stat":{"type":"boolean"},"patch":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"ref":{"type":"string"},"path":{"type":"string"},"show":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      max_retries: 1
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain a git repository
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+      arg_fields:
+        - field: ref
+          max_length: 256
+          deny_characters:
+            - ;
+            - "|"
+            - "&"
+            - "`"
+            - $(
+            - ">"
+            - <
+            - "\n"
+            - "\r"
+    examples:
+      - '{"ref":"HEAD~1"}'
+      - '{"ref":"HEAD","path":"README.md","patch":false}'
+
+  - name: git.branch_list
+    description: List local and/or remote branches.
+    input_schema: '{"type":"object","properties":{"all":{"type":"boolean"},"remotes":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"count":{"type":"integer"},"branches":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"upstream":{"type":"string"},"commit":{"type":"string"},"current":{"type":"boolean"}}}}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 20
+      max_retries: 1
+      output_limit_kb: 512
+    preconditions:
+      - workspace must contain a git repository
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    examples:
+      - '{"all":true}'
+
+  - name: git.commit
+    description: Create a commit from staged changes or selected paths.
+    input_schema: '{"type":"object","properties":{"message":{"type":"string"},"all":{"type":"boolean"},"paths":{"type":"array","items":{"type":"string"}}},"required":["message"]}'
+    output_schema: '{"type":"object","properties":{"committed":{"type":"boolean"},"commit":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: irreversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: none
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 512
+    preconditions:
+      - workspace must contain a git repository and staged changes
+    postconditions:
+      - new commit may be created
+    cost_hint: medium
+    policy:
+      path_fields:
+        - field: paths
+          multi: true
+          workspace_relative: true
+      arg_fields:
+        - field: message
+          max_length: 1024
+          deny_characters:
+            - "\u0000"
+    examples:
+      - '{"message":"feat: add workspace policy guard","all":true}'
+
+  - name: git.push
+    description: Push commits to an allowlisted remote/refspec.
+    input_schema: '{"type":"object","properties":{"remote":{"type":"string"},"refspec":{"type":"string"},"set_upstream":{"type":"boolean"},"force_with_lease":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"remote":{"type":"string"},"refspec":{"type":"string"},"pushed":{"type":"boolean"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: irreversible
+    risk_level: high
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 60
+      output_limit_kb: 1024
+    preconditions:
+      - remote and refspec must be allowlisted by metadata policy
+    postconditions:
+      - remote repository may be mutated
+    cost_hint: high
+    policy: *policy_git_remote
+    examples:
+      - '{"remote":"origin","refspec":"HEAD:refs/heads/feature/new-api","set_upstream":true}'
+
+  - name: git.fetch
+    description: Fetch refs from an allowlisted remote/refspec.
+    input_schema: '{"type":"object","properties":{"remote":{"type":"string"},"refspec":{"type":"string"},"prune":{"type":"boolean"},"tags":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"remote":{"type":"string"},"refspec":{"type":"string"},"fetched":{"type":"boolean"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 60
+      output_limit_kb: 1024
+    preconditions:
+      - remote and refspec must be allowlisted by metadata policy
+    postconditions:
+      - remote-tracking refs may change
+    cost_hint: medium
+    policy: *policy_git_remote
+    examples:
+      - '{"remote":"origin","refspec":"refs/heads/main","prune":true}'
+
+  - name: git.pull
+    description: Pull from an allowlisted remote/refspec.
+    input_schema: '{"type":"object","properties":{"remote":{"type":"string"},"refspec":{"type":"string"},"rebase":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"remote":{"type":"string"},"refspec":{"type":"string"},"pulled":{"type":"boolean"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 60
+      output_limit_kb: 1024
+    preconditions:
+      - remote and refspec must be allowlisted by metadata policy
+    postconditions:
+      - local branch may change
+    cost_hint: medium
+    policy: *policy_git_remote
+    examples:
+      - '{"remote":"origin","refspec":"main","rebase":true}'
+
+  - name: repo.detect_project_type
+    description: Detect repository project type for build/test orchestration.
+    input_schema: '{"type":"object","properties":{},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"flavor":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 64
+    preconditions:
+      - workspace must be initialized
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    examples:
+      - '{}'
+
+  - name: repo.detect_toolchain
+    description: Detect language toolchain metadata for orchestration.
+    input_schema: '{"type":"object","properties":{},"required":[]}'
+    output_schema: '{"type":"object","properties":{"language":{"type":"string"},"build_system":{"type":"string"},"test_framework":{"type":"string"},"containerizable":{"type":"boolean"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 20
+      output_limit_kb: 64
+    preconditions:
+      - workspace must be initialized
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    examples:
+      - '{}'
+
+  - name: repo.validate
+    description: Run toolchain-aware repository validation (syntax/compile checks).
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"language":{"type":"string"},"build_system":{"type":"string"},"test_framework":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"diagnostics":{"type":"array","items":{"type":"string"}},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain a supported project type
+    postconditions:
+      - validation output can be generated
+    cost_hint: medium
+    examples:
+      - '{"target":"./..."}'
+
+  - name: repo.build
+    description: Execute project build command with repository-aware defaults.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"},"extra_args":{"type":"array","items":{"type":"string"}}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 240
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain a supported project type
+    postconditions:
+      - build artifacts may be generated
+    cost_hint: high
+    policy: *policy_extra_args_build
+    examples:
+      - '{"target":"./..."}'
+
+  - name: repo.test
+    description: Execute repository test suite (preferred alias of repo.run_tests).
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"},"extra_args":{"type":"array","items":{"type":"string"}}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain a supported project type
+    postconditions:
+      - test reports can be generated
+    cost_hint: high
+    policy: *policy_extra_args_test
+    examples:
+      - '{"target":"./..."}'
+
+  - name: repo.run_tests
+    description: Execute repository test suite with repo-aware defaults.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"},"extra_args":{"type":"array","items":{"type":"string"}}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain a supported project type
+    postconditions:
+      - test reports can be generated
+    cost_hint: high
+    policy: *policy_extra_args_test
+    examples:
+      - '{"target":"./..."}'
+
+  - name: repo.test_failures_summary
+    description: Summarize failed tests from provided test output or by executing repository tests.
+    input_schema: '{"type":"object","properties":{"output":{"type":"string"},"target":{"type":"string"},"extra_args":{"type":"array","items":{"type":"string"}},"max_failures":{"type":"integer","minimum":1,"maximum":200},"max_diagnostics":{"type":"integer","minimum":1,"maximum":200}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"source":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"failed_count":{"type":"integer"},"failed_tests":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"kind":{"type":"string"},"line":{"type":"string"}}}},"diagnostics":{"type":"array","items":{"type":"string"}},"output_excerpt":{"type":"string"},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain a supported project type when output is omitted
+    postconditions:
+      - test failure summary artifact may be generated
+    cost_hint: medium
+    policy: *policy_extra_args_test
+    examples:
+      - '{"output":"--- FAIL: TestCreateTodo (0.00s)\nFAIL\tgithub.com/acme/todo\t0.01s"}'
+      - '{"target":"./...","max_failures":20}'
+
+  - name: repo.stacktrace_summary
+    description: Summarize stacktraces from provided output or by executing repository tests.
+    input_schema: '{"type":"object","properties":{"output":{"type":"string"},"target":{"type":"string"},"extra_args":{"type":"array","items":{"type":"string"}},"max_traces":{"type":"integer","minimum":1,"maximum":50},"max_frames":{"type":"integer","minimum":1,"maximum":80}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"source":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"trace_count":{"type":"integer"},"stacktraces":{"type":"array","items":{"type":"object","properties":{"type":{"type":"string"},"message":{"type":"string"},"frames":{"type":"array","items":{"type":"string"}},"frame_count":{"type":"integer"}}}},"diagnostics":{"type":"array","items":{"type":"string"}},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain a supported project type when output is omitted
+    postconditions:
+      - stacktrace summary artifact may be generated
+    cost_hint: medium
+    policy: *policy_extra_args_test
+    examples:
+      - '{"output":"panic: runtime error\nmain.main()\n/workspace/repo/main.go:11 +0x29"}'
+      - '{"target":"./...","max_traces":5,"max_frames":12}'
+
+  - name: repo.changed_files
+    description: Return deterministic changed file metadata from git status/diff or provided status output.
+    input_schema: '{"type":"object","properties":{"base_ref":{"type":"string"},"path":{"type":"string"},"max_files":{"type":"integer","minimum":1,"maximum":2000},"include_untracked":{"type":"boolean"},"output":{"type":"string"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"source":{"type":"string"},"mode":{"type":"string"},"base_ref":{"type":"string"},"path":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"changed_count":{"type":"integer"},"changed_files":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"status":{"type":"string"},"index_status":{"type":"string"},"worktree_status":{"type":"string"},"staged":{"type":"boolean"},"unstaged":{"type":"boolean"},"untracked":{"type":"boolean"},"deleted":{"type":"boolean"},"renamed_from":{"type":"string"}}}},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 90
+      output_limit_kb: 1024
+    preconditions:
+      - workspace should be a git repository when output is omitted
+    postconditions:
+      - changed files summary artifact may be generated
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+      arg_fields:
+        - field: base_ref
+          max_length: 120
+          deny_characters:
+            - ;
+            - "|"
+            - "&"
+            - "`"
+            - $(
+            - ">"
+            - <
+            - "\n"
+            - "\r"
+    examples:
+      - '{"path":".","max_files":100}'
+      - '{"base_ref":"origin/main","path":"internal"}'
+
+  - name: repo.symbol_search
+    description: Search symbols with deterministic file/line/column matches in allowed workspace paths.
+    input_schema: '{"type":"object","properties":{"symbol":{"type":"string"},"path":{"type":"string"},"max_results":{"type":"integer","minimum":1,"maximum":2000},"case_sensitive":{"type":"boolean"},"whole_word":{"type":"boolean"},"use_regex":{"type":"boolean"}},"required":["symbol"]}'
+    output_schema: '{"type":"object","properties":{"symbol":{"type":"string"},"path":{"type":"string"},"case_sensitive":{"type":"boolean"},"whole_word":{"type":"boolean"},"use_regex":{"type":"boolean"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"matches_count":{"type":"integer"},"truncated":{"type":"boolean"},"matches":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"column":{"type":"integer"},"snippet":{"type":"string"}}}},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 120
+      output_limit_kb: 1024
+    preconditions:
+      - symbol must be non-empty
+    postconditions:
+      - symbol search artifact may be generated
+    cost_hint: medium
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+      arg_fields:
+        - field: symbol
+          max_length: 160
+          deny_characters:
+            - "\u0000"
+            - "\n"
+            - "\r"
+    examples:
+      - '{"symbol":"CreateTodo","path":"."}'
+      - '{"symbol":"^Test.*Todo$","use_regex":true,"path":"."}'
+
+  - name: repo.find_references
+    description: Find symbol references with declaration tagging for refactor-safe reasoning.
+    input_schema: '{"type":"object","properties":{"symbol":{"type":"string"},"path":{"type":"string"},"max_references":{"type":"integer","minimum":1,"maximum":2000},"max_results":{"type":"integer","minimum":1,"maximum":2000},"case_sensitive":{"type":"boolean"},"include_declarations":{"type":"boolean"}},"required":["symbol"]}'
+    output_schema: '{"type":"object","properties":{"symbol":{"type":"string"},"path":{"type":"string"},"case_sensitive":{"type":"boolean"},"include_declarations":{"type":"boolean"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"references_count":{"type":"integer"},"declaration_count":{"type":"integer"},"truncated":{"type":"boolean"},"references":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"column":{"type":"integer"},"snippet":{"type":"string"},"is_declaration":{"type":"boolean"}}}},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 120
+      output_limit_kb: 1024
+    preconditions:
+      - symbol must be non-empty
+    postconditions:
+      - references summary artifact may be generated
+    cost_hint: medium
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+      arg_fields:
+        - field: symbol
+          max_length: 160
+          deny_characters:
+            - "\u0000"
+            - "\n"
+            - "\r"
+    examples:
+      - '{"symbol":"CreateTodo","path":"."}'
+      - '{"symbol":"Todo","include_declarations":false}'
+
+  - name: repo.coverage_report
+    description: Run repository tests and return a normalized coverage report.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"coverage_supported":{"type":"boolean"},"coverage_percent":{"type":"number"},"exit_code":{"type":"integer"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 240
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain a supported project type
+    postconditions:
+      - coverage artifacts may be generated
+    cost_hint: high
+    examples:
+      - '{"target":"./..."}'
+
+  - name: repo.static_analysis
+    description: Run project-aware static analysis and lint checks.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"},"diagnostics":{"type":"array","items":{"type":"string"}},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain a supported project type
+    postconditions:
+      - analysis diagnostics may be generated
+    cost_hint: medium
+    examples:
+      - '{"target":"./..."}'
+
+  - name: repo.package
+    description: Package repository output into deployable artifacts.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"artifact_path":{"type":"string"},"exit_code":{"type":"integer"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain a supported project type
+    postconditions:
+      - packaged artifacts may be generated
+    cost_hint: high
+    examples:
+      - '{"target":"."}'
+
+  - name: image.build
+    description: Build container image from workspace Dockerfile using available builder with deterministic fallback.
+    input_schema: '{"type":"object","properties":{"context_path":{"type":"string"},"dockerfile_path":{"type":"string"},"tag":{"type":"string"},"push":{"type":"boolean"},"no_cache":{"type":"boolean"},"max_issues":{"type":"integer","minimum":1,"maximum":2000},"include_recommendations":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"builder":{"type":"string"},"simulated":{"type":"boolean"},"context_path":{"type":"string"},"dockerfile_path":{"type":"string"},"tag":{"type":"string"},"image_ref":{"type":"string"},"registry":{"type":"string"},"repository":{"type":"string"},"digest":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"push_command":{"type":"array","items":{"type":"string"}},"push_requested":{"type":"boolean"},"pushed":{"type":"boolean"},"push_skipped_reason":{"type":"string"},"issues_count":{"type":"integer"},"issues":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"severity":{"type":"string"},"line":{"type":"integer"},"message":{"type":"string"},"snippet":{"type":"string"}}}},"recommendations":{"type":"array","items":{"type":"string"}},"truncated":{"type":"boolean"},"exit_code":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 4096
+    preconditions:
+      - context_path and dockerfile_path must be inside allowed_paths
+    postconditions:
+      - image build metadata produced; image push may occur when requested
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: context_path
+          workspace_relative: true
+        - field: dockerfile_path
+          workspace_relative: true
+    examples:
+      - '{"context_path":".","dockerfile_path":"Dockerfile","tag":"ghcr.io/acme/demo:1.0.0","push":false}'
+
+  - name: image.push
+    description: Push an existing container image reference using available builder with deterministic fallback.
+    input_schema: '{"type":"object","properties":{"image_ref":{"type":"string"},"max_retries":{"type":"integer","minimum":0,"maximum":5},"strict":{"type":"boolean"},"max_issues":{"type":"integer","minimum":1,"maximum":2000},"include_recommendations":{"type":"boolean"}},"required":["image_ref"]}'
+    output_schema: '{"type":"object","properties":{"builder":{"type":"string"},"simulated":{"type":"boolean"},"image_ref":{"type":"string"},"registry":{"type":"string"},"repository":{"type":"string"},"tag":{"type":"string"},"digest":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"attempts":{"type":"integer"},"max_retries":{"type":"integer"},"pushed":{"type":"boolean"},"push_skipped_reason":{"type":"string"},"issues_count":{"type":"integer"},"issues":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"severity":{"type":"string"},"line":{"type":"integer"},"message":{"type":"string"},"snippet":{"type":"string"}}}},"recommendations":{"type":"array","items":{"type":"string"}},"truncated":{"type":"boolean"},"exit_code":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: irreversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 4096
+    preconditions:
+      - image_ref must be a valid image reference
+    postconditions:
+      - image may be pushed to remote registry
+    cost_hint: high
+    policy:
+      registry_fields:
+        - image_ref
+    examples:
+      - '{"image_ref":"ghcr.io/acme/demo:1.0.0@sha256:abc123","max_retries":1}'
+
+  - name: image.inspect
+    description: Inspect Dockerfile or image reference metadata with deterministic security hints.
+    input_schema: '{"type":"object","properties":{"context_path":{"type":"string"},"dockerfile_path":{"type":"string"},"image_ref":{"type":"string"},"include_recommendations":{"type":"boolean"},"max_issues":{"type":"integer","minimum":1,"maximum":2000}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"source_type":{"type":"string"},"context_path":{"type":"string"},"dockerfile_path":{"type":"string"},"image_ref":{"type":"string"},"registry":{"type":"string"},"repository":{"type":"string"},"tag":{"type":"string"},"digest":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"base_images":{"type":"array","items":{"type":"string"}},"stages_count":{"type":"integer"},"exposed_ports":{"type":"array","items":{"type":"string"}},"user":{"type":"string"},"entrypoint":{"type":"string"},"cmd":{"type":"string"},"issues_count":{"type":"integer"},"issues":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"severity":{"type":"string"},"line":{"type":"integer"},"message":{"type":"string"},"snippet":{"type":"string"}}}},"recommendations":{"type":"array","items":{"type":"string"}},"truncated":{"type":"boolean"},"exit_code":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 60
+      output_limit_kb: 1024
+    preconditions:
+      - context_path and dockerfile_path must be inside allowed_paths
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: context_path
+          workspace_relative: true
+        - field: dockerfile_path
+          workspace_relative: true
+    examples:
+      - '{"context_path":".","dockerfile_path":"Dockerfile","max_issues":100}'
+      - '{"image_ref":"registry.example.com/app:1.2.3@sha256:abc123","include_recommendations":true}'
+
+  - name: artifact.upload
+    description: Read a workspace file and publish it as invocation artifact payload.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"name":{"type":"string"},"content_type":{"type":"string"},"max_bytes":{"type":"integer","minimum":1024,"maximum":10485760}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"artifact_name":{"type":"string"},"content_type":{"type":"string"},"size_bytes":{"type":"integer"},"sha256":{"type":"string"},"truncated":{"type":"boolean"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 45
+      output_limit_kb: 1024
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - artifact payload attached to invocation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":".workspace-dist/app","name":"app-linux-amd64","content_type":"application/octet-stream"}'
+
+  - name: artifact.download
+    description: Read artifact-like content from workspace and return encoded payload.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"encoding":{"type":"string","enum":["base64","utf8"]},"max_bytes":{"type":"integer","minimum":1024,"maximum":10485760}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"encoding":{"type":"string"},"content":{"type":"string"},"content_base64":{"type":"string"},"size_bytes":{"type":"integer"},"sha256":{"type":"string"},"truncated":{"type":"boolean"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 45
+      output_limit_kb: 2048
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - artifact payload returned in tool output
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"coverage-report.txt","encoding":"utf8"}'
+
+  - name: artifact.list
+    description: List candidate artifact files in workspace path.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"recursive":{"type":"boolean"},"pattern":{"type":"string"},"max_entries":{"type":"integer","minimum":1,"maximum":2000}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"recursive":{"type":"boolean"},"pattern":{"type":"string"},"count":{"type":"integer"},"truncated":{"type":"boolean"},"artifacts":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"size_bytes":{"type":"integer"}}}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 45
+      output_limit_kb: 1024
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - no workspace mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":".workspace-dist","recursive":true,"pattern":"*.tar.gz"}'
+
+  - name: container.ps
+    description: List containers from available runtime (Kubernetes session pods or local podman/docker/nerdctl).
+    input_schema: '{"type":"object","properties":{"all":{"type":"boolean"},"limit":{"type":"integer","minimum":1,"maximum":500},"name_filter":{"type":"string"},"strict":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"runtime":{"type":"string"},"simulated":{"type":"boolean"},"all":{"type":"boolean"},"limit":{"type":"integer"},"name_filter":{"type":"string"},"count":{"type":"integer"},"truncated":{"type":"boolean"},"containers":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"image":{"type":"string"},"name":{"type":"string"},"status":{"type":"string"}}}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 45
+      output_limit_kb: 2048
+    preconditions:
+      - container runtime may be required unless simulated fallback is allowed
+    postconditions:
+      - no workspace mutation
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: name_filter
+          max_length: 80
+          deny_characters:
+            - "\n"
+            - "\r"
+            - " "
+            - ;
+            - "|"
+            - "&"
+    examples:
+      - '{"all":true,"limit":50}'
+      - '{"name_filter":"workspace","strict":false}'
+
+  - name: container.logs
+    description: Read container logs from available runtime (Kubernetes session pods or local podman/docker/nerdctl).
+    input_schema: '{"type":"object","properties":{"container_id":{"type":"string"},"tail_lines":{"type":"integer","minimum":1,"maximum":10000},"since_seconds":{"type":"integer","minimum":0,"maximum":86400},"timestamps":{"type":"boolean"},"strict":{"type":"boolean"},"max_bytes":{"type":"integer","minimum":1024,"maximum":2097152}},"required":["container_id"]}'
+    output_schema: '{"type":"object","properties":{"runtime":{"type":"string"},"simulated":{"type":"boolean"},"container_id":{"type":"string"},"tail_lines":{"type":"integer"},"since_seconds":{"type":"integer"},"timestamps":{"type":"boolean"},"bytes":{"type":"integer"},"line_count":{"type":"integer"},"truncated":{"type":"boolean"},"logs":{"type":"string"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 60
+      output_limit_kb: 2048
+    preconditions:
+      - container_id must refer to a running or completed container
+    postconditions:
+      - no workspace mutation
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: container_id
+          max_length: 128
+          deny_characters:
+            - "\n"
+            - "\r"
+            - ;
+            - "|"
+            - "&"
+            - " "
+            - "\t"
+    examples:
+      - '{"container_id":"abc123","tail_lines":200}'
+
+  - name: container.run
+    description: Start a container using available runtime with bounded args (Kubernetes session pod or local runtime).
+    input_schema: '{"type":"object","properties":{"image_ref":{"type":"string"},"command":{"type":"array","items":{"type":"string"},"maxItems":32},"env":{"type":"object","additionalProperties":{"type":"string"}},"name":{"type":"string"},"detach":{"type":"boolean"},"remove":{"type":"boolean"},"strict":{"type":"boolean"}},"required":["image_ref"]}'
+    output_schema: '{"type":"object","properties":{"runtime":{"type":"string"},"simulated":{"type":"boolean"},"image_ref":{"type":"string"},"name":{"type":"string"},"detach":{"type":"boolean"},"remove":{"type":"boolean"},"command":{"type":"array","items":{"type":"string"}},"env":{"type":"array","items":{"type":"string"}},"container_id":{"type":"string"},"status":{"type":"string"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 90
+      output_limit_kb: 2048
+    preconditions:
+      - explicit approval required
+      - image_ref must be valid
+    postconditions:
+      - container may be started in local runtime
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: image_ref
+          max_length: 255
+          deny_characters:
+            - "\n"
+            - "\r"
+            - " "
+            - "\t"
+            - ;
+            - "|"
+            - "&"
+        - field: name
+          max_length: 80
+          deny_characters:
+            - "\n"
+            - "\r"
+            - " "
+            - ;
+            - "|"
+            - "&"
+        - field: command
+          multi: true
+          max_items: 32
+          max_length: 256
+          deny_characters:
+            - "\n"
+            - "\r"
+            - ;
+            - "|"
+            - "&"
+            - "`"
+            - $(
+            - ">"
+            - <
+    examples:
+      - '{"image_ref":"busybox:1.36","command":["echo","hello"],"detach":true}'
+
+  - name: container.exec
+    description: Execute bounded allowlisted command inside a running runtime container (Kubernetes pod or local runtime).
+    input_schema: '{"type":"object","properties":{"container_id":{"type":"string"},"command":{"type":"array","items":{"type":"string"},"maxItems":16},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600},"max_output_bytes":{"type":"integer","minimum":1024,"maximum":2097152},"strict":{"type":"boolean"}},"required":["container_id","command"]}'
+    output_schema: '{"type":"object","properties":{"runtime":{"type":"string"},"simulated":{"type":"boolean"},"container_id":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"timeout_seconds":{"type":"integer"},"exit_code":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 90
+      output_limit_kb: 2048
+    preconditions:
+      - explicit approval required
+      - command must be allowlisted by runtime guardrails
+    postconditions:
+      - container process may execute command
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: container_id
+          max_length: 128
+          deny_characters:
+            - "\n"
+            - "\r"
+            - " "
+            - "\t"
+            - ;
+            - "|"
+            - "&"
+        - field: command
+          multi: true
+          max_items: 16
+          max_length: 256
+          deny_characters:
+            - "\n"
+            - "\r"
+            - ;
+            - "|"
+            - "&"
+            - "`"
+            - $(
+            - ">"
+            - <
+    examples:
+      - '{"container_id":"abc123","command":["echo","ready"],"timeout_seconds":30}'
+
+  - name: k8s.get_pods
+    description: List Kubernetes pods in a namespace using the Kubernetes SDK.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"max_pods":{"type":"integer","minimum":1,"maximum":500},"include_containers":{"type":"boolean"},"include_labels":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"source":{"type":"string"},"count":{"type":"integer"},"truncated":{"type":"boolean"},"include_containers":{"type":"boolean"},"include_labels":{"type":"boolean"},"pods":{"type":"array","items":{"type":"object"}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 2048
+    preconditions:
+      - principal must have cluster-scope access
+    postconditions:
+      - no cluster mutation
+    cost_hint: low
+    policy:
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","label_selector":"app=workspace","max_pods":50}'
+
+  - name: k8s.get_services
+    description: List Kubernetes services in a namespace using the Kubernetes SDK.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"max_services":{"type":"integer","minimum":1,"maximum":500},"include_labels":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"source":{"type":"string"},"count":{"type":"integer"},"truncated":{"type":"boolean"},"include_labels":{"type":"boolean"},"services":{"type":"array","items":{"type":"object"}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 2048
+    preconditions:
+      - principal must have cluster-scope access
+    postconditions:
+      - no cluster mutation
+    cost_hint: low
+    policy:
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","max_services":50}'
+
+  - name: k8s.get_deployments
+    description: List Kubernetes deployments in a namespace using the Kubernetes SDK.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"max_deployments":{"type":"integer","minimum":1,"maximum":500},"include_containers":{"type":"boolean"},"include_labels":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"source":{"type":"string"},"count":{"type":"integer"},"truncated":{"type":"boolean"},"include_containers":{"type":"boolean"},"include_labels":{"type":"boolean"},"deployments":{"type":"array","items":{"type":"object"}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 2048
+    preconditions:
+      - principal must have cluster-scope access
+    postconditions:
+      - no cluster mutation
+    cost_hint: low
+    policy:
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","include_containers":true}'
+
+  - name: k8s.get_images
+    description: Aggregate container images used by pods in a namespace.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"max_images":{"type":"integer","minimum":1,"maximum":1000},"include_workloads":{"type":"boolean"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"source":{"type":"string"},"count":{"type":"integer"},"truncated":{"type":"boolean"},"include_workloads":{"type":"boolean"},"images":{"type":"array","items":{"type":"object"}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 45
+      output_limit_kb: 2048
+    preconditions:
+      - principal must have cluster-scope access
+    postconditions:
+      - no cluster mutation
+    cost_hint: medium
+    policy:
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","max_images":200}'
+
+  - name: k8s.get_logs
+    description: Fetch logs from a Kubernetes pod container.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"pod_name":{"type":"string"},"container":{"type":"string"},"tail_lines":{"type":"integer","minimum":1,"maximum":10000},"since_seconds":{"type":"integer","minimum":0,"maximum":604800},"previous":{"type":"boolean"},"max_bytes":{"type":"integer","minimum":1024,"maximum":2097152}},"required":["pod_name"]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"pod_name":{"type":"string"},"container":{"type":"string"},"tail_lines":{"type":"integer"},"since_seconds":{"type":"integer"},"previous":{"type":"boolean"},"source":{"type":"string"},"bytes":{"type":"integer"},"line_count":{"type":"integer"},"truncated":{"type":"boolean"},"logs":{"type":"string"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 2048
+    preconditions:
+      - principal must have cluster-scope access
+    postconditions:
+      - no cluster mutation
+    cost_hint: medium
+    policy:
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","pod_name":"workspace-abc123","tail_lines":200}'
+
+  - name: k8s.apply_manifest
+    description: Apply bounded Kubernetes manifests for allowlisted kinds in a namespace.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"manifest":{"type":"string"},"dry_run":{"type":"boolean"},"max_objects":{"type":"integer","minimum":1,"maximum":20}},"required":["manifest"]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"dry_run":{"type":"boolean"},"applied_count":{"type":"integer"},"created_count":{"type":"integer"},"updated_count":{"type":"integer"},"resources":{"type":"array","items":{"type":"object","properties":{"api_version":{"type":"string"},"kind":{"type":"string"},"name":{"type":"string"},"namespace":{"type":"string"},"operation":{"type":"string"}}}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 90
+      output_limit_kb: 2048
+    preconditions:
+      - principal must have cluster-scope access
+      - namespace must be allowlisted by policy
+      - manifest kinds limited to ConfigMap/Deployment/Service
+    postconditions:
+      - cluster resources may be created or updated
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: manifest
+          max_length: 262144
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","manifest":"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: sample-config\ndata:\n  key: value\n"}'
+      - '{"namespace":"underpass-runtime","dry_run":true,"manifest":"apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: sample-app\nspec:\n  replicas: 0\n  selector:\n    matchLabels:\n      app: sample-app\n  template:\n    metadata:\n      labels:\n        app: sample-app\n    spec:\n      containers:\n      - name: app\n        image: busybox:1.36\n        command: [\"sh\",\"-lc\",\"sleep 3600\"]\n"}'
+
+  - name: k8s.rollout_status
+    description: Wait for a deployment rollout to complete within bounded timeout.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":1800},"poll_interval_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["deployment_name"]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"status":{"type":"string"},"duration_ms":{"type":"integer"},"rollout":{"type":"object"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: none
+    risk_level: medium
+    requires_approval: true
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 120
+      output_limit_kb: 1024
+    preconditions:
+      - principal must have cluster-scope access
+      - namespace must be allowlisted by policy
+      - deployment must exist
+    postconditions:
+      - no cluster mutation
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace","timeout_seconds":120}'
+
+  - name: k8s.restart_deployment
+    description: Trigger a deployment restart by patching pod-template restart annotation.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"wait_for_rollout":{"type":"boolean"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":1800},"poll_interval_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["deployment_name"]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"restarted_at":{"type":"string"},"previous_restarted_at":{"type":"string"},"generation":{"type":"integer"},"observed_generation":{"type":"integer"},"rollout_status":{"type":"string"},"rollout":{"type":"object"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 1024
+    preconditions:
+      - principal must have cluster-scope access
+      - namespace must be allowlisted by policy
+      - deployment must exist
+    postconditions:
+      - deployment rollout may be triggered
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace","wait_for_rollout":true,"timeout_seconds":180}'
+
+  - name: security.scan_dependencies
+    description: Collect dependency inventory for the detected project toolchain.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"max_dependencies":{"type":"integer","minimum":1,"maximum":5000}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"dependencies_count":{"type":"integer"},"dependencies":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"version":{"type":"string"},"ecosystem":{"type":"string"},"license":{"type":"string"}}}},"truncated":{"type":"boolean"},"scanner":{"type":"string"},"exit_code":{"type":"integer"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain a supported project type
+      - path must be inside allowed_paths
+    postconditions:
+      - dependency inventory artifact may be generated
+    cost_hint: medium
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":".","max_dependencies":500}'
+
+  - name: sbom.generate
+    description: Generate a CycloneDX JSON SBOM from repository dependencies.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"format":{"type":"string","enum":["cyclonedx-json"]},"max_components":{"type":"integer","minimum":1,"maximum":10000}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"format":{"type":"string"},"generator":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"components_count":{"type":"integer"},"components":{"type":"array","items":{"type":"object","properties":{"type":{"type":"string"},"name":{"type":"string"},"version":{"type":"string"},"purl":{"type":"string"}}}},"truncated":{"type":"boolean"},"artifact_name":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 240
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain a supported project type
+      - path must be inside allowed_paths
+    postconditions:
+      - sbom artifact generated
+    cost_hint: medium
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":".","format":"cyclonedx-json","max_components":1000}'
+
+  - name: security.scan_secrets
+    description: Scan workspace files for likely hardcoded secrets.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"max_results":{"type":"integer","minimum":1,"maximum":2000}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"findings_count":{"type":"integer"},"findings":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"snippet":{"type":"string"}}}},"truncated":{"type":"boolean"},"output":{"type":"string"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 90
+      output_limit_kb: 2048
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - no repository mutation
+    cost_hint: medium
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":".","max_results":100}'
+
+  - name: security.scan_container
+    description: Scan container image or Dockerfile context for vulnerabilities and misconfigurations.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"image_ref":{"type":"string"},"max_findings":{"type":"integer","minimum":1,"maximum":2000},"severity_threshold":{"type":"string","enum":["low","medium","high","critical"]}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"scanner":{"type":"string"},"target":{"type":"string"},"path":{"type":"string"},"image_ref":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"severity_threshold":{"type":"string"},"findings_count":{"type":"integer"},"findings":{"type":"array","items":{"type":"object","properties":{"kind":{"type":"string"},"id":{"type":"string"},"title":{"type":"string"},"severity":{"type":"string"},"target":{"type":"string"}}}},"severity_counts":{"type":"object"},"truncated":{"type":"boolean"},"exit_code":{"type":"integer"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 240
+      output_limit_kb: 4096
+    preconditions:
+      - path must be inside allowed_paths when provided
+    postconditions:
+      - container scan findings may be generated
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":".","max_findings":200,"severity_threshold":"medium"}'
+      - '{"image_ref":"registry.example.com/app:1.2.3","severity_threshold":"high"}'
+
+  - name: security.license_check
+    description: Evaluate repository dependency licenses against allow/deny policy.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string"},"max_dependencies":{"type":"integer","minimum":1,"maximum":5000},"allowed_licenses":{"type":"array","items":{"type":"string"}},"denied_licenses":{"type":"array","items":{"type":"string"}},"unknown_policy":{"type":"string","enum":["warn","deny"]}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"license_source_command":{"type":"array","items":{"type":"string"}},"dependencies_checked":{"type":"integer"},"allowed_count":{"type":"integer"},"denied_count":{"type":"integer"},"unknown_count":{"type":"integer"},"allowed_licenses":{"type":"array","items":{"type":"string"}},"denied_licenses":{"type":"array","items":{"type":"string"}},"unknown_policy":{"type":"string"},"status":{"type":"string"},"violations":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"version":{"type":"string"},"ecosystem":{"type":"string"},"license":{"type":"string"},"reason":{"type":"string"}}}},"dependencies":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"version":{"type":"string"},"ecosystem":{"type":"string"},"license":{"type":"string"}}}},"truncated":{"type":"boolean"},"exit_code":{"type":"integer"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: medium
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 4096
+    preconditions:
+      - workspace must contain a supported project type
+      - path must be inside allowed_paths
+    postconditions:
+      - license compliance report may be generated
+    cost_hint: medium
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":".","allowed_licenses":["MIT","Apache-2.0"],"denied_licenses":["GPL-3.0"],"unknown_policy":"warn"}'
+
+  - name: quality.gate
+    description: Evaluate quality metrics against deterministic acceptance thresholds.
+    input_schema: '{"type":"object","properties":{"metrics":{"type":"object","properties":{"coverage_percent":{"type":"number"},"diagnostics_count":{"type":"integer"},"vulnerabilities_count":{"type":"integer"},"denied_licenses_count":{"type":"integer"},"failed_tests_count":{"type":"integer"}}},"min_coverage_percent":{"type":"number","minimum":0,"maximum":100},"max_diagnostics":{"type":"integer","minimum":-1,"maximum":100000},"max_vulnerabilities":{"type":"integer","minimum":-1,"maximum":100000},"max_denied_licenses":{"type":"integer","minimum":-1,"maximum":100000},"max_failed_tests":{"type":"integer","minimum":-1,"maximum":100000}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"status":{"type":"string"},"passed":{"type":"boolean"},"failed_rules_count":{"type":"integer"},"rules":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"operator":{"type":"string"},"expected":{"type":"number"},"actual":{"type":"number"},"passed":{"type":"boolean"},"message":{"type":"string"}}}},"metrics":{"type":"object"},"thresholds":{"type":"object"},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 256
+    preconditions:
+      - quality metrics should be provided for meaningful evaluation
+    postconditions:
+      - quality gate report may be generated
+    cost_hint: low
+    examples:
+      - '{"metrics":{"coverage_percent":82.5,"diagnostics_count":0,"failed_tests_count":0},"min_coverage_percent":80,"max_diagnostics":0,"max_failed_tests":0}'
+
+  - name: ci.run_pipeline
+    description: "Execute a deterministic CI-like sequence: validate, build, test, and optional analysis/coverage."
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"},"include_static_analysis":{"type":"boolean"},"include_coverage":{"type":"boolean"},"include_quality_gate":{"type":"boolean"},"fail_fast":{"type":"boolean"},"quality_gate":{"type":"object","properties":{"min_coverage_percent":{"type":"number","minimum":0,"maximum":100},"max_diagnostics":{"type":"integer","minimum":-1,"maximum":100000},"max_vulnerabilities":{"type":"integer","minimum":-1,"maximum":100000},"max_denied_licenses":{"type":"integer","minimum":-1,"maximum":100000},"max_failed_tests":{"type":"integer","minimum":-1,"maximum":100000}}}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"project_type":{"type":"string"},"steps":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"status":{"type":"string"},"command":{"type":"array","items":{"type":"string"}},"exit_code":{"type":"integer"}}}},"quality_metrics":{"type":"object"},"quality_gate":{"type":"object"},"exit_code":{"type":"integer"},"failed_step":{"type":"string"},"summary":{"type":"string"},"output":{"type":"string"}}}'
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 600
+      output_limit_kb: 4096
+    preconditions:
+      - workspace must contain a supported project type
+    postconditions:
+      - build/test artifacts may be generated
+      - quality gate report may be generated
+    cost_hint: high
+    examples:
+      - '{"target":"./...","include_static_analysis":true,"include_coverage":true,"include_quality_gate":true,"quality_gate":{"max_failed_tests":0,"max_diagnostics":0},"fail_fast":true}'
+
+  - name: go.mod.tidy
+    description: Run go mod tidy to validate and normalize module dependencies.
+    input_schema: '{"type":"object","properties":{"check":{"type":"boolean"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain go.mod
+    postconditions:
+      - go.mod/go.sum may be updated
+    cost_hint: medium
+    examples:
+      - '{"check":true}'
+
+  - name: go.generate
+    description: Run go generate for a package target.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain go.mod
+    postconditions:
+      - generated files may be updated
+    cost_hint: medium
+    examples:
+      - '{"target":"./..."}'
+
+  - name: go.build
+    description: Compile Go package with restricted build flags and optional output binary name.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"},"ldflags":{"type":"string"},"output_name":{"type":"string"},"race":{"type":"boolean"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain go.mod
+    postconditions:
+      - build artifacts may be generated
+    cost_hint: high
+    examples:
+      - '{"target":"./cmd/app","output_name":"app","ldflags":"-s -w","race":false}'
+
+  - name: go.test
+    description: Run Go tests with optional coverage and run-pattern filter.
+    input_schema: '{"type":"object","properties":{"package":{"type":"string"},"coverage":{"type":"boolean"},"run_pattern":{"type":"string"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain go.mod
+    postconditions:
+      - test reports can be generated
+    cost_hint: high
+    examples:
+      - '{"package":"./...","coverage":true}'
+
+  - name: rust.build
+    description: Compile Rust project/package with cargo build.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"},"release":{"type":"boolean"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain Cargo.toml
+    postconditions:
+      - target artifacts may be generated
+    cost_hint: high
+
+  - name: rust.test
+    description: Run Rust tests using cargo test.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain Cargo.toml
+    postconditions:
+      - test output may be generated
+    cost_hint: high
+
+  - name: rust.clippy
+    description: Run clippy lints for Rust project.
+    input_schema: '{"type":"object","properties":{"deny_warnings":{"type":"boolean"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain Cargo.toml
+    postconditions:
+      - lint diagnostics may be generated
+    cost_hint: high
+
+  - name: rust.format
+    description: Run rustfmt in check or write mode.
+    input_schema: '{"type":"object","properties":{"check":{"type":"boolean"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: low
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain Cargo.toml
+    postconditions:
+      - formatting may be updated
+    cost_hint: medium
+
+  - name: node.install
+    description: Install Node dependencies using npm ci/install.
+    input_schema: '{"type":"object","properties":{"use_ci":{"type":"boolean"},"ignore_scripts":{"type":"boolean"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain package.json
+    postconditions:
+      - node_modules may be updated
+    cost_hint: high
+
+  - name: node.build
+    description: Run Node/TypeScript build script with npm.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain package.json
+    postconditions:
+      - build artifacts may be generated
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: target
+          workspace_relative: true
+
+  - name: node.test
+    description: Run Node test script with npm.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain package.json
+    postconditions:
+      - test output may be generated
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: target
+          workspace_relative: true
+
+  - name: node.lint
+    description: Run Node lint script with npm.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 240
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain package.json
+    postconditions:
+      - lint diagnostics may be generated
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: target
+          workspace_relative: true
+
+  - name: node.typecheck
+    description: Run TypeScript typecheck script with npm.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 240
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain package.json
+    postconditions:
+      - typecheck diagnostics may be generated
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: target
+          workspace_relative: true
+
+  - name: python.install_deps
+    description: Install Python dependencies in an isolated venv.
+    input_schema: '{"type":"object","properties":{"use_venv":{"type":"boolean"},"requirements_file":{"type":"string"},"constraints_file":{"type":"string"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain Python dependency manifest
+    postconditions:
+      - venv and site-packages may be updated
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: requirements_file
+          workspace_relative: true
+        - field: constraints_file
+          workspace_relative: true
+
+  - name: python.validate
+    description: Validate Python syntax/bytecode compilation.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain Python sources
+    postconditions:
+      - no repository mutation
+    cost_hint: medium
+    policy:
+      path_fields:
+        - field: target
+          workspace_relative: true
+
+  - name: python.test
+    description: Run Python tests with constrained pytest options.
+    input_schema: '{"type":"object","properties":{"target":{"type":"string"},"run_pattern":{"type":"string"},"max_fail":{"type":"integer","minimum":1,"maximum":20}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 300
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain pytest-compatible tests
+    postconditions:
+      - test output may be generated
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: target
+          workspace_relative: true
+
+  - name: c.build
+    description: Compile C source files with constrained compiler options.
+    input_schema: '{"type":"object","properties":{"source":{"type":"string"},"output_name":{"type":"string"},"standard":{"type":"string","enum":["c89","c99","c11","c17","c23"]}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain C source files
+    postconditions:
+      - compiled binary may be generated
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: source
+          workspace_relative: true
+
+  - name: c.test
+    description: Compile and optionally run C test source files.
+    input_schema: '{"type":"object","properties":{"source":{"type":"string"},"output_name":{"type":"string"},"standard":{"type":"string","enum":["c89","c99","c11","c17","c23"]},"run":{"type":"boolean"}},"required":[]}'
+    output_schema: *lang_tool_output
+    scope: repo
+    side_effects: reversible
+    risk_level: medium
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 180
+      output_limit_kb: 2048
+    preconditions:
+      - workspace must contain C test source files
+    postconditions:
+      - test binary/output may be generated
+    cost_hint: high
+    policy:
+      path_fields:
+        - field: source
+          workspace_relative: true
+
