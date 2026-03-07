@@ -27,7 +27,7 @@ func buildWorkspaceManager(
 	backend string,
 	workspaceRoot string,
 	_ *k8sRuntime,
-	_ app.SessionStore,
+	sessionStore app.SessionStore,
 ) (app.WorkspaceManager, error) {
 	switch backend {
 	case "", workspaceBackendLocal:
@@ -35,12 +35,17 @@ func buildWorkspaceManager(
 			return nil, fmt.Errorf("create workspace root: %w", err)
 		}
 		return workspaceadapter.NewLocalManager(workspaceRoot), nil
+	case workspaceBackendDocker:
+		return buildDockerManager(sessionStore)
 	default:
 		return nil, fmt.Errorf("unsupported WORKSPACE_BACKEND without k8s tag: %s", backend)
 	}
 }
 
-func buildCommandRunner(_ string, _ *k8sRuntime) (app.CommandRunner, error) {
+func buildCommandRunner(backend string, _ *k8sRuntime) (app.CommandRunner, error) {
+	if backend == workspaceBackendDocker {
+		return buildDockerCommandRunner()
+	}
 	return tooladapter.NewLocalCommandRunner(), nil
 }
 

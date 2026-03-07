@@ -13,12 +13,15 @@ import (
 	"syscall"
 	"time"
 
+	dockerclient "github.com/docker/docker/client"
+
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
 	invocationstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/invocationstore"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/policy"
 	sessionstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/sessionstore"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/storage"
 	tooladapter "github.com/underpass-ai/underpass-runtime/internal/adapters/tools"
+	workspaceadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/workspace"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
 	"github.com/underpass-ai/underpass-runtime/internal/bootstrap"
 	"github.com/underpass-ai/underpass-runtime/internal/httpapi"
@@ -32,8 +35,9 @@ import (
 )
 
 const (
-	workspaceBackendLocal = "local"
-	defaultNamespace      = "underpass-runtime"
+	workspaceBackendLocal  = "local"
+	workspaceBackendDocker = "docker"
+	defaultNamespace       = "underpass-runtime"
 )
 
 func main() {
@@ -132,6 +136,46 @@ func main() {
 	defer cancel()
 	_ = httpServer.Shutdown(ctx)
 	logger.Info("workspace service stopped")
+}
+
+func newDockerClient() (*dockerclient.Client, error) {
+	opts := []dockerclient.Opt{dockerclient.FromEnv, dockerclient.WithAPIVersionNegotiation()}
+	socket := strings.TrimSpace(os.Getenv("WORKSPACE_DOCKER_SOCKET"))
+	if socket != "" {
+		opts = append(opts, dockerclient.WithHost("unix://"+socket))
+	}
+	return dockerclient.NewClientWithOpts(opts...)
+}
+
+func buildDockerManager(sessionStore app.SessionStore) (app.WorkspaceManager, error) {
+	client, err := newDockerClient()
+	if err != nil {
+		return nil, fmt.Errorf("create docker client: %w", err)
+	}
+	imageBundles, err := parseStringMapEnv(os.Getenv("WORKSPACE_DOCKER_IMAGE_BUNDLES_JSON"))
+	if err != nil {
+		return nil, fmt.Errorf("parse WORKSPACE_DOCKER_IMAGE_BUNDLES_JSON: %w", err)
+	}
+	return workspaceadapter.NewDockerManager(workspaceadapter.DockerManagerConfig{
+		DefaultImage:    envOrDefault("WORKSPACE_DOCKER_IMAGE", "alpine:3.20"),
+		ImageBundles:    imageBundles,
+		ProfileKey:      envOrDefault("WORKSPACE_DOCKER_RUNNER_PROFILE_KEY", "runner_profile"),
+		Workdir:         envOrDefault("WORKSPACE_DOCKER_WORKDIR", "/workspace/repo"),
+		ContainerPrefix: envOrDefault("WORKSPACE_DOCKER_CONTAINER_PREFIX", "ws"),
+		Network:         strings.TrimSpace(os.Getenv("WORKSPACE_DOCKER_NETWORK")),
+		CPULimit:        int64(parseIntOrDefault(os.Getenv("WORKSPACE_DOCKER_CPU_LIMIT"), 2)),
+		MemoryLimit:     int64(parseIntOrDefault(os.Getenv("WORKSPACE_DOCKER_MEMORY_LIMIT_MB"), 2048)) * 1024 * 1024,
+		TTL:             time.Duration(parseIntOrDefault(os.Getenv("WORKSPACE_DOCKER_TTL_SECONDS"), 3600)) * time.Second,
+		SessionStore:    sessionStore,
+	}, client), nil
+}
+
+func buildDockerCommandRunner() (app.CommandRunner, error) {
+	client, err := newDockerClient()
+	if err != nil {
+		return nil, fmt.Errorf("create docker client: %w", err)
+	}
+	return tooladapter.NewDockerCommandRunner(client), nil
 }
 
 func parseDisabledBundles() []string {

@@ -66,6 +66,8 @@ func buildWorkspaceManager(
 			return nil, fmt.Errorf("create workspace root: %w", err)
 		}
 		return workspaceadapter.NewLocalManager(workspaceRoot), nil
+	case workspaceBackendDocker:
+		return buildDockerManager(sessionStore)
 	case "kubernetes":
 		if k8s == nil || k8s.client == nil {
 			return nil, fmt.Errorf("kubernetes client is required")
@@ -100,6 +102,9 @@ func buildWorkspaceManager(
 }
 
 func buildCommandRunner(backend string, k8s *k8sRuntime) (app.CommandRunner, error) {
+	if backend == workspaceBackendDocker {
+		return buildDockerCommandRunner()
+	}
 	localRunner := tooladapter.NewLocalCommandRunner()
 	if backend != "kubernetes" {
 		return localRunner, nil
