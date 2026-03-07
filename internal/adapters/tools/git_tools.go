@@ -136,7 +136,7 @@ func (h *GitStatusHandler) Invoke(ctx context.Context, session domain.Session, a
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"status":  commandResult.Output,
+			"status":      commandResult.Output,
 		},
 	}
 	if runErr != nil {
@@ -179,7 +179,7 @@ func (h *GitDiffHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"diff":    commandResult.Output,
+			"diff":        commandResult.Output,
 		},
 	}
 	if runErr != nil {
@@ -228,9 +228,9 @@ func (h *GitApplyPatchHandler) Invoke(ctx context.Context, session domain.Sessio
 		ExitCode: commandResult.ExitCode,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
-			gitKeyCommand:       append([]string{"git"}, command...),
+			gitKeyCommand:   append([]string{"git"}, command...),
 			"applied":       runErr == nil,
-			gitKeyOutput:        commandResult.Output,
+			gitKeyOutput:    commandResult.Output,
 			"changed_paths": patchPaths,
 		},
 	}
@@ -287,8 +287,8 @@ func (h *GitCheckoutHandler) Invoke(ctx context.Context, session domain.Session,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"ref":     ref,
-			"created": request.Create,
+			"ref":         ref,
+			"created":     request.Create,
 			gitKeyOutput:  commandResult.Output,
 		},
 	}
@@ -340,9 +340,9 @@ func (h *GitLogHandler) Invoke(ctx context.Context, session domain.Session, args
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"ref":     ref,
-			"count":   len(entries),
-			"entries": entries,
+			"ref":         ref,
+			"count":       len(entries),
+			"entries":     entries,
 		},
 	}
 	if runErr != nil {
@@ -406,9 +406,9 @@ func (h *GitShowHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"ref":     ref,
-			"path":    path,
-			"show":    commandResult.Output,
+			"ref":         ref,
+			"path":        path,
+			"show":        commandResult.Output,
 		},
 	}
 	if runErr != nil {
@@ -445,9 +445,9 @@ func (h *GitBranchListHandler) Invoke(ctx context.Context, session domain.Sessio
 		ExitCode: commandResult.ExitCode,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
-			gitKeyCommand:  append([]string{"git"}, command...),
-			"count":    len(branches),
-			"branches": branches,
+			gitKeyCommand: append([]string{"git"}, command...),
+			"count":       len(branches),
+			"branches":    branches,
 		},
 	}
 	if runErr != nil {
@@ -481,8 +481,7 @@ func (h *GitCommitHandler) Invoke(ctx context.Context, session domain.Session, a
 		"commit", "-m", message,
 	}
 	if request.All {
-		addAllResult, addAllErr := executeGit(ctx, h.runner, session, []string{"add", "--all"}, nil, 512*1024)
-		if addAllErr != nil {
+		if addAllResult, addAllErr := executeGit(ctx, h.runner, session, []string{"add", "--all"}, nil, 512*1024); addAllErr != nil {
 			return buildGitAddFailedResult(addAllResult), addAllErr
 		}
 	}
@@ -498,10 +497,10 @@ func (h *GitCommitHandler) Invoke(ctx context.Context, session domain.Session, a
 		ExitCode: commandResult.ExitCode,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
-			gitKeyCommand:   append([]string{"git"}, command...),
-			"committed": runErr == nil,
-			"commit":    commitHash,
-			gitKeyOutput:    commandResult.Output,
+			gitKeyCommand: append([]string{"git"}, command...),
+			"committed":   runErr == nil,
+			"commit":      commitHash,
+			gitKeyOutput:  commandResult.Output,
 		},
 	}
 	if runErr != nil {
@@ -965,10 +964,10 @@ func buildGitAddFailedResult(addAllResult app.CommandResult) app.ToolRunResult {
 		ExitCode: addAllResult.ExitCode,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: addAllResult.Output}},
 		Output: map[string]any{
-			gitKeyCommand:   []string{"git", "add", "--all"},
-			"committed": false,
-			"commit":    "",
-			gitKeyOutput:    addAllResult.Output,
+			gitKeyCommand: []string{"git", "add", "--all"},
+			"committed":   false,
+			"commit":      "",
+			gitKeyOutput:  addAllResult.Output,
 		},
 	}
 }

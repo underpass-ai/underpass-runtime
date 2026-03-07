@@ -14,25 +14,25 @@ import (
 )
 
 const (
-	testCIKeyFailedStep         = "failed_step"
+	testCIKeyFailedStep            = "failed_step"
 	testCIKeyIncludeStaticAnalysis = "include_static_analysis"
-	testCIKeyIncludeCoverage    = "include_coverage"
-	testCIKeyIncludeQualityGate = "include_quality_gate"
-	testCIKeyFailFast           = "fail_fast"
-	testCIKeyQualityGate        = "quality_gate"
-	testCIKeySteps              = "steps"
-	testCIKeyStatus             = "status"
-	testCIKeyName               = "name"
-	testCIStepStaticAnalysis    = "static_analysis"
-	testCIStatusSkipped         = "skipped"
-	testCIGoModFile             = "go.mod"
-	testCIGoModContent          = "module example.com/demo\n\ngo 1.23\n"
-	testCIFmtWriteGoMod         = "write go.mod failed: %v"
-	testCIOutputValidateOK      = "validate ok"
-	testCIOutputBuildOK         = "build ok"
-	testCIOutputTestsOK         = "tests ok"
-	testCIErrExit1              = "exit 1"
-	testCIProjectUnknown        = "unknown"
+	testCIKeyIncludeCoverage       = "include_coverage"
+	testCIKeyIncludeQualityGate    = "include_quality_gate"
+	testCIKeyFailFast              = "fail_fast"
+	testCIKeyQualityGate           = "quality_gate"
+	testCIKeySteps                 = "steps"
+	testCIKeyStatus                = "status"
+	testCIKeyName                  = "name"
+	testCIStepStaticAnalysis       = "static_analysis"
+	testCIStatusSkipped            = "skipped"
+	testCIGoModFile                = "go.mod"
+	testCIGoModContent             = "module example.com/demo\n\ngo 1.23\n"
+	testCIFmtWriteGoMod            = "write go.mod failed: %v"
+	testCIOutputValidateOK         = "validate ok"
+	testCIOutputBuildOK            = "build ok"
+	testCIOutputTestsOK            = "tests ok"
+	testCIErrExit1                 = "exit 1"
+	testCIProjectUnknown           = "unknown"
 )
 
 func TestCIRunPipelineHandler_FailFast(t *testing.T) {
@@ -57,9 +57,9 @@ func TestCIRunPipelineHandler_FailFast(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		testCIKeyFailFast:               true,
+		testCIKeyFailFast:              true,
 		testCIKeyIncludeStaticAnalysis: false,
-		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeCoverage:       false,
 	}))
 	if err == nil {
 		t.Fatal("expected ci.run_pipeline to fail")
@@ -103,9 +103,9 @@ func TestCIRunPipelineHandler_QualityGateFailure(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
 		testCIKeyIncludeStaticAnalysis: false,
-		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeCoverage:       false,
 		testCIKeyIncludeQualityGate:    true,
-		testCIKeyFailFast:               true,
+		testCIKeyFailFast:              true,
 		testCIKeyQualityGate: map[string]any{
 			"min_coverage_percent": 80,
 			"max_failed_tests":     0,
@@ -171,9 +171,9 @@ func TestCIRunPipelineHandler_SuccessPath(t *testing.T) {
 
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
 		testCIKeyIncludeStaticAnalysis: true,
-		testCIKeyIncludeCoverage:        true,
+		testCIKeyIncludeCoverage:       true,
 		testCIKeyIncludeQualityGate:    true,
-		testCIKeyFailFast:               true,
+		testCIKeyFailFast:              true,
 		testCIKeyQualityGate: map[string]any{
 			"min_coverage_percent": 80,
 			"max_failed_tests":     0,
@@ -224,9 +224,9 @@ func TestCIRunPipelineHandler_StaticAnalysisFailFast(t *testing.T) {
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
 		testCIKeyIncludeStaticAnalysis: true,
-		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeCoverage:       false,
 		testCIKeyIncludeQualityGate:    false,
-		testCIKeyFailFast:               true,
+		testCIKeyFailFast:              true,
 	}))
 	if err == nil {
 		t.Fatal("expected pipeline to fail on static analysis")
@@ -262,9 +262,9 @@ func TestCIRunPipelineHandler_CoverageStep(t *testing.T) {
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
 		testCIKeyIncludeStaticAnalysis: false,
-		testCIKeyIncludeCoverage:        true,
+		testCIKeyIncludeCoverage:       true,
 		testCIKeyIncludeQualityGate:    false,
-		testCIKeyFailFast:               false,
+		testCIKeyFailFast:              false,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected pipeline error: %#v", err)
@@ -286,7 +286,7 @@ func TestCIRunPipelineHandler_NonGoSkipsCoverage(t *testing.T) {
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
 		testCIKeyIncludeStaticAnalysis: false,
-		testCIKeyIncludeCoverage:        true,
+		testCIKeyIncludeCoverage:       true,
 		testCIKeyIncludeQualityGate:    false,
 	}))
 	if err != nil {
@@ -376,9 +376,9 @@ func TestCIRunPipelineHandler_StaticAnalysisSkippedNoToolchain(t *testing.T) {
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
 		testCIKeyIncludeStaticAnalysis: true,
-		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeCoverage:       false,
 		testCIKeyIncludeQualityGate:    false,
-		testCIKeyFailFast:               true,
+		testCIKeyFailFast:              true,
 	}))
 	// The pipeline may fail at validate/build step because there is no .c source.
 	// But if it gets to static_analysis, the step should be skipped.
@@ -422,9 +422,9 @@ func TestCIRunPipelineHandler_FailFastFalse_ContinuesAfterFailure(t *testing.T) 
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		testCIKeyFailFast:               false,
+		testCIKeyFailFast:              false,
 		testCIKeyIncludeStaticAnalysis: true,
-		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeCoverage:       false,
 		testCIKeyIncludeQualityGate:    false,
 	}))
 	// Pipeline should still report failure (from the build step).
@@ -470,9 +470,9 @@ func TestCIRunPipelineHandler_BuildCommandResolutionError(t *testing.T) {
 	}
 	_, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
 		testCIKeyIncludeStaticAnalysis: false,
-		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeCoverage:       false,
 		testCIKeyIncludeQualityGate:    false,
-		testCIKeyFailFast:               true,
+		testCIKeyFailFast:              true,
 	}))
 	// Should fail because validate or build can't resolve a C source file.
 	if err == nil {
@@ -505,9 +505,9 @@ func TestCIRunPipelineHandler_TestStepFailFast(t *testing.T) {
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		testCIKeyFailFast:               true,
+		testCIKeyFailFast:              true,
 		testCIKeyIncludeStaticAnalysis: false,
-		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeCoverage:       false,
 		testCIKeyIncludeQualityGate:    false,
 	}))
 	if err == nil {
@@ -539,9 +539,9 @@ func TestCIRunPipelineHandler_ValidateFailNoAbort(t *testing.T) {
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		testCIKeyFailFast:               false,
+		testCIKeyFailFast:              false,
 		testCIKeyIncludeStaticAnalysis: false,
-		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeCoverage:       false,
 		testCIKeyIncludeQualityGate:    false,
 	}))
 	if err == nil {
@@ -568,9 +568,9 @@ func TestCIRunPipelineHandler_ValidateFailFast(t *testing.T) {
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		testCIKeyFailFast:               true,
+		testCIKeyFailFast:              true,
 		testCIKeyIncludeStaticAnalysis: false,
-		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeCoverage:       false,
 		testCIKeyIncludeQualityGate:    false,
 	}))
 	if err == nil {

@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	testSeverityMedium    = "medium"
-	testMsgNotSupported   = "not supported"
+	testSeverityMedium  = "medium"
+	testMsgNotSupported = "not supported"
 )
 
 type fakeSWERuntimeCommandRunner struct {
@@ -163,7 +163,7 @@ func TestIntFromAny_AllBranches(t *testing.T) {
 		{float32(3.9), 3},
 		{float64(4.7), 4},
 		{json.Number("99"), 99},
-		{json.Number("3.5"), 3},  // fallback to Float64 parse
+		{json.Number("3.5"), 3}, // fallback to Float64 parse
 		{"42", 42},
 		{"bad", 0},
 		{nil, 0},
@@ -282,11 +282,21 @@ func TestNormalizeFindingSeverity_AllBranches(t *testing.T) {
 }
 
 func TestSecuritySeverityRank_AllBranches(t *testing.T) {
-	if securitySeverityRank("critical") != 4 { t.Fatal("critical should be 4") }
-	if securitySeverityRank("high") != 3 { t.Fatal("high should be 3") }
-	if securitySeverityRank(testSeverityMedium) != 2 { t.Fatal("medium should be 2") }
-	if securitySeverityRank("low") != 1 { t.Fatal("low should be 1") }
-	if securitySeverityRank("bogus") != 0 { t.Fatal("unknown should be 0") }
+	if securitySeverityRank("critical") != 4 {
+		t.Fatal("critical should be 4")
+	}
+	if securitySeverityRank("high") != 3 {
+		t.Fatal("high should be 3")
+	}
+	if securitySeverityRank(testSeverityMedium) != 2 {
+		t.Fatal("medium should be 2")
+	}
+	if securitySeverityRank("low") != 1 {
+		t.Fatal("low should be 1")
+	}
+	if securitySeverityRank("bogus") != 0 {
+		t.Fatal("unknown should be 0")
+	}
 }
 
 func TestDependencyInventoryError(t *testing.T) {

@@ -74,13 +74,13 @@ const (
 	containerKeyNamespace           = "namespace"
 	containerRunReportJSON          = "container-run-report.json"
 	containerRunOutputTxt           = "container-run-output.txt"
-	containerErrRuntimeNotAvailable  = "container runtime not available"
-	containerFmtSimulatedLogs        = "simulated logs for %s"
-	containerFmtSimulatedExec        = "simulated exec in %s: %s"
-	containerFmtK8sLogsFailed        = "k8s container logs failed: %v"
-	containerSummaryExecSimulated    = "container exec simulated"
-	containerRuntimeInfoCmd          = "info"
-	containerFormatFlag              = "--format"
+	containerErrRuntimeNotAvailable = "container runtime not available"
+	containerFmtSimulatedLogs       = "simulated logs for %s"
+	containerFmtSimulatedExec       = "simulated exec in %s: %s"
+	containerFmtK8sLogsFailed       = "k8s container logs failed: %v"
+	containerSummaryExecSimulated   = "container exec simulated"
+	containerRuntimeInfoCmd         = "info"
+	containerFormatFlag             = "--format"
 )
 
 var (
@@ -659,14 +659,14 @@ func (h *ContainerExecHandler) Invoke(ctx context.Context, session domain.Sessio
 	if isSimulatedContainerID(containerID) && !strict {
 		outputText := fmt.Sprintf(containerFmtSimulatedExec, containerID, strings.Join(command, " "))
 		output := map[string]any{
-			containerSourceRuntime:   containerSourceSynthetic,
-			containerSourceSimulated: true,
-			containerKeyContainerID:  containerID,
-			containerKeyCommand:      command,
+			containerSourceRuntime:     containerSourceSynthetic,
+			containerSourceSimulated:   true,
+			containerKeyContainerID:    containerID,
+			containerKeyCommand:        command,
 			containerKeyTimeoutSeconds: timeoutSec,
-			containerKeyExitCode:     0,
-			containerKeySummary:      containerSummaryExecSimulated,
-			containerKeyOutput:       outputText,
+			containerKeyExitCode:       0,
+			containerKeySummary:        containerSummaryExecSimulated,
+			containerKeyOutput:         outputText,
 		}
 		return containerResult(output, outputText, containerExecReportJSON, containerExecOutputTxt), nil
 	}

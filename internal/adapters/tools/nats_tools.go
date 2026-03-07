@@ -515,4 +515,3 @@ func decodePayload(payload, encoding string) ([]byte, error) {
 	}
 	return nil, fmt.Errorf("unsupported payload_encoding")
 }
-

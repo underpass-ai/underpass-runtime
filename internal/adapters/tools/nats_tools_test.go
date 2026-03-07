@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	testNATSProfileID     = "dev.nats"
-	testNATSAllowedKey    = "allowed_profiles"
-	testNATSSubjectEcho   = "sandbox.echo"
-	testNATSBadURL        = "://bad-url"
+	testNATSProfileID   = "dev.nats"
+	testNATSAllowedKey  = "allowed_profiles"
+	testNATSSubjectEcho = "sandbox.echo"
+	testNATSBadURL      = "://bad-url"
 )
 
 type fakeNATSClient struct {

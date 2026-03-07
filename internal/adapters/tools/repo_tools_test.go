@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	testRepoGoModFile       = "go.mod"
-	testRepoGoModContent    = "module example.com/repo\n\ngo 1.23\n"
-	testRepoGoTarget        = "./..."
-	testRepoErrWriteGoMod   = "write go.mod failed: %v"
+	testRepoGoModFile     = "go.mod"
+	testRepoGoModContent  = "module example.com/repo\n\ngo 1.23\n"
+	testRepoGoTarget      = "./..."
+	testRepoErrWriteGoMod = "write go.mod failed: %v"
 )
 
 func TestDetectTestCommand(t *testing.T) {

@@ -13,19 +13,19 @@ import (
 )
 
 const (
-	testContainerRuntimePodman     = "podman"
-	testContainerRuntimeDocker     = "docker"
-	testContainerSessionID1        = "sess1"
-	testContainerImageNginxLatest  = "nginx:latest"
+	testContainerRuntimePodman      = "podman"
+	testContainerRuntimeDocker      = "docker"
+	testContainerSessionID1         = "sess1"
+	testContainerImageNginxLatest   = "nginx:latest"
 	testContainerImageBusyboxLatest = "busybox:latest"
-	testContainerNameMycontainer   = "mycontainer"
-	testContainerCmdNginx          = "nginx"
-	testContainerArgInfo           = "info"
-	testContainerErrExitStatus1    = "exit status 1"
-	testContainerErrUnexpectedCmd  = "unexpected command"
-	testContainerErrCannotConnect  = "cannot connect to runtime"
-	testContainerFmtExecFailed     = "expected execution_failed, got %s"
-	testContainerFmtPodmanRuntime  = "expected podman runtime output, got %#v"
+	testContainerNameMycontainer    = "mycontainer"
+	testContainerCmdNginx           = "nginx"
+	testContainerArgInfo            = "info"
+	testContainerErrExitStatus1     = "exit status 1"
+	testContainerErrUnexpectedCmd   = "unexpected command"
+	testContainerErrCannotConnect   = "cannot connect to runtime"
+	testContainerFmtExecFailed      = "expected execution_failed, got %s"
+	testContainerFmtPodmanRuntime   = "expected podman runtime output, got %#v"
 )
 
 type fakeContainerRunner struct {
@@ -502,4 +502,3 @@ func TestHandleContainerRunError_Strict(t *testing.T) {
 		t.Fatal("expected simulated=false in strict mode error")
 	}
 }
-

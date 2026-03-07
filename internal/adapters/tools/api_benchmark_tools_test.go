@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	testModeArrivalRate           = "arrival_rate"
-	testConstraintsViolationMsg   = "constraints violation"
+	testModeArrivalRate            = "arrival_rate"
+	testConstraintsViolationMsg    = "constraints violation"
 	testExpectedInvalidArgumentFmt = "expected invalid_argument, got %s"
 )
 

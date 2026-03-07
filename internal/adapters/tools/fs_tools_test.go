@@ -15,21 +15,21 @@ import (
 )
 
 const (
-	testFSNotesTodo     = "notes/todo.txt"
-	testFSKeyContent    = "content"
-	testFSKeyPath       = "path"
-	testFSKeyRecursive  = "recursive"
-	testFSKeyCreateDirs = "create_parents"
-	testFSKeySrcPath    = "source_path"
-	testFSKeyDstPath    = "destination_path"
-	testFSKeyOverwrite  = "overwrite"
+	testFSNotesTodo      = "notes/todo.txt"
+	testFSKeyContent     = "content"
+	testFSKeyPath        = "path"
+	testFSKeyRecursive   = "recursive"
+	testFSKeyCreateDirs  = "create_parents"
+	testFSKeySrcPath     = "source_path"
+	testFSKeyDstPath     = "destination_path"
+	testFSKeyOverwrite   = "overwrite"
 	testFSKeyUnifiedDiff = "unified_diff"
-	testFSKeyEncoding   = "encoding"
-	testFSKeyForce      = "force"
-	testFSKeyPattern    = "pattern"
-	testFSKeyExists     = "exists"
-	testFSKeyCount      = "count"
-	testFSTodoContent   = "hola\nTODO: test"
+	testFSKeyEncoding    = "encoding"
+	testFSKeyForce       = "force"
+	testFSKeyPattern     = "pattern"
+	testFSKeyExists      = "exists"
+	testFSKeyCount       = "count"
+	testFSTodoContent    = "hola\nTODO: test"
 )
 
 func TestFSWriteReadListSearchFlow(t *testing.T) {
@@ -43,8 +43,8 @@ func TestFSWriteReadListSearchFlow(t *testing.T) {
 	search := &FSSearchHandler{}
 
 	_, err := write.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeyPath:    testFSNotesTodo,
-		testFSKeyContent: testFSTodoContent,
+		testFSKeyPath:       testFSNotesTodo,
+		testFSKeyContent:    testFSTodoContent,
 		testFSKeyCreateDirs: true,
 	}))
 	if err != nil {
@@ -179,8 +179,8 @@ func TestFSHandlers_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 	search := NewFSSearchHandler(runner)
 
 	_, err := write.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeyPath:    testFSNotesTodo,
-		testFSKeyContent: testFSTodoContent,
+		testFSKeyPath:       testFSNotesTodo,
+		testFSKeyContent:    testFSTodoContent,
 		testFSKeyCreateDirs: true,
 	}))
 	if err != nil {
@@ -279,7 +279,7 @@ func TestFSPatchHandler_UsesRunnerAndStrategy(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
 		testFSKeyUnifiedDiff: diff,
-		"strategy":     "apply",
+		"strategy":           "apply",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.patch error: %#v", err)
@@ -339,17 +339,17 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 	write := NewFSWriteHandler(nil)
 
 	_, err := mkdir.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeyPath:    "tmp/work",
+		testFSKeyPath:       "tmp/work",
 		testFSKeyCreateDirs: true,
-		"mode":           "0755",
+		"mode":              "0755",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.mkdir error: %#v", err)
 	}
 
 	_, err = write.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeyPath:    "tmp/work/input.txt",
-		testFSKeyContent: "payload",
+		testFSKeyPath:       "tmp/work/input.txt",
+		testFSKeyContent:    "payload",
 		testFSKeyCreateDirs: true,
 	}))
 	if err != nil {
@@ -357,8 +357,8 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 	}
 
 	_, err = copyHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeySrcPath:"tmp/work/input.txt",
-		testFSKeyDstPath:"tmp/work/input.copy.txt",
+		testFSKeySrcPath:   "tmp/work/input.txt",
+		testFSKeyDstPath:   "tmp/work/input.copy.txt",
 		testFSKeyOverwrite: true,
 	}))
 	if err != nil {
@@ -366,10 +366,10 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 	}
 
 	_, err = move.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeySrcPath:"tmp/work/input.copy.txt",
-		testFSKeyDstPath:"tmp/archive/input.copy.txt",
+		testFSKeySrcPath:    "tmp/work/input.copy.txt",
+		testFSKeyDstPath:    "tmp/archive/input.copy.txt",
 		testFSKeyCreateDirs: true,
-		testFSKeyOverwrite: true,
+		testFSKeyOverwrite:  true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.move error: %#v", err)
@@ -388,9 +388,9 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 	}
 
 	_, err = deleteHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeyPath: "tmp/archive/input.copy.txt",
+		testFSKeyPath:      "tmp/archive/input.copy.txt",
 		testFSKeyRecursive: false,
-		testFSKeyForce: false,
+		testFSKeyForce:     false,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.delete error: %#v", err)
@@ -420,15 +420,15 @@ func TestFSOps_ValidationAndPolicy(t *testing.T) {
 
 	_, err := NewFSMkdirHandler(nil).Invoke(ctx, session, mustJSON(t, map[string]any{
 		testFSKeyPath: "dir/new",
-		"mode": "invalid",
+		"mode":        "invalid",
 	}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected mode validation error, got %#v", err)
 	}
 
 	_, err = NewFSCopyHandler(nil).Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeySrcPath:"dir",
-		testFSKeyDstPath:"dir/dir-copy",
+		testFSKeySrcPath:   "dir",
+		testFSKeyDstPath:   "dir/dir-copy",
 		testFSKeyRecursive: false,
 	}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
@@ -436,15 +436,15 @@ func TestFSOps_ValidationAndPolicy(t *testing.T) {
 	}
 
 	_, err = NewFSMoveHandler(nil).Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeySrcPath:"../outside",
-		testFSKeyDstPath:"dir/b.txt",
+		testFSKeySrcPath: "../outside",
+		testFSKeyDstPath: "dir/b.txt",
 	}))
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("expected traversal denial on move, got %#v", err)
 	}
 
 	_, err = NewFSDeleteHandler(nil).Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeyPath: "dir",
+		testFSKeyPath:      "dir",
 		testFSKeyRecursive: false,
 	}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
@@ -453,9 +453,9 @@ func TestFSOps_ValidationAndPolicy(t *testing.T) {
 
 	rootSession := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	_, err = NewFSDeleteHandler(nil).Invoke(ctx, rootSession, mustJSON(t, map[string]any{
-		testFSKeyPath: ".",
+		testFSKeyPath:      ".",
 		testFSKeyRecursive: true,
-		testFSKeyForce: true,
+		testFSKeyForce:     true,
 	}))
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("expected workspace root delete denial, got %#v", err)
@@ -505,7 +505,7 @@ func TestFSOps_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 
 	_, err = copyHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
 		testFSKeySrcPath:   testFSNotesTodo,
-		testFSKeyDstPath:"notes/todo.copy.txt",
+		testFSKeyDstPath:   "notes/todo.copy.txt",
 		testFSKeyOverwrite: true,
 	}))
 	if err != nil {
@@ -513,8 +513,8 @@ func TestFSOps_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 	}
 
 	_, err = move.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeySrcPath:"notes/todo.copy.txt",
-		testFSKeyDstPath:"notes/todo.moved.txt",
+		testFSKeySrcPath:   "notes/todo.copy.txt",
+		testFSKeyDstPath:   "notes/todo.moved.txt",
 		testFSKeyOverwrite: true,
 	}))
 	if err != nil {
@@ -530,7 +530,7 @@ func TestFSOps_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 	}
 
 	_, err = deleteHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeyPath: "notes/todo.moved.txt",
+		testFSKeyPath:  "notes/todo.moved.txt",
 		testFSKeyForce: true,
 	}))
 	if err != nil {

@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	contentTypeJSON      = "application/json"
-	headerContentType    = "Content-Type"
-	contentTypeMetrics   = "text/plain; version=0.0.4; charset=utf-8"
+	contentTypeJSON    = "application/json"
+	headerContentType  = "Content-Type"
+	contentTypeMetrics = "text/plain; version=0.0.4; charset=utf-8"
 )
 
 type Server struct {

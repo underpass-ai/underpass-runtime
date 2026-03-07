@@ -62,8 +62,8 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testi
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":               ".",
-		"max_findings":       10,
+		"path":                ".",
+		"max_findings":        10,
 		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
@@ -121,8 +121,8 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t 
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":               ".",
-		"max_findings":       10,
+		"path":                ".",
+		"max_findings":        10,
 		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
@@ -160,7 +160,7 @@ func TestSecurityScanContainerHandler_TrivyPath(t *testing.T) {
 		},
 	}
 	result, err := NewSecurityScanContainerHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, mustSWERuntimeJSON(t, map[string]any{
-		"path":               ".",
+		"path":                ".",
 		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
@@ -268,7 +268,7 @@ func TestSecurityScanContainerHandler_TrivyWithImageRef(t *testing.T) {
 		},
 	}
 	result, err := NewSecurityScanContainerHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, mustSWERuntimeJSON(t, map[string]any{
-		"image_ref":          "myimage:latest",
+		"image_ref":           "myimage:latest",
 		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
@@ -304,7 +304,7 @@ func TestSecurityScanContainerHandler_TrivyParseFailFallsBackToHeuristic(t *test
 		},
 	}
 	result, err := NewSecurityScanContainerHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}, mustSWERuntimeJSON(t, map[string]any{
-		"path":               ".",
+		"path":                ".",
 		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {

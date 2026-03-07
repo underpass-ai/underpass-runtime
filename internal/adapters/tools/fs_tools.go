@@ -507,8 +507,7 @@ func (h *FSWriteHandler) invokeRemote(
 		script = fmt.Sprintf("cat > %s", shellQuote(resolved))
 	}
 
-	commandResult, err := runShellCommand(ctx, runner, session, script, payload, 256*1024)
-	if err != nil {
+	if commandResult, err := runShellCommand(ctx, runner, session, script, payload, 256*1024); err != nil {
 		return app.ToolRunResult{}, toFSRunnerError(err, commandResult.Output)
 	}
 	return fsWriteResult(path, payload), nil
@@ -643,8 +642,7 @@ func (h *FSMkdirHandler) invokeRemote(
 		"chmod " + formatPermission(mode) + " " + shellQuote(resolved) + " >/dev/null 2>&1 || true",
 	}, "\n")
 
-	commandResult, err := runShellCommand(ctx, runner, session, script, nil, 64*1024)
-	if err != nil {
+	if commandResult, err := runShellCommand(ctx, runner, session, script, nil, 64*1024); err != nil {
 		return app.ToolRunResult{}, toFSRunnerError(err, commandResult.Output)
 	}
 	return app.ToolRunResult{
@@ -684,7 +682,7 @@ func (h *FSMoveHandler) Invoke(ctx context.Context, session domain.Session, args
 			Output: map[string]any{
 				fsKeySourcePath: filepath.Clean(request.SourcePath),
 				fsKeyDestPath:   filepath.Clean(request.DestinationPath),
-				"moved":          false,
+				"moved":         false,
 			},
 			Logs: []domain.LogLine{{At: time.Now().UTC(), Channel: fsKeyStdout, Message: "source and destination are identical"}},
 		}, nil
@@ -1077,10 +1075,10 @@ func (h *FSStatHandler) invokeLocal(path, resolved string) (app.ToolRunResult, *
 
 	return app.ToolRunResult{
 		Output: map[string]any{
-			"path":        filepath.Clean(path),
-			"exists":      true,
+			"path":          filepath.Clean(path),
+			"exists":        true,
 			"type":          fsEntryType(info.Mode()),
-			fsKeySizeBytes: info.Size(),
+			fsKeySizeBytes:  info.Size(),
 			"mode":          info.Mode().String(),
 			fsKeyModifiedAt: info.ModTime().UTC(),
 		},
@@ -1131,8 +1129,8 @@ func (h *FSStatHandler) invokeRemote(
 	mtimeEpoch, _ := strconv.ParseInt(strings.TrimSpace(parts[3]), 10, 64)
 	modeString := strings.TrimSpace(parts[2])
 	output := map[string]any{
-		"path":       filepath.Clean(path),
-		"exists":     true,
+		"path":         filepath.Clean(path),
+		"exists":       true,
 		"type":         strings.TrimSpace(parts[0]),
 		fsKeySizeBytes: sizeValue,
 	}

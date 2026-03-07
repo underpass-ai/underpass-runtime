@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	testKafkaTopic          = "sandbox.events"
+	testKafkaTopic           = "sandbox.events"
 	testKafkaDeadBroker      = "127.0.0.1:1"
 	testErrMsgMapOutput      = "expected map output, got %#v"
 	testErrMsgUnexpectedCode = "unexpected error code: %s"

@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	testLangGo                       = "go"
-	testExpectedInvalidArgCodeGoFmt  = "expected invalid argument code, got %#v"
+	testLangGo                      = "go"
+	testExpectedInvalidArgCodeGoFmt = "expected invalid argument code, got %#v"
 )
 
 func TestRepoDetectToolchainInvoke_GoModule(t *testing.T) {

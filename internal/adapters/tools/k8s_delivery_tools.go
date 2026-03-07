@@ -148,14 +148,14 @@ func (h *K8sApplyManifestHandler) Invoke(ctx context.Context, session domain.Ses
 	summary := fmt.Sprintf("applied %d resources in namespace %s", len(resources), namespace)
 	output := map[string]any{
 		k8sDelivKeyNamespace: namespace,
-		"dry_run":       request.DryRun,
-		"applied_count": len(resources),
-		"created_count": createdCount,
-		"updated_count": updatedCount,
-		"resources":     resources,
-		k8sDelivKeySummary: summary,
-		k8sDelivKeyOutput: summary,
-		k8sDelivKeyExitCode: 0,
+		"dry_run":            request.DryRun,
+		"applied_count":      len(resources),
+		"created_count":      createdCount,
+		"updated_count":      updatedCount,
+		"resources":          resources,
+		k8sDelivKeySummary:   summary,
+		k8sDelivKeyOutput:    summary,
+		k8sDelivKeyExitCode:  0,
 	}
 	return k8sResult(output, "k8s-apply-manifest-report.json"), nil
 }
@@ -213,10 +213,10 @@ func (h *K8sApplyManifestHandler) applyDocument(
 		}
 		return map[string]any{
 			k8sDelivKeyAPIVersion: document.APIVersion,
-			"kind":        "ConfigMap",
-			"name":        document.Name,
-			k8sDelivKeyNamespace: namespace,
-			k8sDelivKeyOperation: operation,
+			"kind":                "ConfigMap",
+			"name":                document.Name,
+			k8sDelivKeyNamespace:  namespace,
+			k8sDelivKeyOperation:  operation,
 		}, nil
 	case "deployment":
 		operation, err := h.applyDeployment(ctx, namespace, dryRun, document)
@@ -225,10 +225,10 @@ func (h *K8sApplyManifestHandler) applyDocument(
 		}
 		return map[string]any{
 			k8sDelivKeyAPIVersion: document.APIVersion,
-			"kind":        "Deployment",
-			"name":        document.Name,
-			k8sDelivKeyNamespace: namespace,
-			k8sDelivKeyOperation: operation,
+			"kind":                "Deployment",
+			"name":                document.Name,
+			k8sDelivKeyNamespace:  namespace,
+			k8sDelivKeyOperation:  operation,
 		}, nil
 	case "service":
 		operation, err := h.applyService(ctx, namespace, dryRun, document)
@@ -237,10 +237,10 @@ func (h *K8sApplyManifestHandler) applyDocument(
 		}
 		return map[string]any{
 			k8sDelivKeyAPIVersion: document.APIVersion,
-			"kind":        "Service",
-			"name":        document.Name,
-			k8sDelivKeyNamespace: namespace,
-			k8sDelivKeyOperation: operation,
+			"kind":                "Service",
+			"name":                document.Name,
+			k8sDelivKeyNamespace:  namespace,
+			k8sDelivKeyOperation:  operation,
 		}, nil
 	default:
 		return nil, &domain.Error{
@@ -412,14 +412,14 @@ func (h *K8sRolloutStatusHandler) Invoke(ctx context.Context, session domain.Ses
 
 	summary := fmt.Sprintf("deployment %s/%s rollout is complete", namespace, deploymentName)
 	output := map[string]any{
-		k8sDelivKeyNamespace: namespace,
+		k8sDelivKeyNamespace:  namespace,
 		k8sDelivKeyDeployment: deploymentName,
-		"status":          k8sDelivStatusCompleted,
-		"duration_ms":     int(time.Since(started).Milliseconds()),
-		"rollout":         snapshot,
-		k8sDelivKeySummary: summary,
-		k8sDelivKeyOutput: summary,
-		k8sDelivKeyExitCode: 0,
+		"status":              k8sDelivStatusCompleted,
+		"duration_ms":         int(time.Since(started).Milliseconds()),
+		"rollout":             snapshot,
+		k8sDelivKeySummary:    summary,
+		k8sDelivKeyOutput:     summary,
+		k8sDelivKeyExitCode:   0,
 	}
 	return k8sResult(output, "k8s-rollout-status-report.json"), nil
 }
@@ -478,8 +478,8 @@ func (h *K8sRestartDeploymentHandler) Invoke(ctx context.Context, session domain
 	}
 
 	output := map[string]any{
-		k8sDelivKeyNamespace: namespace,
-		k8sDelivKeyDeployment: deploymentName,
+		k8sDelivKeyNamespace:    namespace,
+		k8sDelivKeyDeployment:   deploymentName,
 		"restarted_at":          restartedAt,
 		"previous_restarted_at": previousRestartedAt,
 		"generation":            updated.Generation,
@@ -744,14 +744,14 @@ func evaluateDeploymentRollout(deployment *appsv1.Deployment) (map[string]any, b
 		unavailable == 0
 
 	return map[string]any{
-		"generation":           generation,
-		"observed_generation":  observedGeneration,
-		"desired_replicas":     desired,
-		"updated_replicas":     updated,
-		"ready_replicas":       ready,
-		"available_replicas":   available,
-		"unavailable_replicas": unavailable,
-		"conditions":           conditions,
+		"generation":            generation,
+		"observed_generation":   observedGeneration,
+		"desired_replicas":      desired,
+		"updated_replicas":      updated,
+		"ready_replicas":        ready,
+		"available_replicas":    available,
+		"unavailable_replicas":  unavailable,
+		"conditions":            conditions,
 		k8sDelivStatusCompleted: completed,
 	}, completed
 }

@@ -24,10 +24,10 @@ type yamlCatalog struct {
 
 // yamlCapability mirrors domain.Capability with string fields for JSON schemas.
 type yamlCapability struct {
-	Name             string               `yaml:"name"`
-	Description      string               `yaml:"description"`
-	InputSchema      string               `yaml:"input_schema"`
-	OutputSchema     string               `yaml:"output_schema"`
+	Name             string                `yaml:"name"`
+	Description      string                `yaml:"description"`
+	InputSchema      string                `yaml:"input_schema"`
+	OutputSchema     string                `yaml:"output_schema"`
 	Scope            domain.Scope          `yaml:"scope"`
 	SideEffects      domain.SideEffects    `yaml:"side_effects"`
 	RiskLevel        domain.RiskLevel      `yaml:"risk_level"`

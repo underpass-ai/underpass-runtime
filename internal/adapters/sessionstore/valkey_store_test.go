@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	testSessionID    = "session-1"
-	testKeyPrefix    = "workspace:test:session"
+	testSessionID = "session-1"
+	testKeyPrefix = "workspace:test:session"
 )
 
 type fakeValkeyClient struct {

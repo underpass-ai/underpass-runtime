@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	testRedisKey             = "sandbox:todo:1"
-	testErrMsgKeyDenial      = "expected key policy denial"
+	testRedisKey        = "sandbox:todo:1"
+	testErrMsgKeyDenial = "expected key policy denial"
 )
 
 type fakeRedisClient struct {

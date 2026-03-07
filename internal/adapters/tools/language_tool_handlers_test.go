@@ -13,12 +13,12 @@ import (
 )
 
 const (
-	testExpectedExitCode0       = "expected exit code 0, got %d"
-	testExpectedOneRunnerCall   = "expected one runner call, got %d"
-	testCommandCargo            = "cargo"
-	testJSONKeyTarget           = "target"
-	testTargetAppsWeb           = "apps/web"
-	testVenvDir                 = ".workspace-venv"
+	testExpectedExitCode0     = "expected exit code 0, got %d"
+	testExpectedOneRunnerCall = "expected one runner call, got %d"
+	testCommandCargo          = "cargo"
+	testJSONKeyTarget         = "target"
+	testTargetAppsWeb         = "apps/web"
+	testVenvDir               = ".workspace-venv"
 )
 
 type fakeLanguageCommandRunner struct {
@@ -41,7 +41,7 @@ func TestRustBuildHandler_BuildsExpectedCommand(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{
 		testJSONKeyTarget: "workspace-crate",
-		"release": true,
+		"release":         true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected rust.build error: %v", err)
@@ -308,8 +308,8 @@ func TestPythonValidateAndTestHandlers(t *testing.T) {
 	}
 	_, err = NewPythonTestHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{
 		testJSONKeyTarget: "tests",
-		"run_pattern": "todo",
-		"max_fail":    3,
+		"run_pattern":     "todo",
+		"max_fail":        3,
 	}))
 	if err != nil {
 		t.Fatalf("python.test failed: %v", err)

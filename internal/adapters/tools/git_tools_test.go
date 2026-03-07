@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	testGitRemoteOrigin      = "origin"
-	testGitBranchLifecycle   = "feature/lifecycle"
+	testGitRemoteOrigin    = "origin"
+	testGitBranchLifecycle = "feature/lifecycle"
 )
 
 func TestGitHandlers_StatusDiffApplyPatch(t *testing.T) {

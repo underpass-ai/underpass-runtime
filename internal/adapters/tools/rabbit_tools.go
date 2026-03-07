@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	errRabbitQueueRequired        = "queue is required"
+	errRabbitQueueRequired         = "queue is required"
 	errRabbitQueueOutsideAllowlist = "queue outside profile allowlist"
 )
 

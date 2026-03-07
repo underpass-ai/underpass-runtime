@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	invalidArgsPayload            = "invalid args payload"
-	errFieldMustBeArray           = "field %s must be an array"
-	errFieldMustContainStrings    = "field %s must contain strings"
-	errFieldMustBeString          = "field %s must be a string"
+	invalidArgsPayload         = "invalid args payload"
+	errFieldMustBeArray        = "field %s must be an array"
+	errFieldMustContainStrings = "field %s must contain strings"
+	errFieldMustBeString       = "field %s must be a string"
 )
 
 type StaticPolicy struct{}

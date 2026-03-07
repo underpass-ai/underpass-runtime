@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	testK8sNamespaceSandbox  = "sandbox"
-	testK8sNamespaceDefault  = "default"
-	testK8sRoleDevops        = "devops"
+	testK8sNamespaceSandbox = "sandbox"
+	testK8sNamespaceDefault = "default"
+	testK8sRoleDevops       = "devops"
 )
 
 func TestK8sApplyManifestHandler_ConfigMapCreateAndUpdate(t *testing.T) {

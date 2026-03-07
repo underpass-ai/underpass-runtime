@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	testRabbitQueue    = "sandbox.jobs"
-	testRabbitBadURL   = "amqp://invalid:5672"
+	testRabbitQueue  = "sandbox.jobs"
+	testRabbitBadURL = "amqp://invalid:5672"
 )
 
 type fakeRabbitClient struct {

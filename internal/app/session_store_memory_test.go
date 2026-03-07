@@ -31,7 +31,8 @@ func TestInMemorySessionStore_SaveGetDelete(t *testing.T) {
 		t.Fatalf("unexpected session id: %s", loaded.ID)
 	}
 
-	if err := store.Delete(context.Background(), testSessionID); err != nil {
+	err = store.Delete(context.Background(), testSessionID)
+	if err != nil {
 		t.Fatalf("delete failed: %v", err)
 	}
 	_, found, err = store.Get(context.Background(), testSessionID)

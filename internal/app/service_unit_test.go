@@ -12,12 +12,12 @@ import (
 )
 
 const (
-	testSessionID           = "session-1"
-	testInvocationID        = "inv-1"
-	testToolK8sGetPods      = "k8s.get_pods"
+	testSessionID            = "session-1"
+	testInvocationID         = "inv-1"
+	testToolK8sGetPods       = "k8s.get_pods"
 	testExpectedDeniedStatus = "expected denied invocation status, got %#v"
-	testContentTypePlain    = "text/plain"
-	testToolFSList          = "fs.list"
+	testContentTypePlain     = "text/plain"
+	testToolFSList           = "fs.list"
 )
 
 type fakeWorkspaceManager struct {

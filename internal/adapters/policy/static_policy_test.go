@@ -88,12 +88,12 @@ func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 			"src/a.go",
 			"src/b.go",
 		},
-		"profile": "dev.redis",
-		"subjects": []any{"sandbox.events.todo"},
-		"topics":   []any{"sandbox.tasks"},
-		"queues":   []any{"sandbox.jobs"},
-		"keys":     []any{"sandbox:todo:1"},
-		"arg":      "--run=TestTodo",
+		"profile":     "dev.redis",
+		"subjects":    []any{"sandbox.events.todo"},
+		"topics":      []any{"sandbox.tasks"},
+		"queues":      []any{"sandbox.jobs"},
+		"keys":        []any{"sandbox:todo:1"},
+		"arg":         "--run=TestTodo",
 		testFieldArgs: []any{"-v", "-run=TestTodo"},
 	}
 
@@ -148,13 +148,13 @@ func TestStaticPolicy_ArgumentPolicyRules(t *testing.T) {
 	allowed, reason := argsAllowedByPolicy(
 		json.RawMessage(`{"args":["-v","-run=TestTodo"]}`),
 		[]domain.PolicyArgField{{
-			Field:         testFieldArgs,
-			Multi:         true,
-			MaxItems:      3,
-			MaxLength:     32,
-			DeniedPrefix:  []string{"-exec"},
+			Field:          testFieldArgs,
+			Multi:          true,
+			MaxItems:       3,
+			MaxLength:      32,
+			DeniedPrefix:   []string{"-exec"},
 			DenyCharacters: []string{";"},
-			AllowedPrefix: []string{"-v", "-run="},
+			AllowedPrefix:  []string{"-v", "-run="},
 		}},
 	)
 	if !allowed || reason != "" {

@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	testRemoteOrigin             = "origin"
-	testExpectedBadJSONErrFmt    = "expected invalid_argument for bad JSON, got %#v"
+	testRemoteOrigin          = "origin"
+	testExpectedBadJSONErrFmt = "expected invalid_argument for bad JSON, got %#v"
 )
 
 // ---------------------------------------------------------------------------

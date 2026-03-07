@@ -363,13 +363,12 @@ func (h *PythonInstallDepsHandler) Invoke(ctx context.Context, session domain.Se
 
 	runner := ensureRunner(h.runner)
 	venvPath := workspaceVenvDir
-	setupResult, setupErr := runner.Run(ctx, session, app.CommandSpec{
+	if setupResult, setupErr := runner.Run(ctx, session, app.CommandSpec{
 		Cwd:      session.WorkspacePath,
 		Command:  "python3",
 		Args:     []string{"-m", "venv", venvPath},
 		MaxBytes: 1024 * 1024,
-	})
-	if setupErr != nil {
+	}); setupErr != nil {
 		result := structuredToolRunResult(setupResult.ExitCode, setupResult.Output, artifactPythonInstall, "", 0.0)
 		return result, toToolError(setupErr, setupResult.Output)
 	}

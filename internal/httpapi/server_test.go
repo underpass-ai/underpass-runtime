@@ -20,20 +20,20 @@ import (
 )
 
 const (
-	testHTTPTenantA         = "tenant-a"
-	testHTTPTenantAuth      = "tenant-auth"
-	testHTTPRoleDeveloper   = "developer"
-	testHTTPSharedToken     = "workspace-shared-token"
-	testHTTPActorAuth       = "actor-auth"
-	testHTTPKeyTenantID     = "tenant_id"
-	testHTTPKeyActorID      = "actor_id"
-	testHTTPKeyRoles        = "roles"
-	testHTTPKeyPrincipal    = "principal"
-	testHTTPKeySession      = "session"
-	testHTTPKeyID           = "id"
-	testHTTPKeyInvocation   = "invocation"
-	testHTTPPathSessions    = "/v1/sessions"
-	testHTTPSourceRepoPath  = "source_repo_path"
+	testHTTPTenantA        = "tenant-a"
+	testHTTPTenantAuth     = "tenant-auth"
+	testHTTPRoleDeveloper  = "developer"
+	testHTTPSharedToken    = "workspace-shared-token"
+	testHTTPActorAuth      = "actor-auth"
+	testHTTPKeyTenantID    = "tenant_id"
+	testHTTPKeyActorID     = "actor_id"
+	testHTTPKeyRoles       = "roles"
+	testHTTPKeyPrincipal   = "principal"
+	testHTTPKeySession     = "session"
+	testHTTPKeyID          = "id"
+	testHTTPKeyInvocation  = "invocation"
+	testHTTPPathSessions   = "/v1/sessions"
+	testHTTPSourceRepoPath = "source_repo_path"
 )
 
 func TestHTTPAPI_EndToEndToolExecutionInWorkspace(t *testing.T) {
@@ -43,10 +43,10 @@ func TestHTTPAPI_EndToEndToolExecutionInWorkspace(t *testing.T) {
 		testHTTPKeyPrincipal: map[string]any{
 			testHTTPKeyTenantID: testHTTPTenantA,
 			testHTTPKeyActorID:  "agent-1",
-			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
-		testHTTPSourceRepoPath:   sourcePath,
-		"expires_in_seconds": 3600,
+		testHTTPSourceRepoPath: sourcePath,
+		"expires_in_seconds":   3600,
 	}
 	createResp := doJSONRequest(t, handler, http.MethodPost, testHTTPPathSessions, createPayload)
 	if createResp.StatusCode != http.StatusCreated {
@@ -98,7 +98,7 @@ func TestHTTPAPI_ApprovalRequiredAndRouteErrors(t *testing.T) {
 		testHTTPKeyPrincipal: map[string]any{
 			testHTTPKeyTenantID: testHTTPTenantA,
 			testHTTPKeyActorID:  "agent-2",
-			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
 	}
 	createResp := doJSONRequest(t, handler, http.MethodPost, testHTTPPathSessions, createPayload)
@@ -151,7 +151,7 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 		testHTTPKeyPrincipal: map[string]any{
 			testHTTPKeyTenantID: testHTTPTenantA,
 			testHTTPKeyActorID:  "agent-3",
-			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
 		testHTTPSourceRepoPath: sourcePath,
 	})
@@ -230,7 +230,7 @@ func TestHTTPAPI_TrustedHeadersUsesAuthenticatedPrincipal(t *testing.T) {
 		testHTTPKeyPrincipal: map[string]any{
 			testHTTPKeyTenantID: "payload-tenant",
 			testHTTPKeyActorID:  "payload-actor",
-			testHTTPKeyRoles:     []string{"admin"},
+			testHTTPKeyRoles:    []string{"admin"},
 		},
 	}, headers)
 	if createResp.StatusCode != http.StatusCreated {
@@ -478,7 +478,7 @@ func TestHTTPAPI_MethodNotAllowedEdgeCases(t *testing.T) {
 		testHTTPKeyPrincipal: map[string]any{
 			testHTTPKeyTenantID: testHTTPTenantA,
 			testHTTPKeyActorID:  "agent-edge",
-			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
 		testHTTPSourceRepoPath: sourcePath,
 	})
@@ -516,7 +516,7 @@ func TestHTTPAPI_InvocationRouteEdgeCases(t *testing.T) {
 		testHTTPKeyPrincipal: map[string]any{
 			testHTTPKeyTenantID: testHTTPTenantA,
 			testHTTPKeyActorID:  "agent-inv-edge",
-			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
 		testHTTPSourceRepoPath: sourcePath,
 	})

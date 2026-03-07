@@ -62,8 +62,8 @@ func TestSecurityLicenseCheckHandler_DeniedLicenseFailsStatus(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":            ".",
-		"denied_licenses": []string{testLicenseGPL30},
+		"path":                   ".",
+		"denied_licenses":        []string{testLicenseGPL30},
 		testLicenseUnknownPolicy: "warn",
 	}))
 	if err != nil {
@@ -107,7 +107,7 @@ func TestSecurityLicenseCheckHandler_UnknownPolicyDeny(t *testing.T) {
 		},
 	}
 	result, err := NewSecurityLicenseCheckHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"path":           ".",
+		"path":                   ".",
 		testLicenseUnknownPolicy: "deny",
 	}))
 	if err != nil {
@@ -339,7 +339,7 @@ func TestSecurityLicenseCheckHandler_EnrichmentFailsButEntriesExist(t *testing.T
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}, Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes}}
 
 	result, toolErr := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":           ".",
+		"path":                   ".",
 		testLicenseUnknownPolicy: "warn",
 	}))
 	if toolErr != nil {
@@ -385,7 +385,7 @@ func TestSecurityLicenseCheckHandler_InventoryRunErrWithEmptyEnriched(t *testing
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}, Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes}}
 
 	result, toolErr := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":           ".",
+		"path":                   ".",
 		testLicenseUnknownPolicy: "warn",
 	}))
 	// With 0 dependencies the result should still be returned (pass status).
@@ -433,7 +433,7 @@ func TestSecurityLicenseCheckHandler_WarnStatus(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, toolErr := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":           ".",
+		"path":                   ".",
 		testLicenseUnknownPolicy: "warn",
 	}))
 	if toolErr != nil {

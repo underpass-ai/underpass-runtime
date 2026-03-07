@@ -546,8 +546,8 @@ func TestBuildSBOMResult_PreviewTruncation(t *testing.T) {
 
 func TestWalkNodeDependencies_Truncation(t *testing.T) {
 	tree := map[string]any{
-		"alpha": map[string]any{testMapKeyVersion: testVersion100},
-		"bravo": map[string]any{testMapKeyVersion: "2.0.0"},
+		"alpha":   map[string]any{testMapKeyVersion: testVersion100},
+		"bravo":   map[string]any{testMapKeyVersion: "2.0.0"},
 		"charlie": map[string]any{testMapKeyVersion: "3.0.0"},
 	}
 	var out []dependencyEntry
