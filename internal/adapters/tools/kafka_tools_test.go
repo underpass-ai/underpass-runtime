@@ -469,6 +469,88 @@ func TestKafkaTopicMetadataHandler_ErrorPaths(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// kafkaTrimMessageBytes — all branches
+// ---------------------------------------------------------------------------
+
+func TestKafkaTrimMessageBytes(t *testing.T) {
+	t.Run("no_trimming_needed", func(t *testing.T) {
+		key := []byte("key")
+		value := []byte("value")
+		tKey, tVal, keyTrimmed, valTrimmed, anyTrimmed := kafkaTrimMessageBytes(key, value, 100)
+		if anyTrimmed || keyTrimmed || valTrimmed {
+			t.Fatal("expected no trimming")
+		}
+		if string(tKey) != "key" || string(tVal) != "value" {
+			t.Fatalf("unexpected result: key=%q value=%q", tKey, tVal)
+		}
+	})
+	t.Run("exact_fit", func(t *testing.T) {
+		key := []byte("ab")
+		value := []byte("cd")
+		tKey, tVal, keyTrimmed, valTrimmed, anyTrimmed := kafkaTrimMessageBytes(key, value, 4)
+		if anyTrimmed || keyTrimmed || valTrimmed {
+			t.Fatal("expected no trimming when exact fit")
+		}
+		if string(tKey) != "ab" || string(tVal) != "cd" {
+			t.Fatalf("unexpected result: key=%q value=%q", tKey, tVal)
+		}
+	})
+	t.Run("key_exceeds_remaining", func(t *testing.T) {
+		key := []byte("abcdef")
+		value := []byte("xyz")
+		tKey, tVal, keyTrimmed, valTrimmed, anyTrimmed := kafkaTrimMessageBytes(key, value, 3)
+		if !anyTrimmed || !keyTrimmed || !valTrimmed {
+			t.Fatalf("expected all trimmed: anyTrimmed=%v keyTrimmed=%v valTrimmed=%v", anyTrimmed, keyTrimmed, valTrimmed)
+		}
+		if string(tKey) != "abc" {
+			t.Fatalf("expected key trimmed to 'abc', got %q", tKey)
+		}
+		if len(tVal) != 0 {
+			t.Fatalf("expected empty value, got %q", tVal)
+		}
+	})
+	t.Run("key_fits_value_trimmed", func(t *testing.T) {
+		key := []byte("ab")
+		value := []byte("cdefgh")
+		tKey, tVal, keyTrimmed, valTrimmed, anyTrimmed := kafkaTrimMessageBytes(key, value, 5)
+		if !anyTrimmed || keyTrimmed || !valTrimmed {
+			t.Fatalf("expected only value trimmed: anyTrimmed=%v keyTrimmed=%v valTrimmed=%v", anyTrimmed, keyTrimmed, valTrimmed)
+		}
+		if string(tKey) != "ab" {
+			t.Fatalf("expected key unchanged, got %q", tKey)
+		}
+		if string(tVal) != "cde" {
+			t.Fatalf("expected value trimmed to 'cde', got %q", tVal)
+		}
+	})
+	t.Run("key_equals_remaining_empty_value", func(t *testing.T) {
+		key := []byte("abc")
+		value := []byte("")
+		tKey, tVal, keyTrimmed, valTrimmed, anyTrimmed := kafkaTrimMessageBytes(key, value, 3)
+		if anyTrimmed || keyTrimmed || valTrimmed {
+			t.Fatal("expected no trimming when key=remaining and value empty")
+		}
+		if string(tKey) != "abc" || len(tVal) != 0 {
+			t.Fatalf("unexpected result: key=%q value=%q", tKey, tVal)
+		}
+	})
+	t.Run("key_equals_remaining_with_value", func(t *testing.T) {
+		key := []byte("abc")
+		value := []byte("x")
+		tKey, tVal, keyTrimmed, valTrimmed, anyTrimmed := kafkaTrimMessageBytes(key, value, 3)
+		if !anyTrimmed || keyTrimmed || !valTrimmed {
+			t.Fatalf("expected value trimmed only: anyTrimmed=%v keyTrimmed=%v valTrimmed=%v", anyTrimmed, keyTrimmed, valTrimmed)
+		}
+		if string(tKey) != "abc" {
+			t.Fatalf("expected key unchanged, got %q", tKey)
+		}
+		if len(tVal) != 0 {
+			t.Fatalf("expected empty value, got %q", tVal)
+		}
+	})
+}
+
 func writableKafkaSession() domain.Session {
 	return domain.Session{
 		Metadata: map[string]string{

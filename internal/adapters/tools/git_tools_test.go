@@ -56,7 +56,7 @@ func TestGitHandlers_StatusDiffApplyPatch(t *testing.T) {
 	if applyErr != nil {
 		t.Fatalf("unexpected git apply error: %v", applyErr)
 	}
-	if applied := applyResult.Output.(map[string]any)["applied"].(bool); !applied {
+	if !applyResult.Output.(map[string]any)["applied"].(bool) {
 		t.Fatalf("expected patch to apply: %#v", applyResult.Output)
 	}
 

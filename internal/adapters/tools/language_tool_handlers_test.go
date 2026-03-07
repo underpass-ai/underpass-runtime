@@ -402,6 +402,63 @@ func TestResolvePythonExecutablesFromVenv(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// resolveConstraintsFile — all branches
+// ---------------------------------------------------------------------------
+
+func TestResolveConstraintsFile(t *testing.T) {
+	t.Run("empty_string", func(t *testing.T) {
+		result, err := resolveConstraintsFile(t.TempDir(), "")
+		if err != nil {
+			t.Fatalf(testUnexpectedErrorFmt, err)
+		}
+		if result != "" {
+			t.Fatalf("expected empty result, got %q", result)
+		}
+	})
+	t.Run("whitespace_only", func(t *testing.T) {
+		result, err := resolveConstraintsFile(t.TempDir(), "   ")
+		if err != nil {
+			t.Fatalf(testUnexpectedErrorFmt, err)
+		}
+		if result != "" {
+			t.Fatalf("expected empty result, got %q", result)
+		}
+	})
+	t.Run("file_exists", func(t *testing.T) {
+		root := t.TempDir()
+		constraintsPath := filepath.Join(root, "constraints.txt")
+		if writeErr := os.WriteFile(constraintsPath, []byte("pytest>=8\n"), 0o644); writeErr != nil {
+			t.Fatalf("write constraints.txt: %v", writeErr)
+		}
+		result, err := resolveConstraintsFile(root, "constraints.txt")
+		if err != nil {
+			t.Fatalf(testUnexpectedErrorFmt, err)
+		}
+		if result != "constraints.txt" {
+			t.Fatalf("expected 'constraints.txt', got %q", result)
+		}
+	})
+	t.Run("file_not_found", func(t *testing.T) {
+		_, err := resolveConstraintsFile(t.TempDir(), "missing.txt")
+		if err == nil {
+			t.Fatal("expected error for missing file")
+		}
+		if err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
+		}
+	})
+	t.Run("path_traversal", func(t *testing.T) {
+		_, err := resolveConstraintsFile(t.TempDir(), "../../../etc/passwd")
+		if err == nil {
+			t.Fatal("expected error for path traversal")
+		}
+		if err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
+		}
+	})
+}
+
 func mustLanguageJSON(t *testing.T, payload any) json.RawMessage {
 	t.Helper()
 	data, err := json.Marshal(payload)
