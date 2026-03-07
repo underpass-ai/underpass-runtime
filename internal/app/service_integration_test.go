@@ -16,15 +16,23 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testTenantID                      = "tenant-a"
+	testActorID                       = "alice"
+	testRoleDeveloper                 = "developer"
+	testUnexpectedCreateSessionErrFmt = "unexpected error creating session: %v"
+	testNotesTodoPath                 = "notes/todo.txt"
+)
+
 func TestService_CreateAndListTools(t *testing.T) {
 	svc := setupService(t)
 	ctx := context.Background()
 
 	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice", Roles: []string{"developer"}},
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
 	})
 	if err != nil {
-		t.Fatalf("unexpected error creating session: %v", err)
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
 	tools, listErr := svc.ListTools(ctx, session.ID)
@@ -52,14 +60,14 @@ func TestService_FsWriteRequiresApproval(t *testing.T) {
 	ctx := context.Background()
 
 	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice", Roles: []string{"developer"}},
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
 	})
 	if err != nil {
-		t.Fatalf("unexpected error creating session: %v", err)
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
 	invocation, invokeErr := svc.InvokeTool(ctx, session.ID, "fs.write_file", app.InvokeToolRequest{
-		Args: mustJSON(t, map[string]any{"path": "notes/todo.txt", "content": "hello"}),
+		Args: mustJSON(t, map[string]any{"path": testNotesTodoPath, "content": "hello"}),
 	})
 	if invokeErr == nil {
 		t.Fatal("expected approval error")
@@ -77,22 +85,22 @@ func TestService_FsWriteAndRead(t *testing.T) {
 	ctx := context.Background()
 
 	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice", Roles: []string{"developer"}},
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
 	})
 	if err != nil {
-		t.Fatalf("unexpected error creating session: %v", err)
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
 	_, writeErr := svc.InvokeTool(ctx, session.ID, "fs.write_file", app.InvokeToolRequest{
 		Approved: true,
-		Args:     mustJSON(t, map[string]any{"path": "notes/todo.txt", "content": "hello world", "create_parents": true}),
+		Args:     mustJSON(t, map[string]any{"path": testNotesTodoPath, "content": "hello world", "create_parents": true}),
 	})
 	if writeErr != nil {
 		t.Fatalf("unexpected fs.write_file error: %v", writeErr)
 	}
 
 	invocation, readErr := svc.InvokeTool(ctx, session.ID, "fs.read_file", app.InvokeToolRequest{
-		Args: mustJSON(t, map[string]any{"path": "notes/todo.txt"}),
+		Args: mustJSON(t, map[string]any{"path": testNotesTodoPath}),
 	})
 	if readErr != nil {
 		t.Fatalf("unexpected fs.read_file error: %v", readErr)
@@ -116,10 +124,10 @@ func TestService_PathTraversalDenied(t *testing.T) {
 	ctx := context.Background()
 
 	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice", Roles: []string{"developer"}},
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
 	})
 	if err != nil {
-		t.Fatalf("unexpected error creating session: %v", err)
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
 	_, invokeErr := svc.InvokeTool(ctx, session.ID, "fs.read_file", app.InvokeToolRequest{
@@ -143,7 +151,7 @@ func setupService(t *testing.T) *app.Service {
 	workspaceManager := workspaceadapter.NewLocalManager(workspaceRoot)
 	catalog := tooladapter.NewCatalog(tooladapter.DefaultCapabilities())
 	commandRunner := tooladapter.NewLocalCommandRunner()
-	engine := tooladapter.NewEngine(
+	handlers := []tooladapter.Handler{ //nolint:prealloc // k8s handlers appended conditionally via build tags
 		tooladapter.NewFSListHandler(commandRunner),
 		tooladapter.NewFSReadHandler(commandRunner),
 		tooladapter.NewFSWriteHandler(commandRunner),
@@ -210,14 +218,6 @@ func setupService(t *testing.T) *app.Service {
 		tooladapter.NewContainerLogsHandler(commandRunner),
 		tooladapter.NewContainerRunHandler(commandRunner),
 		tooladapter.NewContainerExecHandler(commandRunner),
-		tooladapter.NewK8sGetPodsHandler(nil, "default"),
-		tooladapter.NewK8sGetServicesHandler(nil, "default"),
-		tooladapter.NewK8sGetDeploymentsHandler(nil, "default"),
-		tooladapter.NewK8sGetImagesHandler(nil, "default"),
-		tooladapter.NewK8sGetLogsHandler(nil, "default"),
-		tooladapter.NewK8sApplyManifestHandler(nil, "default"),
-		tooladapter.NewK8sRolloutStatusHandler(nil, "default"),
-		tooladapter.NewK8sRestartDeploymentHandler(nil, "default"),
 		tooladapter.NewSecurityScanDependenciesHandler(commandRunner),
 		tooladapter.NewSBOMGenerateHandler(commandRunner),
 		tooladapter.NewSecurityScanSecretsHandler(commandRunner),
@@ -243,7 +243,9 @@ func setupService(t *testing.T) *app.Service {
 		tooladapter.NewPythonTestHandler(commandRunner),
 		tooladapter.NewCBuildHandler(commandRunner),
 		tooladapter.NewCTestHandler(commandRunner),
-	)
+	}
+	handlers = append(handlers, k8sToolHandlers()...)
+	engine := tooladapter.NewEngine(handlers...)
 	artifactStore := storage.NewLocalArtifactStore(artifactRoot)
 	policyEngine := policy.NewStaticPolicy()
 	auditLogger := audit.NewLoggerAudit(logger)

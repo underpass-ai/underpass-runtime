@@ -414,7 +414,7 @@ func decodeArtifactArgs(args json.RawMessage, destination any) *domain.Error {
 	if len(args) == 0 || string(args) == "null" {
 		return nil
 	}
-	if err := json.Unmarshal(args, destination); err != nil {
+	if json.Unmarshal(args, destination) != nil {
 		return &domain.Error{
 			Code:      app.ErrorCodeInvalidArgument,
 			Message:   "invalid artifact tool args",

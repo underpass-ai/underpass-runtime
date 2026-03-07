@@ -7,6 +7,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testMissingCapabilityFmt        = "missing capability %q"
+	testExpectedLangOutputSchemaFmt = "%s: expected lang tool OutputSchema"
+)
+
 // langToolOutputSchema is the expected JSON schema for language-specific toolchain tools.
 var langToolOutputSchema = json.RawMessage(`{"type":"object","properties":{"exit_code":{"type":"integer"},"compiled_binary_path":{"type":"string"},"coverage_percent":{"type":"number"},"diagnostics":{"type":"array","items":{"type":"string"}}}}`)
 
@@ -19,107 +24,120 @@ func TestDefaultCapabilities_PolicyConsistency(t *testing.T) {
 		capMap[c.Name] = c
 	}
 
-	// Git remote tools must have remote + refspec policy fields.
-	for _, name := range []string{"git.push", "git.fetch", "git.pull"} {
-		cap, ok := capMap[name]
-		if !ok {
-			t.Fatalf("missing capability %q", name)
+	t.Run("git_remote_tools", func(t *testing.T) {
+		for _, name := range []string{"git.push", "git.fetch", "git.pull"} {
+			requireGitRemotePolicy(t, capMap, name)
 		}
-		if len(cap.Policy.ArgFields) != 2 {
-			t.Fatalf("%s: expected 2 policy ArgFields, got %d", name, len(cap.Policy.ArgFields))
-		}
-		if cap.Policy.ArgFields[0].Field != "remote" {
-			t.Fatalf("%s: expected first ArgField=remote, got %q", name, cap.Policy.ArgFields[0].Field)
-		}
-		if cap.Policy.ArgFields[1].Field != "refspec" {
-			t.Fatalf("%s: expected second ArgField=refspec, got %q", name, cap.Policy.ArgFields[1].Field)
-		}
-	}
+	})
 
-	// Repo tools must have extra_args policy.
-	for _, name := range []string{"repo.build", "repo.test", "repo.run_tests", "repo.test_failures_summary", "repo.stacktrace_summary"} {
-		cap, ok := capMap[name]
-		if !ok {
-			t.Fatalf("missing capability %q", name)
+	t.Run("repo_extra_args_tools", func(t *testing.T) {
+		for _, name := range []string{"repo.build", "repo.test", "repo.run_tests", "repo.test_failures_summary", "repo.stacktrace_summary"} {
+			requireExtraArgsPolicy(t, capMap, name)
 		}
-		if len(cap.Policy.ArgFields) != 1 {
-			t.Fatalf("%s: expected 1 policy ArgField, got %d", name, len(cap.Policy.ArgFields))
-		}
-		af := cap.Policy.ArgFields[0]
-		if af.Field != "extra_args" {
-			t.Fatalf("%s: expected ArgField=extra_args, got %q", name, af.Field)
-		}
-		if !af.Multi {
-			t.Fatalf("%s: expected Multi=true", name)
-		}
-		if af.MaxItems != 8 {
-			t.Fatalf("%s: expected MaxItems=8, got %d", name, af.MaxItems)
-		}
-	}
+	})
 
-	// K8s read tools must have cluster scope, low risk, 30s timeout, namespace field.
-	for _, name := range []string{"k8s.get_pods", "k8s.get_services", "k8s.get_deployments"} {
-		cap, ok := capMap[name]
-		if !ok {
-			t.Fatalf("missing capability %q", name)
+	t.Run("k8s_read_tools", func(t *testing.T) {
+		for _, name := range []string{"k8s.get_pods", "k8s.get_services", "k8s.get_deployments"} {
+			requireK8sReadPolicy(t, capMap, name)
 		}
-		if cap.Scope != domain.ScopeCluster {
-			t.Fatalf("%s: expected ScopeCluster, got %v", name, cap.Scope)
-		}
-		if cap.RiskLevel != domain.RiskLow {
-			t.Fatalf("%s: expected RiskLow, got %v", name, cap.RiskLevel)
-		}
-		if cap.Constraints.TimeoutSeconds != 30 {
-			t.Fatalf("%s: expected TimeoutSeconds=30, got %d", name, cap.Constraints.TimeoutSeconds)
-		}
-		if len(cap.Policy.NamespaceFields) != 1 {
-			t.Fatalf("%s: expected 1 NamespaceField, got %d", name, len(cap.Policy.NamespaceFields))
-		}
-	}
+	})
 
-	// Go tools: repo scope, high cost, lang tool output schema.
-	for _, name := range []string{"go.build", "go.test"} {
-		cap, ok := capMap[name]
-		if !ok {
-			t.Fatalf("missing capability %q", name)
+	t.Run("go_tools", func(t *testing.T) {
+		for _, name := range []string{"go.build", "go.test"} {
+			cap := requireCapability(t, capMap, name)
+			if cap.Scope != domain.ScopeRepo {
+				t.Fatalf("%s: expected ScopeRepo, got %v", name, cap.Scope)
+			}
+			if cap.CostHint != "high" {
+				t.Fatalf("%s: expected CostHint=high, got %q", name, cap.CostHint)
+			}
+			requireLangOutputSchema(t, cap, name)
 		}
-		if cap.Scope != domain.ScopeRepo {
-			t.Fatalf("%s: expected ScopeRepo, got %v", name, cap.Scope)
-		}
-		if cap.CostHint != "high" {
-			t.Fatalf("%s: expected CostHint=high, got %q", name, cap.CostHint)
-		}
-		if string(cap.OutputSchema) != string(langToolOutputSchema) {
-			t.Fatalf("%s: expected lang tool OutputSchema", name)
-		}
-	}
+	})
 
-	// Rust tools: repo scope, lang tool output schema.
-	for _, name := range []string{"rust.build", "rust.test", "rust.clippy"} {
-		cap, ok := capMap[name]
-		if !ok {
-			t.Fatalf("missing capability %q", name)
+	t.Run("rust_tools", func(t *testing.T) {
+		for _, name := range []string{"rust.build", "rust.test", "rust.clippy"} {
+			cap := requireCapability(t, capMap, name)
+			if cap.Scope != domain.ScopeRepo {
+				t.Fatalf("%s: expected ScopeRepo, got %v", name, cap.Scope)
+			}
+			requireLangOutputSchema(t, cap, name)
 		}
-		if cap.Scope != domain.ScopeRepo {
-			t.Fatalf("%s: expected ScopeRepo, got %v", name, cap.Scope)
-		}
-		if string(cap.OutputSchema) != string(langToolOutputSchema) {
-			t.Fatalf("%s: expected lang tool OutputSchema", name)
-		}
-	}
+	})
 
-	// Node tools: path field "target", lang tool output schema.
-	for _, name := range []string{"node.build", "node.test", "node.lint", "node.typecheck"} {
-		cap, ok := capMap[name]
-		if !ok {
-			t.Fatalf("missing capability %q", name)
+	t.Run("node_tools", func(t *testing.T) {
+		for _, name := range []string{"node.build", "node.test", "node.lint", "node.typecheck"} {
+			cap := requireCapability(t, capMap, name)
+			if len(cap.Policy.PathFields) != 1 || cap.Policy.PathFields[0].Field != "target" {
+				t.Fatalf("%s: expected PathFields with target, got %#v", name, cap.Policy.PathFields)
+			}
+			requireLangOutputSchema(t, cap, name)
 		}
-		if len(cap.Policy.PathFields) != 1 || cap.Policy.PathFields[0].Field != "target" {
-			t.Fatalf("%s: expected PathFields with target, got %#v", name, cap.Policy.PathFields)
-		}
-		if string(cap.OutputSchema) != string(langToolOutputSchema) {
-			t.Fatalf("%s: expected lang tool OutputSchema", name)
-		}
+	})
+}
+
+func requireCapability(t *testing.T, capMap map[string]domain.Capability, name string) domain.Capability {
+	t.Helper()
+	cap, ok := capMap[name]
+	if !ok {
+		t.Fatalf(testMissingCapabilityFmt, name)
+	}
+	return cap
+}
+
+func requireGitRemotePolicy(t *testing.T, capMap map[string]domain.Capability, name string) {
+	t.Helper()
+	cap := requireCapability(t, capMap, name)
+	if len(cap.Policy.ArgFields) != 2 {
+		t.Fatalf("%s: expected 2 policy ArgFields, got %d", name, len(cap.Policy.ArgFields))
+	}
+	if cap.Policy.ArgFields[0].Field != "remote" {
+		t.Fatalf("%s: expected first ArgField=remote, got %q", name, cap.Policy.ArgFields[0].Field)
+	}
+	if cap.Policy.ArgFields[1].Field != "refspec" {
+		t.Fatalf("%s: expected second ArgField=refspec, got %q", name, cap.Policy.ArgFields[1].Field)
+	}
+}
+
+func requireExtraArgsPolicy(t *testing.T, capMap map[string]domain.Capability, name string) {
+	t.Helper()
+	cap := requireCapability(t, capMap, name)
+	if len(cap.Policy.ArgFields) != 1 {
+		t.Fatalf("%s: expected 1 policy ArgField, got %d", name, len(cap.Policy.ArgFields))
+	}
+	af := cap.Policy.ArgFields[0]
+	if af.Field != "extra_args" {
+		t.Fatalf("%s: expected ArgField=extra_args, got %q", name, af.Field)
+	}
+	if !af.Multi {
+		t.Fatalf("%s: expected Multi=true", name)
+	}
+	if af.MaxItems != 8 {
+		t.Fatalf("%s: expected MaxItems=8, got %d", name, af.MaxItems)
+	}
+}
+
+func requireK8sReadPolicy(t *testing.T, capMap map[string]domain.Capability, name string) {
+	t.Helper()
+	cap := requireCapability(t, capMap, name)
+	if cap.Scope != domain.ScopeCluster {
+		t.Fatalf("%s: expected ScopeCluster, got %v", name, cap.Scope)
+	}
+	if cap.RiskLevel != domain.RiskLow {
+		t.Fatalf("%s: expected RiskLow, got %v", name, cap.RiskLevel)
+	}
+	if cap.Constraints.TimeoutSeconds != 30 {
+		t.Fatalf("%s: expected TimeoutSeconds=30, got %d", name, cap.Constraints.TimeoutSeconds)
+	}
+	if len(cap.Policy.NamespaceFields) != 1 {
+		t.Fatalf("%s: expected 1 NamespaceField, got %d", name, len(cap.Policy.NamespaceFields))
+	}
+}
+
+func requireLangOutputSchema(t *testing.T, cap domain.Capability, name string) {
+	t.Helper()
+	if string(cap.OutputSchema) != string(langToolOutputSchema) {
+		t.Fatalf(testExpectedLangOutputSchemaFmt, name)
 	}
 }
 

@@ -144,7 +144,7 @@ func TestSecurityScanSecretsHandler_ClampsMaxResults(t *testing.T) {
 	// max_results=0 should clamp to 200
 	result, err := NewSecurityScanSecretsHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"path":".","max_results":0}`))
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	output := result.Output.(map[string]any)
 	if output["findings_count"] != 0 {
@@ -153,7 +153,7 @@ func TestSecurityScanSecretsHandler_ClampsMaxResults(t *testing.T) {
 	// max_results=9999 should clamp to 2000
 	result2, err2 := NewSecurityScanSecretsHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"path":".","max_results":9999}`))
 	if err2 != nil {
-		t.Fatalf("unexpected error: %#v", err2)
+		t.Fatalf(testUnexpectedErrorGoFmt, err2)
 	}
 	_ = result2
 }

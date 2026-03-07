@@ -1,3 +1,5 @@
+//go:build k8s
+
 package tools
 
 import (
@@ -14,13 +16,19 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testK8sNsSandbox = "sandbox"
+	testK8sNsDefault = "default"
+	testK8sImageAPI1 = "ghcr.io/acme/api:1"
+)
+
 func TestK8sGetPodsHandler_ListPods(t *testing.T) {
 	now := time.Now().UTC()
 	client := k8sfake.NewSimpleClientset(
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              "b-pod",
-				Namespace:         "sandbox",
+				Namespace:         testK8sNsSandbox,
 				CreationTimestamp: metav1.NewTime(now),
 				Labels:            map[string]string{"app": "beta"},
 			},
@@ -43,7 +51,7 @@ func TestK8sGetPodsHandler_ListPods(t *testing.T) {
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:              "a-pod",
-				Namespace:         "sandbox",
+				Namespace:         testK8sNsSandbox,
 				CreationTimestamp: metav1.NewTime(now.Add(-time.Minute)),
 				Labels:            map[string]string{"app": "alpha"},
 			},
@@ -66,11 +74,11 @@ func TestK8sGetPodsHandler_ListPods(t *testing.T) {
 			},
 		},
 	)
-	handler := NewK8sGetPodsHandler(client, "default")
+	handler := NewK8sGetPodsHandler(client, testK8sNsDefault)
 	session := domain.Session{
 		WorkspacePath: "/workspace/repo",
 		AllowedPaths:  []string{"."},
-		Principal:     domain.Principal{TenantID: "t", ActorID: "a", Roles: []string{"devops"}},
+		Principal:     domain.Principal{TenantID: "t", ActorID: "a", Roles: []string{testK8sRoleDevops}},
 	}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox","include_containers":true,"include_labels":true,"max_pods":10}`))
@@ -80,9 +88,9 @@ func TestK8sGetPodsHandler_ListPods(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
-	if output["namespace"] != "sandbox" {
+	if output["namespace"] != testK8sNsSandbox {
 		t.Fatalf("unexpected namespace: %#v", output["namespace"])
 	}
 	if output["count"] != 2 {
@@ -108,13 +116,13 @@ func TestK8sGetPodsHandler_ListPods(t *testing.T) {
 
 func TestK8sGetPodsHandler_Truncates(t *testing.T) {
 	client := k8sfake.NewSimpleClientset(
-		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "c-pod", Namespace: "sandbox"}},
-		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "a-pod", Namespace: "sandbox"}},
-		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "b-pod", Namespace: "sandbox"}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "c-pod", Namespace: testK8sNsSandbox}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "a-pod", Namespace: testK8sNsSandbox}},
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "b-pod", Namespace: testK8sNsSandbox}},
 	)
-	handler := NewK8sGetPodsHandler(client, "default")
+	handler := NewK8sGetPodsHandler(client, testK8sNsDefault)
 	session := domain.Session{
-		Principal: domain.Principal{TenantID: "t", ActorID: "a", Roles: []string{"devops"}},
+		Principal: domain.Principal{TenantID: "t", ActorID: "a", Roles: []string{testK8sRoleDevops}},
 	}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox","max_pods":1}`))
@@ -135,9 +143,9 @@ func TestK8sGetPodsHandler_Truncates(t *testing.T) {
 }
 
 func TestK8sGetPodsHandler_WithoutClientFails(t *testing.T) {
-	handler := NewK8sGetPodsHandler(nil, "default")
+	handler := NewK8sGetPodsHandler(nil, testK8sNsDefault)
 	session := domain.Session{
-		Principal: domain.Principal{TenantID: "t", ActorID: "a", Roles: []string{"devops"}},
+		Principal: domain.Principal{TenantID: "t", ActorID: "a", Roles: []string{testK8sRoleDevops}},
 	}
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{}`))
 	if err == nil {
@@ -151,7 +159,7 @@ func TestK8sGetPodsHandler_WithoutClientFails(t *testing.T) {
 func TestK8sGetServicesHandler_ListAndTruncate(t *testing.T) {
 	client := k8sfake.NewSimpleClientset(
 		&corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: "b-svc", Namespace: "sandbox"},
+			ObjectMeta: metav1.ObjectMeta{Name: "b-svc", Namespace: testK8sNsSandbox},
 			Spec: corev1.ServiceSpec{
 				Type:     corev1.ServiceTypeClusterIP,
 				Selector: map[string]string{"app": "beta"},
@@ -159,7 +167,7 @@ func TestK8sGetServicesHandler_ListAndTruncate(t *testing.T) {
 			},
 		},
 		&corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: "a-svc", Namespace: "sandbox"},
+			ObjectMeta: metav1.ObjectMeta{Name: "a-svc", Namespace: testK8sNsSandbox},
 			Spec: corev1.ServiceSpec{
 				Type:     corev1.ServiceTypeClusterIP,
 				Selector: map[string]string{"app": "alpha"},
@@ -167,8 +175,8 @@ func TestK8sGetServicesHandler_ListAndTruncate(t *testing.T) {
 			},
 		},
 	)
-	handler := NewK8sGetServicesHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sGetServicesHandler(client, testK8sNsDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox","max_services":1}`))
 	if err != nil {
@@ -188,14 +196,14 @@ func TestK8sGetDeploymentsHandler_ListDeployments(t *testing.T) {
 	replicas := int32(3)
 	client := k8sfake.NewSimpleClientset(
 		&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "sandbox"},
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: testK8sNsSandbox},
 			Spec: appsv1.DeploymentSpec{
 				Replicas: &replicas,
 				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}},
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
-							{Name: "api", Image: "ghcr.io/acme/api:1"},
+							{Name: "api", Image: testK8sImageAPI1},
 						},
 					},
 				},
@@ -208,8 +216,8 @@ func TestK8sGetDeploymentsHandler_ListDeployments(t *testing.T) {
 			},
 		},
 	)
-	handler := NewK8sGetDeploymentsHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sGetDeploymentsHandler(client, testK8sNsDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox","include_containers":true}`))
 	if err != nil {
@@ -224,7 +232,7 @@ func TestK8sGetDeploymentsHandler_ListDeployments(t *testing.T) {
 		t.Fatalf("expected deployment api, got %#v", deployments[0]["name"])
 	}
 	containers := deployments[0]["containers"].([]map[string]any)
-	if len(containers) != 1 || containers[0]["image"] != "ghcr.io/acme/api:1" {
+	if len(containers) != 1 || containers[0]["image"] != testK8sImageAPI1 {
 		t.Fatalf("unexpected deployment containers: %#v", containers)
 	}
 }
@@ -232,25 +240,25 @@ func TestK8sGetDeploymentsHandler_ListDeployments(t *testing.T) {
 func TestK8sGetImagesHandler_Aggregates(t *testing.T) {
 	client := k8sfake.NewSimpleClientset(
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "sandbox"},
+			ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: testK8sNsSandbox},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
-					{Name: "api", Image: "ghcr.io/acme/api:1"},
+					{Name: "api", Image: testK8sImageAPI1},
 					{Name: "sidecar", Image: "ghcr.io/acme/sidecar:1"},
 				},
 			},
 		},
 		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: "sandbox"},
+			ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: testK8sNsSandbox},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
-					{Name: "api", Image: "ghcr.io/acme/api:1"},
+					{Name: "api", Image: testK8sImageAPI1},
 				},
 			},
 		},
 	)
-	handler := NewK8sGetImagesHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sGetImagesHandler(client, testK8sNsDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox","include_workloads":true}`))
 	if err != nil {
@@ -261,7 +269,7 @@ func TestK8sGetImagesHandler_Aggregates(t *testing.T) {
 		t.Fatalf("expected 2 images, got %#v", output["count"])
 	}
 	images := output["images"].([]map[string]any)
-	if images[0]["image"] != "ghcr.io/acme/api:1" {
+	if images[0]["image"] != testK8sImageAPI1 {
 		t.Fatalf("expected api image first by occurrences, got %#v", images[0]["image"])
 	}
 	if images[0]["occurrences"] != 2 {
@@ -270,14 +278,14 @@ func TestK8sGetImagesHandler_Aggregates(t *testing.T) {
 }
 
 func TestK8sGetLogsHandler_RequiresPodName(t *testing.T) {
-	handler := NewK8sGetLogsHandler(k8sfake.NewSimpleClientset(), "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sGetLogsHandler(k8sfake.NewSimpleClientset(), testK8sNsDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox"}`))
 	if err == nil {
 		t.Fatal("expected invalid_argument when pod_name is missing")
 	}
 	if err.Code != "invalid_argument" {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }

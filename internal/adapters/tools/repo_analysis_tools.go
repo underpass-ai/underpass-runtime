@@ -147,7 +147,7 @@ func (h *RepoTestFailuresSummaryHandler) Invoke(ctx context.Context, session dom
 		MaxDiagnostics: 30,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.test_failures_summary args",
@@ -228,7 +228,7 @@ func (h *RepoStacktraceSummaryHandler) Invoke(ctx context.Context, session domai
 		MaxFrames: 20,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.stacktrace_summary args",
@@ -305,7 +305,7 @@ func (h *RepoChangedFilesHandler) Invoke(ctx context.Context, session domain.Ses
 		IncludeUntracked: true,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.changed_files args",
@@ -364,12 +364,12 @@ func (h *RepoChangedFilesHandler) Invoke(ctx context.Context, session domain.Ses
 					Message: commandResult.Output,
 				}},
 				Output: map[string]any{
-					"source":    source,
-					"mode":              mode,
+					"source":               source,
+					"mode":                 mode,
 					repoAnalysisKeyBaseRef: baseRef,
-					"path":              path,
-					"command":   command,
-					"exit_code": exitCode,
+					"path":                 path,
+					"command":              command,
+					"exit_code":            exitCode,
 				},
 			}, toGitToolError(runErr, commandResult.ExitCode, commandResult.Output)
 		}
@@ -378,16 +378,16 @@ func (h *RepoChangedFilesHandler) Invoke(ctx context.Context, session domain.Ses
 	changed := summarizeChangedFiles(rawOutput, mode, request.IncludeUntracked, maxFiles)
 	summary := fmt.Sprintf("identified %d changed files", len(changed))
 	resultOutput := map[string]any{
-		"source":        source,
-		"mode":               mode,
+		"source":               source,
+		"mode":                 mode,
 		repoAnalysisKeyBaseRef: strings.TrimSpace(request.BaseRef),
-		"path":          path,
-		"command":       command,
-		"exit_code":     exitCode,
-		"changed_count": len(changed),
-		"changed_files": changed,
-		"summary":       summary,
-		"output":        summary,
+		"path":                 path,
+		"command":              command,
+		"exit_code":            exitCode,
+		"changed_count":        len(changed),
+		"changed_files":        changed,
+		"summary":              summary,
+		"output":               summary,
 	}
 
 	artifacts := []app.ArtifactPayload{}
@@ -423,7 +423,7 @@ func (h *RepoSymbolSearchHandler) Invoke(ctx context.Context, session domain.Ses
 		UseRegex:      false,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.symbol_search args",
@@ -484,18 +484,18 @@ func (h *RepoSymbolSearchHandler) Invoke(ctx context.Context, session domain.Ses
 
 	summary := fmt.Sprintf("found %d symbol matches", len(searchRun.Matches))
 	resultOutput := map[string]any{
-		"symbol":         symbol,
-		"path":                    path,
+		"symbol":                     symbol,
+		"path":                       path,
 		repoAnalysisKeyCaseSensitive: request.CaseSensitive,
-		"whole_word":     request.WholeWord,
-		"use_regex":      request.UseRegex,
-		"command":        searchRun.Command,
-		"exit_code":      searchRun.ExitCode,
-		"matches_count":  len(searchRun.Matches),
-		"truncated":      searchRun.Truncated,
-		"matches":        searchRun.Matches,
-		"summary":        summary,
-		"output":         summary,
+		"whole_word":                 request.WholeWord,
+		"use_regex":                  request.UseRegex,
+		"command":                    searchRun.Command,
+		"exit_code":                  searchRun.ExitCode,
+		"matches_count":              len(searchRun.Matches),
+		"truncated":                  searchRun.Truncated,
+		"matches":                    searchRun.Matches,
+		"summary":                    summary,
+		"output":                     summary,
 	}
 
 	artifacts := []app.ArtifactPayload{}
@@ -530,7 +530,7 @@ func (h *RepoFindReferencesHandler) Invoke(ctx context.Context, session domain.S
 		IncludeDeclarations: true,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid repo.find_references args",
@@ -592,18 +592,18 @@ func (h *RepoFindReferencesHandler) Invoke(ctx context.Context, session domain.S
 	}
 	summary := fmt.Sprintf("found %d symbol references", len(references))
 	resultOutput := map[string]any{
-		"symbol":               symbol,
-		"path":                        path,
+		"symbol":                     symbol,
+		"path":                       path,
 		repoAnalysisKeyCaseSensitive: request.CaseSensitive,
-		"include_declarations": request.IncludeDeclarations,
-		"command":              searchRun.Command,
-		"exit_code":            searchRun.ExitCode,
-		"references_count":     len(references),
-		"declaration_count":    declarationCount,
-		"truncated":            truncated,
-		"references":           references,
-		"summary":              summary,
-		"output":               summary,
+		"include_declarations":       request.IncludeDeclarations,
+		"command":                    searchRun.Command,
+		"exit_code":                  searchRun.ExitCode,
+		"references_count":           len(references),
+		"declaration_count":          declarationCount,
+		"truncated":                  truncated,
+		"references":                 references,
+		"summary":                    summary,
+		"output":                     summary,
 	}
 
 	artifacts := []app.ArtifactPayload{}

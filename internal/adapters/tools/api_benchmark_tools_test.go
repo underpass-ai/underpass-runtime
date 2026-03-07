@@ -13,6 +13,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testModeArrivalRate         = "arrival_rate"
+	testConstraintsViolationMsg = "constraints violation"
+)
+
 type fakeBenchmarkRunner struct {
 	calls []app.CommandSpec
 	run   func(callIndex int, spec app.CommandSpec) (app.CommandResult, error)
@@ -43,30 +48,7 @@ func TestAPIBenchmarkHandler_Success(t *testing.T) {
 				t.Fatalf("expected constant-vus script, got: %q", string(spec.Stdin))
 			}
 
-			summary := `{
-  "metrics": {
-    "http_req_duration": {
-      "min": 2.1,
-      "avg": 10.4,
-      "med": 9.0,
-      "p(95)": 20.7,
-      "p(99)": 31.2,
-      "max": 40.1,
-      "thresholds": {"p(95)<300": true}
-    },
-    "http_reqs": {"count": 80, "rate": 8.0},
-    "http_req_failed": {"rate": 0.0125, "fails": 1, "passes": 79, "thresholds": {"rate<0.05": true}},
-    "checks": {"value": 0.99, "passes": 79, "fails": 1, "thresholds": {"rate>0.95": true}},
-    "bench_http_code_200": {"count": 79, "rate": 7.9},
-    "bench_http_code_500": {"count": 1, "rate": 0.1}
-  }
-}`
-			if err := os.MkdirAll(filepath.Join(workspace, ".bench"), 0o755); err != nil {
-				t.Fatalf("mkdir .bench: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(workspace, ".bench", "summary.json"), []byte(summary), 0o644); err != nil {
-				t.Fatalf("write summary: %v", err)
-			}
+			writeBenchmarkSummary(t, workspace)
 			return app.CommandResult{ExitCode: 0, Output: "k6 completed"}, nil
 		},
 	}
@@ -92,8 +74,37 @@ func TestAPIBenchmarkHandler_Success(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
+	assertBenchmarkOutputFields(t, output)
+	assertBenchmarkArtifacts(t, result)
+}
+
+func writeBenchmarkSummary(t *testing.T, workspace string) {
+	t.Helper()
+	summary := `{
+  "metrics": {
+    "http_req_duration": {
+      "min": 2.1, "avg": 10.4, "med": 9.0, "p(95)": 20.7, "p(99)": 31.2, "max": 40.1,
+      "thresholds": {"p(95)<300": true}
+    },
+    "http_reqs": {"count": 80, "rate": 8.0},
+    "http_req_failed": {"rate": 0.0125, "fails": 1, "passes": 79, "thresholds": {"rate<0.05": true}},
+    "checks": {"value": 0.99, "passes": 79, "fails": 1, "thresholds": {"rate>0.95": true}},
+    "bench_http_code_200": {"count": 79, "rate": 7.9},
+    "bench_http_code_500": {"count": 1, "rate": 0.1}
+  }
+}`
+	if err := os.MkdirAll(filepath.Join(workspace, ".bench"), 0o755); err != nil {
+		t.Fatalf("mkdir .bench: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace, ".bench", "summary.json"), []byte(summary), 0o644); err != nil {
+		t.Fatalf("write summary: %v", err)
+	}
+}
+
+func assertBenchmarkOutputFields(t *testing.T, output map[string]any) {
+	t.Helper()
 	if output["requests"] != 80 {
 		t.Fatalf("unexpected requests: %#v", output["requests"])
 	}
@@ -111,7 +122,10 @@ func TestAPIBenchmarkHandler_Success(t *testing.T) {
 	if codes["200"] != 79 || codes["500"] != 1 {
 		t.Fatalf("unexpected http codes: %#v", codes)
 	}
+}
 
+func assertBenchmarkArtifacts(t *testing.T, result app.ToolRunResult) {
+	t.Helper()
 	artifactNames := make([]string, 0, len(result.Artifacts))
 	for _, artifact := range result.Artifacts {
 		artifactNames = append(artifactNames, artifact.Name)
@@ -179,7 +193,7 @@ func TestAPIBenchmarkHandler_RejectsConstraintsViolation(t *testing.T) {
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("unexpected error code: %s", err.Code)
 	}
-	if !strings.Contains(err.Message, "constraints violation") {
+	if !strings.Contains(err.Message, testConstraintsViolationMsg) {
 		t.Fatalf("unexpected constraints message: %q", err.Message)
 	}
 }
@@ -264,11 +278,11 @@ func mapStringInt(raw any) map[string]int {
 
 func TestNormalizeArrivalRateLoad_ValidDefaults(t *testing.T) {
 	// valid: mode="arrival_rate", durationMS=5000, rps=10, vus=0 -> vus defaults to rps (10), no error
-	spec, err := normalizeArrivalRateLoad("arrival_rate", 5000, 10, 0)
+	spec, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, 10, 0)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
-	if spec.Mode != "arrival_rate" {
+	if spec.Mode != testModeArrivalRate {
 		t.Fatalf("expected mode 'arrival_rate', got %q", spec.Mode)
 	}
 	if spec.DurationMS != 5000 {
@@ -284,46 +298,46 @@ func TestNormalizeArrivalRateLoad_ValidDefaults(t *testing.T) {
 }
 
 func TestNormalizeArrivalRateLoad_RPSTooLow(t *testing.T) {
-	_, err := normalizeArrivalRateLoad("arrival_rate", 5000, 0, 0)
+	_, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, 0, 0)
 	if err == nil {
 		t.Fatal("expected error for rps < 1")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }
 
 func TestNormalizeArrivalRateLoad_RPSTooHigh(t *testing.T) {
-	_, err := normalizeArrivalRateLoad("arrival_rate", 5000, benchmarkMaxRPS+1, 0)
+	_, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, benchmarkMaxRPS+1, 0)
 	if err == nil {
 		t.Fatal("expected error for rps > max")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
-	if !strings.Contains(err.Message, "constraints violation") {
+	if !strings.Contains(err.Message, testConstraintsViolationMsg) {
 		t.Fatalf("expected constraints violation message, got %q", err.Message)
 	}
 }
 
 func TestNormalizeArrivalRateLoad_VUSTooHigh(t *testing.T) {
-	_, err := normalizeArrivalRateLoad("arrival_rate", 5000, 10, benchmarkMaxVUs+1)
+	_, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, 10, benchmarkMaxVUs+1)
 	if err == nil {
 		t.Fatal("expected error for vus > max")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
-	if !strings.Contains(err.Message, "constraints violation") {
+	if !strings.Contains(err.Message, testConstraintsViolationMsg) {
 		t.Fatalf("expected constraints violation message, got %q", err.Message)
 	}
 }
 
 func TestNormalizeArrivalRateLoad_ExplicitVUs(t *testing.T) {
 	// valid with explicit vus=20 -> vus=20
-	spec, err := normalizeArrivalRateLoad("arrival_rate", 5000, 10, 20)
+	spec, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, 10, 20)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if spec.VUs != 20 {
 		t.Fatalf("expected VUs=20, got %d", spec.VUs)

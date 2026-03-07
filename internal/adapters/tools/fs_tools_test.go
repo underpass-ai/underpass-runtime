@@ -14,6 +14,28 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testFSNotesTodo        = "notes/todo.txt"
+	testFSKeyContent       = "content"
+	testFSKeyPath          = "path"
+	testFSKeyRecursive     = "recursive"
+	testFSKeyCreateDirs    = "create_parents"
+	testFSKeySrcPath       = "source_path"
+	testFSKeyDstPath       = "destination_path"
+	testFSKeyOverwrite     = "overwrite"
+	testFSKeyUnifiedDiff   = "unified_diff"
+	testFSKeyEncoding      = "encoding"
+	testFSKeyForce         = "force"
+	testFSKeyPattern       = "pattern"
+	testFSKeyExists        = "exists"
+	testFSKeyCount         = "count"
+	testFSTodoContent      = "hola\nTODO: test"
+	testFSNotesTodoMoved   = "notes/todo.moved.txt"
+	testFSCopyDst          = "tmp/archive/input.copy.txt"
+	testFSDiffHunkHeader   = "@@ -1 +1 @@"
+	testFSDiffDeletedHello = "-hello"
+)
+
 func TestFSWriteReadListSearchFlow(t *testing.T) {
 	root := t.TempDir()
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
@@ -25,36 +47,36 @@ func TestFSWriteReadListSearchFlow(t *testing.T) {
 	search := &FSSearchHandler{}
 
 	_, err := write.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"path":           "notes/todo.txt",
-		"content":        "hola\nTODO: test",
-		"create_parents": true,
+		testFSKeyPath:       testFSNotesTodo,
+		testFSKeyContent:    testFSTodoContent,
+		testFSKeyCreateDirs: true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected write error: %v", err)
 	}
 
-	readResult, err := read.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "notes/todo.txt"}))
+	readResult, err := read.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: testFSNotesTodo}))
 	if err != nil {
 		t.Fatalf("unexpected read error: %v", err)
 	}
 	readOutput := readResult.Output.(map[string]any)
-	if readOutput["encoding"] != "utf8" {
+	if readOutput[testFSKeyEncoding] != "utf8" {
 		t.Fatalf("unexpected encoding: %#v", readOutput)
 	}
 
-	listResult, err := list.Invoke(ctx, session, mustJSON(t, map[string]any{"path": ".", "recursive": true}))
+	listResult, err := list.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: ".", testFSKeyRecursive: true}))
 	if err != nil {
 		t.Fatalf("unexpected list error: %v", err)
 	}
-	if listResult.Output.(map[string]any)["count"].(int) < 1 {
+	if listResult.Output.(map[string]any)[testFSKeyCount].(int) < 1 {
 		t.Fatalf("expected at least one entry, got %#v", listResult.Output)
 	}
 
-	searchResult, err := search.Invoke(ctx, session, mustJSON(t, map[string]any{"path": ".", "pattern": "TODO"}))
+	searchResult, err := search.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: ".", testFSKeyPattern: "TODO"}))
 	if err != nil {
 		t.Fatalf("unexpected search error: %v", err)
 	}
-	if searchResult.Output.(map[string]any)["count"].(int) < 1 {
+	if searchResult.Output.(map[string]any)[testFSKeyCount].(int) < 1 {
 		t.Fatalf("expected at least one match, got %#v", searchResult.Output)
 	}
 }
@@ -69,15 +91,15 @@ func TestFSReadBinaryAndValidationErrors(t *testing.T) {
 	}
 
 	read := &FSReadHandler{}
-	result, err := read.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "bin.dat"}))
+	result, err := read.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: "bin.dat"}))
 	if err != nil {
 		t.Fatalf("unexpected read error: %v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["encoding"] != "base64" {
-		t.Fatalf("expected base64 encoding, got %#v", output["encoding"])
+	if output[testFSKeyEncoding] != "base64" {
+		t.Fatalf("expected base64 encoding, got %#v", output[testFSKeyEncoding])
 	}
-	if _, decodeErr := base64.StdEncoding.DecodeString(output["content"].(string)); decodeErr != nil {
+	if _, decodeErr := base64.StdEncoding.DecodeString(output[testFSKeyContent].(string)); decodeErr != nil {
 		t.Fatalf("expected valid base64 content: %v", decodeErr)
 	}
 
@@ -87,7 +109,7 @@ func TestFSReadBinaryAndValidationErrors(t *testing.T) {
 	}
 
 	search := &FSSearchHandler{}
-	_, err = search.Invoke(ctx, session, mustJSON(t, map[string]any{"pattern": "["}))
+	_, err = search.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPattern: "["}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected invalid regex error, got: %#v", err)
 	}
@@ -103,18 +125,18 @@ func TestFSWriteValidationAndTraversal(t *testing.T) {
 		t.Fatalf("expected invalid base64 error, got: %#v", err)
 	}
 
-	_, err = write.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "x", "content": "a", "encoding": "unknown"}))
+	_, err = write.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: "x", testFSKeyContent: "a", testFSKeyEncoding: "unknown"}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected invalid encoding error, got: %#v", err)
 	}
 
-	_, err = write.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "../x", "content": "a"}))
+	_, err = write.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: "../x", testFSKeyContent: "a"}))
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("expected policy denial, got: %#v", err)
 	}
 
 	large := make([]byte, 1024*1024+1)
-	_, err = write.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "big.txt", "content": string(large)}))
+	_, err = write.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: "big.txt", testFSKeyContent: string(large)}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected content size error, got: %#v", err)
 	}
@@ -122,7 +144,7 @@ func TestFSWriteValidationAndTraversal(t *testing.T) {
 
 func TestFSHandlers_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 	session := domain.Session{
-		WorkspacePath: "/workspace/repo",
+		WorkspacePath: testWorkspaceRepoPath,
 		AllowedPaths:  []string{"."},
 		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
 	}
@@ -144,7 +166,7 @@ func TestFSHandlers_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 		case strings.Contains(script, "cat > '/workspace/repo/notes/todo.txt'"):
 			return app.CommandResult{Output: "", ExitCode: 0}, nil
 		case strings.Contains(script, "dd if='/workspace/repo/notes/todo.txt'"):
-			return app.CommandResult{Output: base64.StdEncoding.EncodeToString([]byte("hola\nTODO: test")), ExitCode: 0}, nil
+			return app.CommandResult{Output: base64.StdEncoding.EncodeToString([]byte(testFSTodoContent)), ExitCode: 0}, nil
 		case strings.Contains(script, "find '/workspace/repo' -mindepth 1"):
 			return app.CommandResult{
 				Output:   "dir\t/workspace/repo/notes\nfile\t/workspace/repo/notes/todo.txt\n",
@@ -161,46 +183,46 @@ func TestFSHandlers_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 	search := NewFSSearchHandler(runner)
 
 	_, err := write.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"path":           "notes/todo.txt",
-		"content":        "hola\nTODO: test",
-		"create_parents": true,
+		testFSKeyPath:       testFSNotesTodo,
+		testFSKeyContent:    testFSTodoContent,
+		testFSKeyCreateDirs: true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes write error: %v", err)
 	}
 
-	readResult, err := read.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "notes/todo.txt"}))
+	readResult, err := read.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: testFSNotesTodo}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes read error: %v", err)
 	}
-	if content := readResult.Output.(map[string]any)["content"].(string); content != "hola\nTODO: test" {
+	if content := readResult.Output.(map[string]any)[testFSKeyContent].(string); content != testFSTodoContent {
 		t.Fatalf("unexpected kubernetes read content: %q", content)
 	}
 
-	listResult, err := list.Invoke(ctx, session, mustJSON(t, map[string]any{"path": ".", "recursive": true}))
+	listResult, err := list.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: ".", testFSKeyRecursive: true}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes list error: %v", err)
 	}
-	if listResult.Output.(map[string]any)["count"].(int) < 1 {
+	if listResult.Output.(map[string]any)[testFSKeyCount].(int) < 1 {
 		t.Fatalf("expected kubernetes list entries, got %#v", listResult.Output)
 	}
 
-	searchResult, err := search.Invoke(ctx, session, mustJSON(t, map[string]any{"path": ".", "pattern": "TODO"}))
+	searchResult, err := search.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: ".", testFSKeyPattern: "TODO"}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes search error: %v", err)
 	}
-	if searchResult.Output.(map[string]any)["count"].(int) != 1 {
+	if searchResult.Output.(map[string]any)[testFSKeyCount].(int) != 1 {
 		t.Fatalf("unexpected kubernetes search output: %#v", searchResult.Output)
 	}
 }
 
 func TestFSHandlers_KubernetesRuntimeRequiresRunner(t *testing.T) {
 	session := domain.Session{
-		WorkspacePath: "/workspace/repo",
+		WorkspacePath: testWorkspaceRepoPath,
 		AllowedPaths:  []string{"."},
 		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
 	}
-	_, err := NewFSReadHandler(nil).Invoke(context.Background(), session, mustJSON(t, map[string]any{"path": "notes/a.txt"}))
+	_, err := NewFSReadHandler(nil).Invoke(context.Background(), session, mustJSON(t, map[string]any{testFSKeyPath: "notes/a.txt"}))
 	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("expected missing runner execution error, got %#v", err)
 	}
@@ -221,12 +243,12 @@ func TestFSPatchHandler_ValidationAndExecution(t *testing.T) {
 	}
 
 	_, err = handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
-		"unified_diff": strings.Join([]string{
+		testFSKeyUnifiedDiff: strings.Join([]string{
 			"diff --git a/outside.txt b/outside.txt",
 			"--- a/outside.txt",
 			"+++ b/outside.txt",
-			"@@ -1 +1 @@",
-			"-hello",
+			testFSDiffHunkHeader,
+			testFSDiffDeletedHello,
 			"+hola",
 		}, "\n"),
 	}))
@@ -240,8 +262,8 @@ func TestFSPatchHandler_UsesRunnerAndStrategy(t *testing.T) {
 		"diff --git a/src/a.txt b/src/a.txt",
 		"--- a/src/a.txt",
 		"+++ b/src/a.txt",
-		"@@ -1 +1 @@",
-		"-hello",
+		testFSDiffHunkHeader,
+		testFSDiffDeletedHello,
 		"+hola",
 	}, "\n")
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"src"}}
@@ -260,8 +282,8 @@ func TestFSPatchHandler_UsesRunnerAndStrategy(t *testing.T) {
 	handler := NewFSPatchHandler(runner)
 
 	result, err := handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
-		"unified_diff": diff,
-		"strategy":     "apply",
+		testFSKeyUnifiedDiff: diff,
+		"strategy":           "apply",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.patch error: %#v", err)
@@ -277,8 +299,8 @@ func TestFSPatchHandler_MapsRunnerErrors(t *testing.T) {
 		"diff --git a/src/a.txt b/src/a.txt",
 		"--- a/src/a.txt",
 		"+++ b/src/a.txt",
-		"@@ -1 +1 @@",
-		"-hello",
+		testFSDiffHunkHeader,
+		testFSDiffDeletedHello,
 		"+hola",
 	}, "\n")
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"src"}}
@@ -289,7 +311,7 @@ func TestFSPatchHandler_MapsRunnerErrors(t *testing.T) {
 		},
 	}
 	_, err := NewFSPatchHandler(timeoutRunner).Invoke(context.Background(), session, mustJSON(t, map[string]any{
-		"unified_diff": diff,
+		testFSKeyUnifiedDiff: diff,
 	}))
 	if err == nil || err.Code != app.ErrorCodeTimeout {
 		t.Fatalf("expected timeout mapping, got %#v", err)
@@ -301,7 +323,7 @@ func TestFSPatchHandler_MapsRunnerErrors(t *testing.T) {
 		},
 	}
 	_, err = NewFSPatchHandler(execRunner).Invoke(context.Background(), session, mustJSON(t, map[string]any{
-		"unified_diff": diff,
+		testFSKeyUnifiedDiff: diff,
 	}))
 	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("expected execution failure mapping, got %#v", err)
@@ -321,48 +343,48 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 	write := NewFSWriteHandler(nil)
 
 	_, err := mkdir.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"path":           "tmp/work",
-		"create_parents": true,
-		"mode":           "0755",
+		testFSKeyPath:       "tmp/work",
+		testFSKeyCreateDirs: true,
+		"mode":              "0755",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.mkdir error: %#v", err)
 	}
 
 	_, err = write.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"path":           "tmp/work/input.txt",
-		"content":        "payload",
-		"create_parents": true,
+		testFSKeyPath:       "tmp/work/input.txt",
+		testFSKeyContent:    "payload",
+		testFSKeyCreateDirs: true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.write_file error: %#v", err)
 	}
 
 	_, err = copyHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"source_path":      "tmp/work/input.txt",
-		"destination_path": "tmp/work/input.copy.txt",
-		"overwrite":        true,
+		testFSKeySrcPath:   "tmp/work/input.txt",
+		testFSKeyDstPath:   "tmp/work/input.copy.txt",
+		testFSKeyOverwrite: true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.copy error: %#v", err)
 	}
 
 	_, err = move.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"source_path":      "tmp/work/input.copy.txt",
-		"destination_path": "tmp/archive/input.copy.txt",
-		"create_parents":   true,
-		"overwrite":        true,
+		testFSKeySrcPath:    "tmp/work/input.copy.txt",
+		testFSKeyDstPath:    testFSCopyDst,
+		testFSKeyCreateDirs: true,
+		testFSKeyOverwrite:  true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.move error: %#v", err)
 	}
 
-	statResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "tmp/archive/input.copy.txt"}))
+	statResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: testFSCopyDst}))
 	if err != nil {
 		t.Fatalf("unexpected fs.stat error: %#v", err)
 	}
 	statOutput := statResult.Output.(map[string]any)
-	if exists, ok := statOutput["exists"].(bool); !ok || !exists {
+	if exists, ok := statOutput[testFSKeyExists].(bool); !ok || !exists {
 		t.Fatalf("expected fs.stat exists=true, got %#v", statOutput)
 	}
 	if statOutput["type"] != "file" {
@@ -370,20 +392,20 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 	}
 
 	_, err = deleteHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"path":      "tmp/archive/input.copy.txt",
-		"recursive": false,
-		"force":     false,
+		testFSKeyPath:      testFSCopyDst,
+		testFSKeyRecursive: false,
+		testFSKeyForce:     false,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.delete error: %#v", err)
 	}
 
-	missingResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "tmp/archive/input.copy.txt"}))
+	missingResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: testFSCopyDst}))
 	if err != nil {
 		t.Fatalf("unexpected fs.stat after delete error: %#v", err)
 	}
 	missingOutput := missingResult.Output.(map[string]any)
-	if exists, ok := missingOutput["exists"].(bool); !ok || exists {
+	if exists, ok := missingOutput[testFSKeyExists].(bool); !ok || exists {
 		t.Fatalf("expected fs.stat exists=false after delete, got %#v", missingOutput)
 	}
 }
@@ -401,33 +423,33 @@ func TestFSOps_ValidationAndPolicy(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := NewFSMkdirHandler(nil).Invoke(ctx, session, mustJSON(t, map[string]any{
-		"path": "dir/new",
-		"mode": "invalid",
+		testFSKeyPath: "dir/new",
+		"mode":        "invalid",
 	}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected mode validation error, got %#v", err)
 	}
 
 	_, err = NewFSCopyHandler(nil).Invoke(ctx, session, mustJSON(t, map[string]any{
-		"source_path":      "dir",
-		"destination_path": "dir/dir-copy",
-		"recursive":        false,
+		testFSKeySrcPath:   "dir",
+		testFSKeyDstPath:   "dir/dir-copy",
+		testFSKeyRecursive: false,
 	}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected recursive required error, got %#v", err)
 	}
 
 	_, err = NewFSMoveHandler(nil).Invoke(ctx, session, mustJSON(t, map[string]any{
-		"source_path":      "../outside",
-		"destination_path": "dir/b.txt",
+		testFSKeySrcPath: "../outside",
+		testFSKeyDstPath: "dir/b.txt",
 	}))
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("expected traversal denial on move, got %#v", err)
 	}
 
 	_, err = NewFSDeleteHandler(nil).Invoke(ctx, session, mustJSON(t, map[string]any{
-		"path":      "dir",
-		"recursive": false,
+		testFSKeyPath:      "dir",
+		testFSKeyRecursive: false,
 	}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected recursive required for directory delete, got %#v", err)
@@ -435,9 +457,9 @@ func TestFSOps_ValidationAndPolicy(t *testing.T) {
 
 	rootSession := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	_, err = NewFSDeleteHandler(nil).Invoke(ctx, rootSession, mustJSON(t, map[string]any{
-		"path":      ".",
-		"recursive": true,
-		"force":     true,
+		testFSKeyPath:      ".",
+		testFSKeyRecursive: true,
+		testFSKeyForce:     true,
 	}))
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("expected workspace root delete denial, got %#v", err)
@@ -446,7 +468,7 @@ func TestFSOps_ValidationAndPolicy(t *testing.T) {
 
 func TestFSOps_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 	session := domain.Session{
-		WorkspacePath: "/workspace/repo",
+		WorkspacePath: testWorkspaceRepoPath,
 		AllowedPaths:  []string{"."},
 		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
 	}
@@ -480,40 +502,40 @@ func TestFSOps_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 	stat := NewFSStatHandler(runner)
 	deleteHandler := NewFSDeleteHandler(runner)
 
-	_, err := mkdir.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "tmp/k8s", "create_parents": true}))
+	_, err := mkdir.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: "tmp/k8s", testFSKeyCreateDirs: true}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes fs.mkdir error: %#v", err)
 	}
 
 	_, err = copyHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"source_path":      "notes/todo.txt",
-		"destination_path": "notes/todo.copy.txt",
-		"overwrite":        true,
+		testFSKeySrcPath:   testFSNotesTodo,
+		testFSKeyDstPath:   "notes/todo.copy.txt",
+		testFSKeyOverwrite: true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes fs.copy error: %#v", err)
 	}
 
 	_, err = move.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"source_path":      "notes/todo.copy.txt",
-		"destination_path": "notes/todo.moved.txt",
-		"overwrite":        true,
+		testFSKeySrcPath:   "notes/todo.copy.txt",
+		testFSKeyDstPath:   testFSNotesTodoMoved,
+		testFSKeyOverwrite: true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes fs.move error: %#v", err)
 	}
 
-	statResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{"path": "notes/todo.moved.txt"}))
+	statResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: testFSNotesTodoMoved}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes fs.stat error: %#v", err)
 	}
-	if statResult.Output.(map[string]any)["exists"] != true {
+	if statResult.Output.(map[string]any)[testFSKeyExists] != true {
 		t.Fatalf("expected kubernetes fs.stat exists=true, got %#v", statResult.Output)
 	}
 
 	_, err = deleteHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
-		"path":  "notes/todo.moved.txt",
-		"force": true,
+		testFSKeyPath:  testFSNotesTodoMoved,
+		testFSKeyForce: true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes fs.delete error: %#v", err)

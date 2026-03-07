@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	errRabbitQueueRequired        = "queue is required"
+	errRabbitQueueRequired         = "queue is required"
 	errRabbitQueueOutsideAllowlist = "queue outside profile allowlist"
 )
 
@@ -106,7 +106,7 @@ func (h *RabbitConsumeHandler) Invoke(ctx context.Context, session domain.Sessio
 		TimeoutMS:   2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid rabbit.consume args",
@@ -217,7 +217,7 @@ func (h *RabbitPublishHandler) Invoke(ctx context.Context, session domain.Sessio
 		MaxBytes:        1024 * 1024,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid rabbit.publish args",
@@ -322,7 +322,7 @@ func (h *RabbitQueueInfoHandler) Invoke(ctx context.Context, session domain.Sess
 		TimeoutMS: 2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid rabbit.queue_info args",

@@ -1,3 +1,5 @@
+//go:build k8s
+
 package tools
 
 import (
@@ -14,10 +16,17 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testK8sNamespaceSandbox = "sandbox"
+	testK8sNamespaceDefault = "default"
+	testK8sRoleDevops       = "devops"
+	testK8sClusterIP        = "10.0.0.1"
+)
+
 func TestK8sApplyManifestHandler_ConfigMapCreateAndUpdate(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
-	handler := NewK8sApplyManifestHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sApplyManifestHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	createManifest := `apiVersion: v1
 kind: ConfigMap
@@ -67,7 +76,7 @@ data:
 		t.Fatalf("unexpected apply resources for update: %#v", resources)
 	}
 
-	configMap, getErr := client.CoreV1().ConfigMaps("sandbox").Get(context.Background(), "delivery-config", metav1.GetOptions{})
+	configMap, getErr := client.CoreV1().ConfigMaps(testK8sNamespaceSandbox).Get(context.Background(), "delivery-config", metav1.GetOptions{})
 	if getErr != nil {
 		t.Fatalf("expected applied configmap, got error: %v", getErr)
 	}
@@ -78,8 +87,8 @@ data:
 
 func TestK8sApplyManifestHandler_DeniesUnsupportedKind(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
-	handler := NewK8sApplyManifestHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sApplyManifestHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	manifest := `apiVersion: v1
 kind: Secret
@@ -104,8 +113,8 @@ stringData:
 
 func TestK8sApplyManifestHandler_DeniesNamespaceMismatch(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
-	handler := NewK8sApplyManifestHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sApplyManifestHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	manifest := `apiVersion: v1
 kind: ConfigMap
@@ -134,7 +143,7 @@ func TestK8sRolloutStatusHandler_Succeeds(t *testing.T) {
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       "api",
-				Namespace:  "sandbox",
+				Namespace:  testK8sNamespaceSandbox,
 				Generation: 3,
 			},
 			Spec: appsv1.DeploymentSpec{Replicas: &replicas},
@@ -146,8 +155,8 @@ func TestK8sRolloutStatusHandler_Succeeds(t *testing.T) {
 			},
 		},
 	)
-	handler := NewK8sRolloutStatusHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sRolloutStatusHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	result, err := handler.Invoke(
 		context.Background(),
@@ -173,7 +182,7 @@ func TestK8sRolloutStatusHandler_Timeout(t *testing.T) {
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:       "api",
-				Namespace:  "sandbox",
+				Namespace:  testK8sNamespaceSandbox,
 				Generation: 2,
 			},
 			Spec: appsv1.DeploymentSpec{Replicas: &replicas},
@@ -186,8 +195,8 @@ func TestK8sRolloutStatusHandler_Timeout(t *testing.T) {
 			},
 		},
 	)
-	handler := NewK8sRolloutStatusHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sRolloutStatusHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	_, err := handler.Invoke(
 		context.Background(),
@@ -208,7 +217,7 @@ func TestK8sRestartDeploymentHandler_Succeeds(t *testing.T) {
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "api",
-				Namespace: "sandbox",
+				Namespace: testK8sNamespaceSandbox,
 			},
 			Spec: appsv1.DeploymentSpec{
 				Replicas: &replicas,
@@ -219,8 +228,8 @@ func TestK8sRestartDeploymentHandler_Succeeds(t *testing.T) {
 			},
 		},
 	)
-	handler := NewK8sRestartDeploymentHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sRestartDeploymentHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	result, err := handler.Invoke(
 		context.Background(),
@@ -239,7 +248,7 @@ func TestK8sRestartDeploymentHandler_Succeeds(t *testing.T) {
 		t.Fatalf("expected restarted_at in output, got %#v", output)
 	}
 
-	deployment, getErr := client.AppsV1().Deployments("sandbox").Get(context.Background(), "api", metav1.GetOptions{})
+	deployment, getErr := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "api", metav1.GetOptions{})
 	if getErr != nil {
 		t.Fatalf("expected deployment after restart, got error: %v", getErr)
 	}
@@ -255,21 +264,21 @@ func quoteJSON(value string) string {
 
 func TestK8sDeliveryHandlerNames(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
-	if NewK8sApplyManifestHandler(client, "default").Name() != "k8s.apply_manifest" {
+	if NewK8sApplyManifestHandler(client, testK8sNamespaceDefault).Name() != "k8s.apply_manifest" {
 		t.Fatal("unexpected K8sApplyManifestHandler name")
 	}
-	if NewK8sRolloutStatusHandler(client, "default").Name() != "k8s.rollout_status" {
+	if NewK8sRolloutStatusHandler(client, testK8sNamespaceDefault).Name() != "k8s.rollout_status" {
 		t.Fatal("unexpected K8sRolloutStatusHandler name")
 	}
-	if NewK8sRestartDeploymentHandler(client, "default").Name() != "k8s.restart_deployment" {
+	if NewK8sRestartDeploymentHandler(client, testK8sNamespaceDefault).Name() != "k8s.restart_deployment" {
 		t.Fatal("unexpected K8sRestartDeploymentHandler name")
 	}
 }
 
 func TestK8sApplyManifestHandler_DeploymentCreateAndUpdate(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
-	handler := NewK8sApplyManifestHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sApplyManifestHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	deployManifest := `apiVersion: apps/v1
 kind: Deployment
@@ -319,8 +328,8 @@ spec:
 
 func TestK8sApplyManifestHandler_ServiceCreateAndUpdate(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
-	handler := NewK8sApplyManifestHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sApplyManifestHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	svcManifest := `apiVersion: v1
 kind: Service
@@ -367,8 +376,8 @@ func TestPreserveServiceImmutableFields_CopiesFields(t *testing.T) {
 	ipFamilyPolicy := corev1.IPFamilyPolicySingleStack
 	existing := &corev1.Service{
 		Spec: corev1.ServiceSpec{
-			ClusterIP:           "10.0.0.1",
-			ClusterIPs:          []string{"10.0.0.1"},
+			ClusterIP:           testK8sClusterIP,
+			ClusterIPs:          []string{testK8sClusterIP},
 			IPFamilies:          []corev1.IPFamily{corev1.IPv4Protocol},
 			IPFamilyPolicy:      &ipFamilyPolicy,
 			HealthCheckNodePort: 31500,
@@ -387,10 +396,10 @@ func TestPreserveServiceImmutableFields_CopiesFields(t *testing.T) {
 
 	preserveServiceImmutableFields(service, existing)
 
-	if service.Spec.ClusterIP != "10.0.0.1" {
+	if service.Spec.ClusterIP != testK8sClusterIP {
 		t.Fatalf("expected ClusterIP preserved, got %q", service.Spec.ClusterIP)
 	}
-	if len(service.Spec.ClusterIPs) == 0 || service.Spec.ClusterIPs[0] != "10.0.0.1" {
+	if len(service.Spec.ClusterIPs) == 0 || service.Spec.ClusterIPs[0] != testK8sClusterIP {
 		t.Fatalf("expected ClusterIPs preserved, got %#v", service.Spec.ClusterIPs)
 	}
 	if len(service.Spec.IPFamilies) == 0 || service.Spec.IPFamilies[0] != corev1.IPv4Protocol {
@@ -413,8 +422,8 @@ func TestPreserveServiceImmutableFields_CopiesFields(t *testing.T) {
 
 func TestK8sApplyManifestHandler_EmptyManifestAndNoObjects(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
-	handler := NewK8sApplyManifestHandler(client, "default")
-	session := domain.Session{Principal: domain.Principal{Roles: []string{"devops"}}}
+	handler := NewK8sApplyManifestHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
 
 	// blank manifest → k8sInvalidArgument "manifest is required"
 	_, err := handler.Invoke(

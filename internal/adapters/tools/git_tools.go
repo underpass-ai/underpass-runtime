@@ -120,7 +120,7 @@ func (h *GitStatusHandler) Invoke(ctx context.Context, session domain.Session, a
 		Short bool `json:"short"`
 	}{Short: true}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.status args", Retryable: false}
 		}
 	}
@@ -136,7 +136,7 @@ func (h *GitStatusHandler) Invoke(ctx context.Context, session domain.Session, a
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"status":  commandResult.Output,
+			"status":      commandResult.Output,
 		},
 	}
 	if runErr != nil {
@@ -156,7 +156,7 @@ func (h *GitDiffHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Base   string   `json:"base"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.diff args", Retryable: false}
 		}
 	}
@@ -179,7 +179,7 @@ func (h *GitDiffHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"diff":    commandResult.Output,
+			"diff":        commandResult.Output,
 		},
 	}
 	if runErr != nil {
@@ -197,7 +197,7 @@ func (h *GitApplyPatchHandler) Invoke(ctx context.Context, session domain.Sessio
 		Patch string `json:"patch"`
 		Check bool   `json:"check"`
 	}{}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.apply_patch args", Retryable: false}
 	}
 	if strings.TrimSpace(request.Patch) == "" {
@@ -228,9 +228,9 @@ func (h *GitApplyPatchHandler) Invoke(ctx context.Context, session domain.Sessio
 		ExitCode: commandResult.ExitCode,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
-			gitKeyCommand:       append([]string{"git"}, command...),
+			gitKeyCommand:   append([]string{"git"}, command...),
 			"applied":       runErr == nil,
-			gitKeyOutput:        commandResult.Output,
+			gitKeyOutput:    commandResult.Output,
 			"changed_paths": patchPaths,
 		},
 	}
@@ -251,7 +251,7 @@ func (h *GitCheckoutHandler) Invoke(ctx context.Context, session domain.Session,
 		StartPoint string `json:"start_point"`
 		Force      bool   `json:"force"`
 	}{}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.checkout args", Retryable: false}
 	}
 
@@ -287,8 +287,8 @@ func (h *GitCheckoutHandler) Invoke(ctx context.Context, session domain.Session,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"ref":     ref,
-			"created": request.Create,
+			"ref":         ref,
+			"created":     request.Create,
 			gitKeyOutput:  commandResult.Output,
 		},
 	}
@@ -311,7 +311,7 @@ func (h *GitLogHandler) Invoke(ctx context.Context, session domain.Session, args
 		MaxCount: 20,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.log args", Retryable: false}
 		}
 	}
@@ -340,9 +340,9 @@ func (h *GitLogHandler) Invoke(ctx context.Context, session domain.Session, args
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"ref":     ref,
-			"count":   len(entries),
-			"entries": entries,
+			"ref":         ref,
+			"count":       len(entries),
+			"entries":     entries,
 		},
 	}
 	if runErr != nil {
@@ -367,7 +367,7 @@ func (h *GitShowHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Patch: true,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.show args", Retryable: false}
 		}
 	}
@@ -406,9 +406,9 @@ func (h *GitShowHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
 			gitKeyCommand: append([]string{"git"}, command...),
-			"ref":     ref,
-			"path":    path,
-			"show":    commandResult.Output,
+			"ref":         ref,
+			"path":        path,
+			"show":        commandResult.Output,
 		},
 	}
 	if runErr != nil {
@@ -427,7 +427,7 @@ func (h *GitBranchListHandler) Invoke(ctx context.Context, session domain.Sessio
 		Remotes bool `json:"remotes"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.branch_list args", Retryable: false}
 		}
 	}
@@ -445,9 +445,9 @@ func (h *GitBranchListHandler) Invoke(ctx context.Context, session domain.Sessio
 		ExitCode: commandResult.ExitCode,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
-			gitKeyCommand:  append([]string{"git"}, command...),
-			"count":    len(branches),
-			"branches": branches,
+			gitKeyCommand: append([]string{"git"}, command...),
+			"count":       len(branches),
+			"branches":    branches,
 		},
 	}
 	if runErr != nil {
@@ -466,7 +466,7 @@ func (h *GitCommitHandler) Invoke(ctx context.Context, session domain.Session, a
 		All     bool     `json:"all"`
 		Paths   []string `json:"paths"`
 	}{}
-	if err := json.Unmarshal(args, &request); err != nil {
+	if json.Unmarshal(args, &request) != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.commit args", Retryable: false}
 	}
 
@@ -481,8 +481,7 @@ func (h *GitCommitHandler) Invoke(ctx context.Context, session domain.Session, a
 		"commit", "-m", message,
 	}
 	if request.All {
-		addAllResult, addAllErr := executeGit(ctx, h.runner, session, []string{"add", "--all"}, nil, 512*1024)
-		if addAllErr != nil {
+		if addAllResult, addAllErr := executeGit(ctx, h.runner, session, []string{"add", "--all"}, nil, 512*1024); addAllErr != nil {
 			return buildGitAddFailedResult(addAllResult), addAllErr
 		}
 	}
@@ -498,10 +497,10 @@ func (h *GitCommitHandler) Invoke(ctx context.Context, session domain.Session, a
 		ExitCode: commandResult.ExitCode,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
 		Output: map[string]any{
-			gitKeyCommand:   append([]string{"git"}, command...),
-			"committed": runErr == nil,
-			"commit":    commitHash,
-			gitKeyOutput:    commandResult.Output,
+			gitKeyCommand: append([]string{"git"}, command...),
+			"committed":   runErr == nil,
+			"commit":      commitHash,
+			gitKeyOutput:  commandResult.Output,
 		},
 	}
 	if runErr != nil {
@@ -585,7 +584,7 @@ func (h *GitPushHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Remote: gitRemoteOrigin,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.push args", Retryable: false}
 		}
 	}
@@ -621,7 +620,7 @@ func (h *GitFetchHandler) Invoke(ctx context.Context, session domain.Session, ar
 		Remote: gitRemoteOrigin,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.fetch args", Retryable: false}
 		}
 	}
@@ -656,7 +655,7 @@ func (h *GitPullHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Remote: gitRemoteOrigin,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.pull args", Retryable: false}
 		}
 	}
@@ -965,10 +964,10 @@ func buildGitAddFailedResult(addAllResult app.CommandResult) app.ToolRunResult {
 		ExitCode: addAllResult.ExitCode,
 		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: addAllResult.Output}},
 		Output: map[string]any{
-			gitKeyCommand:   []string{"git", "add", "--all"},
-			"committed": false,
-			"commit":    "",
-			gitKeyOutput:    addAllResult.Output,
+			gitKeyCommand: []string{"git", "add", "--all"},
+			"committed":   false,
+			"commit":      "",
+			gitKeyOutput:  addAllResult.Output,
 		},
 	}
 }

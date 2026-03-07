@@ -7,15 +7,25 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/underpass-ai/underpass-runtime/internal/app"
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	k8sruntime "k8s.io/apimachinery/pkg/runtime"
-	k8sfake "k8s.io/client-go/kubernetes/fake"
-	k8stesting "k8s.io/client-go/testing"
+)
+
+const (
+	testContainerRuntimePodman      = "podman"
+	testContainerRuntimeDocker      = "docker"
+	testContainerSessionID1         = "sess1"
+	testContainerImageNginxLatest   = "nginx:latest"
+	testContainerImageBusyboxLatest = "busybox:latest"
+	testContainerNameMycontainer    = "mycontainer"
+	testContainerCmdNginx           = "nginx"
+	testContainerArgInfo            = "info"
+	testContainerErrExitStatus1     = "exit status 1"
+	testContainerErrUnexpectedCmd   = "unexpected command"
+	testContainerErrCannotConnect   = "cannot connect to runtime"
+	testContainerFmtExecFailed      = "expected execution_failed, got %s"
+	testContainerFmtPodmanRuntime   = "expected podman runtime output, got %#v"
 )
 
 type fakeContainerRunner struct {
@@ -34,10 +44,10 @@ func (f *fakeContainerRunner) Run(_ context.Context, _ domain.Session, spec app.
 func TestContainerPSHandler_SimulatedWhenRuntimeUnavailable(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "cannot connect to runtime"}, errors.New("exit status 1")
+			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
+				return app.CommandResult{ExitCode: 1, Output: testContainerErrCannotConnect}, errors.New(testContainerErrExitStatus1)
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -58,13 +68,13 @@ func TestContainerPSHandler_SimulatedWhenRuntimeUnavailable(t *testing.T) {
 func TestContainerPSHandler_RuntimeAndTruncation(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "info" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
 				return app.CommandResult{ExitCode: 0, Output: "{}"}, nil
 			}
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "ps" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == "ps" {
 				return app.CommandResult{ExitCode: 0, Output: "b123\timg-b\tb\trunning\na123\timg-a\ta\texited"}, nil
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -74,8 +84,8 @@ func TestContainerPSHandler_RuntimeAndTruncation(t *testing.T) {
 		t.Fatalf("unexpected container.ps error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["runtime"] != "podman" || output["simulated"] != false {
-		t.Fatalf("expected podman runtime output, got %#v", output)
+	if output["runtime"] != testContainerRuntimePodman || output["simulated"] != false {
+		t.Fatalf(testContainerFmtPodmanRuntime, output)
 	}
 	if output["count"] != 1 || output["truncated"] != true {
 		t.Fatalf("expected count=1 truncated=true, got %#v", output)
@@ -89,10 +99,10 @@ func TestContainerPSHandler_RuntimeAndTruncation(t *testing.T) {
 func TestContainerRunHandler_StrictNoRuntimeFails(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "no runtime"}, errors.New("exit status 1")
+			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
+				return app.CommandResult{ExitCode: 1, Output: "no runtime"}, errors.New(testContainerErrExitStatus1)
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -102,23 +112,23 @@ func TestContainerRunHandler_StrictNoRuntimeFails(t *testing.T) {
 		t.Fatal("expected strict runtime failure")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("expected execution_failed, got %s", err.Code)
+		t.Fatalf(testContainerFmtExecFailed, err.Code)
 	}
 }
 
 func TestContainerRunHandler_UsesRuntime(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "info" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
 				return app.CommandResult{ExitCode: 0, Output: "{}"}, nil
 			}
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "run" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == "run" {
 				if !containsArg(spec.Args, "-d") {
 					t.Fatalf("expected detach flag in run args: %#v", spec.Args)
 				}
 				return app.CommandResult{ExitCode: 0, Output: "abc123def456\n"}, nil
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -128,8 +138,8 @@ func TestContainerRunHandler_UsesRuntime(t *testing.T) {
 		t.Fatalf("unexpected container.run error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["runtime"] != "podman" || output["simulated"] != false {
-		t.Fatalf("expected podman runtime output, got %#v", output)
+	if output["runtime"] != testContainerRuntimePodman || output["simulated"] != false {
+		t.Fatalf(testContainerFmtPodmanRuntime, output)
 	}
 	if output["container_id"] != "abc123def456" {
 		t.Fatalf("unexpected container_id: %#v", output["container_id"])
@@ -158,20 +168,20 @@ func TestContainerExecHandler_DeniesDisallowedCommand(t *testing.T) {
 		t.Fatal("expected command denial")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }
 
 func TestContainerExecHandler_UsesRuntime(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "info" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
 				return app.CommandResult{ExitCode: 0, Output: "{}"}, nil
 			}
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "exec" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == "exec" {
 				return app.CommandResult{ExitCode: 0, Output: "hello from container"}, nil
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -181,277 +191,60 @@ func TestContainerExecHandler_UsesRuntime(t *testing.T) {
 		t.Fatalf("unexpected container.exec error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["runtime"] != "podman" || output["simulated"] != false {
-		t.Fatalf("expected podman runtime output, got %#v", output)
+	if output["runtime"] != testContainerRuntimePodman || output["simulated"] != false {
+		t.Fatalf(testContainerFmtPodmanRuntime, output)
 	}
 	if !strings.Contains(output["output"].(string), "hello") {
 		t.Fatalf("unexpected exec output: %#v", output["output"])
 	}
 }
 
-func TestContainerRunHandler_UsesKubernetesPodRuntime(t *testing.T) {
-	client := k8sfake.NewSimpleClientset()
-	client.Fake.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, k8sruntime.Object, error) {
-		getAction, ok := action.(k8stesting.GetAction)
-		if !ok {
-			return false, nil, nil
-		}
-		obj, err := client.Tracker().Get(corev1.SchemeGroupVersion.WithResource("pods"), getAction.GetNamespace(), getAction.GetName())
-		if err != nil {
-			return true, nil, err
-		}
-		pod, ok := obj.(*corev1.Pod)
-		if !ok {
-			return true, obj, nil
-		}
-		copy := pod.DeepCopy()
-		if copy.Status.Phase == "" {
-			copy.Status.Phase = corev1.PodRunning
-		}
-		return true, copy, nil
-	})
-
-	handler := NewContainerRunHandlerWithKubernetes(nil, client, "sandbox")
-	session := domain.Session{
-		ID:        "session-k8s-run",
-		Principal: domain.Principal{TenantID: "tenant-a"},
-		Runtime: domain.RuntimeRef{
-			Kind:      domain.RuntimeKindKubernetes,
-			Namespace: "sandbox",
-		},
-	}
-
-	result, err := handler.Invoke(
-		context.Background(),
-		session,
-		json.RawMessage(`{"image_ref":"busybox:1.36","command":["sleep","5"],"detach":true}`),
-	)
-	if err != nil {
-		t.Fatalf("unexpected container.run k8s error: %#v", err)
-	}
-	output := result.Output.(map[string]any)
-	if output["runtime"] != "k8s" || output["simulated"] != false {
-		t.Fatalf("expected k8s runtime output, got %#v", output)
-	}
-	containerID := strings.TrimSpace(asString(output["container_id"]))
-	if containerID == "" {
-		t.Fatalf("expected non-empty container_id, got %#v", output["container_id"])
-	}
-	if output["namespace"] != "sandbox" {
-		t.Fatalf("expected sandbox namespace, got %#v", output["namespace"])
-	}
-
-	pod, getErr := client.CoreV1().Pods("sandbox").Get(context.Background(), containerID, metav1.GetOptions{})
-	if getErr != nil {
-		t.Fatalf("expected created pod %s: %v", containerID, getErr)
-	}
-	if len(pod.Spec.Containers) != 1 || pod.Spec.Containers[0].Name != "task" {
-		t.Fatalf("unexpected pod container spec: %#v", pod.Spec.Containers)
-	}
-	if pod.Spec.Containers[0].Image != "busybox:1.36" {
-		t.Fatalf("unexpected pod image: %#v", pod.Spec.Containers[0].Image)
-	}
-	if strings.Join(pod.Spec.Containers[0].Command, " ") != "sleep 5" {
-		t.Fatalf("unexpected pod command: %#v", pod.Spec.Containers[0].Command)
-	}
-}
-
-func TestContainerPSHandler_UsesKubernetesPodRuntime(t *testing.T) {
-	client := k8sfake.NewSimpleClientset(
-		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "ws-ctr-alpha",
-				Namespace: "sandbox",
-				Labels: map[string]string{
-					"app":                  "workspace-container-run",
-					"workspace_session_id": "session-k8s-ps",
-				},
-			},
-			Spec: corev1.PodSpec{
-				Containers: []corev1.Container{{Name: "task", Image: "busybox:1.36"}},
-			},
-			Status: corev1.PodStatus{Phase: corev1.PodRunning},
-		},
-		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "ws-ctr-bravo",
-				Namespace: "sandbox",
-				Labels: map[string]string{
-					"app":                  "workspace-container-run",
-					"workspace_session_id": "session-k8s-ps",
-				},
-			},
-			Spec: corev1.PodSpec{
-				Containers: []corev1.Container{{Name: "task", Image: "busybox:1.36"}},
-			},
-			Status: corev1.PodStatus{Phase: corev1.PodSucceeded},
-		},
-		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "ws-ctr-other",
-				Namespace: "sandbox",
-				Labels: map[string]string{
-					"app":                  "workspace-container-run",
-					"workspace_session_id": "other-session",
-				},
-			},
-			Spec: corev1.PodSpec{
-				Containers: []corev1.Container{{Name: "task", Image: "busybox:1.36"}},
-			},
-			Status: corev1.PodStatus{Phase: corev1.PodRunning},
-		},
-	)
-	handler := NewContainerPSHandlerWithKubernetes(nil, client, "sandbox")
-	session := domain.Session{
-		ID: "session-k8s-ps",
-		Runtime: domain.RuntimeRef{
-			Kind:      domain.RuntimeKindKubernetes,
-			Namespace: "sandbox",
-		},
-	}
-
-	result, err := handler.Invoke(
-		context.Background(),
-		session,
-		json.RawMessage(`{"all":false,"limit":20,"strict":true}`),
-	)
-	if err != nil {
-		t.Fatalf("unexpected container.ps k8s error: %#v", err)
-	}
-	output := result.Output.(map[string]any)
-	if output["runtime"] != "k8s" || output["simulated"] != false {
-		t.Fatalf("expected k8s runtime output, got %#v", output)
-	}
-	if output["count"] != 1 {
-		t.Fatalf("expected one running container for session, got %#v", output["count"])
-	}
-	containers, ok := output["containers"].([]map[string]any)
-	if !ok {
-		t.Fatalf("expected []map output containers, got %#v", output["containers"])
-	}
-	if len(containers) != 1 || containers[0]["id"] != "ws-ctr-alpha" {
-		t.Fatalf("unexpected containers list: %#v", containers)
-	}
-	if containers[0]["status"] != "running" {
-		t.Fatalf("unexpected container status: %#v", containers[0]["status"])
-	}
-}
-
-func TestContainerExecHandler_UsesKubernetesPodRuntime(t *testing.T) {
-	client := k8sfake.NewSimpleClientset(
-		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "ctr-pod", Namespace: "sandbox"},
-			Spec: corev1.PodSpec{
-				Containers: []corev1.Container{{Name: "task", Image: "busybox:1.36"}},
-			},
-			Status: corev1.PodStatus{
-				Phase: corev1.PodRunning,
-			},
-		},
-	)
-	runner := &fakeContainerRunner{
+// noRuntimeRunner returns a fakeContainerRunner that always fails runtime
+// detection (info command) with a connection error.
+func noRuntimeRunner() *fakeContainerRunner {
+	return &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command != "echo" || len(spec.Args) != 1 || spec.Args[0] != "ok" {
-				t.Fatalf("unexpected exec command spec: %#v", spec)
+			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
+				return app.CommandResult{ExitCode: 1, Output: testContainerErrCannotConnect}, errors.New(testContainerErrExitStatus1)
 			}
-			if spec.Cwd != "" {
-				t.Fatalf("expected empty cwd for k8s exec, got %#v", spec.Cwd)
-			}
-			return app.CommandResult{ExitCode: 0, Output: "ok"}, nil
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
-	}
-	handler := NewContainerExecHandlerWithKubernetes(runner, client, "sandbox")
-	session := domain.Session{
-		WorkspacePath: "/tmp/workspace",
-		Runtime: domain.RuntimeRef{
-			Kind:      domain.RuntimeKindKubernetes,
-			Namespace: "sandbox",
-		},
-	}
-
-	result, err := handler.Invoke(
-		context.Background(),
-		session,
-		json.RawMessage(`{"container_id":"ctr-pod","command":["echo","ok"],"strict":true}`),
-	)
-	if err != nil {
-		t.Fatalf("unexpected container.exec k8s error: %#v", err)
-	}
-	if len(runner.calls) != 1 {
-		t.Fatalf("expected one runner call, got %d", len(runner.calls))
-	}
-	output := result.Output.(map[string]any)
-	if output["runtime"] != "k8s" || output["simulated"] != false {
-		t.Fatalf("expected k8s runtime output, got %#v", output)
-	}
-	if output["pod_name"] != "ctr-pod" {
-		t.Fatalf("unexpected pod_name: %#v", output["pod_name"])
-	}
-	if !strings.Contains(output["output"].(string), "ok") {
-		t.Fatalf("unexpected exec output: %#v", output["output"])
 	}
 }
 
 func TestContainerPSHandler_StrictByDefaultEnvFailsWithoutRuntime(t *testing.T) {
 	t.Setenv("WORKSPACE_CONTAINER_STRICT_BY_DEFAULT", "true")
-	runner := &fakeContainerRunner{
-		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "cannot connect to runtime"}, errors.New("exit status 1")
-			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
-		},
-	}
-
-	handler := NewContainerPSHandler(runner)
+	handler := NewContainerPSHandler(noRuntimeRunner())
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"limit":25}`))
 	if err == nil {
 		t.Fatal("expected strict-by-default runtime failure")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("expected execution_failed, got %s", err.Code)
+		t.Fatalf(testContainerFmtExecFailed, err.Code)
 	}
 }
 
 func TestContainerPSHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testing.T) {
 	t.Setenv("WORKSPACE_CONTAINER_ALLOW_SYNTHETIC_FALLBACK", "false")
-	runner := &fakeContainerRunner{
-		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "cannot connect to runtime"}, errors.New("exit status 1")
-			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
-		},
-	}
-
-	handler := NewContainerPSHandler(runner)
+	handler := NewContainerPSHandler(noRuntimeRunner())
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"limit":25,"strict":false}`))
 	if err == nil {
 		t.Fatal("expected runtime failure when synthetic fallback disabled")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("expected execution_failed, got %s", err.Code)
+		t.Fatalf(testContainerFmtExecFailed, err.Code)
 	}
 }
 
 func TestContainerLogsHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testing.T) {
 	t.Setenv("WORKSPACE_CONTAINER_ALLOW_SYNTHETIC_FALLBACK", "false")
-	runner := &fakeContainerRunner{
-		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "cannot connect to runtime"}, errors.New("exit status 1")
-			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
-		},
-	}
-
-	handler := NewContainerLogsHandler(runner)
+	handler := NewContainerLogsHandler(noRuntimeRunner())
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"container_id":"sim-123456","strict":false}`))
 	if err == nil {
 		t.Fatal("expected runtime failure when synthetic fallback disabled")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("expected execution_failed, got %s", err.Code)
+		t.Fatalf(testContainerFmtExecFailed, err.Code)
 	}
 }
 
@@ -462,7 +255,7 @@ func TestContainerExecHandler_DeniesShellCommands(t *testing.T) {
 		t.Fatal("expected shell command denial")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }
 
@@ -482,9 +275,9 @@ func TestContainerHandlerNames(t *testing.T) {
 }
 
 func TestBuildSimulatedContainerID(t *testing.T) {
-	id1 := buildSimulatedContainerID("sess1", "busybox:latest", []string{"echo", "hi"}, "mycontainer")
-	id2 := buildSimulatedContainerID("sess1", "busybox:latest", []string{"echo", "hi"}, "mycontainer")
-	id3 := buildSimulatedContainerID("sess2", "busybox:latest", []string{"echo", "hi"}, "mycontainer")
+	id1 := buildSimulatedContainerID(testContainerSessionID1, testContainerImageBusyboxLatest, []string{"echo", "hi"}, testContainerNameMycontainer)
+	id2 := buildSimulatedContainerID(testContainerSessionID1, testContainerImageBusyboxLatest, []string{"echo", "hi"}, testContainerNameMycontainer)
+	id3 := buildSimulatedContainerID("sess2", testContainerImageBusyboxLatest, []string{"echo", "hi"}, testContainerNameMycontainer)
 
 	if id1 != id2 {
 		t.Fatalf("expected same inputs to produce same ID: %q != %q", id1, id2)
@@ -503,8 +296,8 @@ func TestBuildSimulatedContainerID(t *testing.T) {
 
 func TestBuildContainerLogsCommand(t *testing.T) {
 	// Without sinceSec and without timestamps
-	cmd := buildContainerLogsCommand("docker", "ctr-1", 50, 0, false)
-	expected := []string{"docker", "logs", "--tail", "50", "ctr-1"}
+	cmd := buildContainerLogsCommand(testContainerRuntimeDocker, "ctr-1", 50, 0, false)
+	expected := []string{testContainerRuntimeDocker, "logs", "--tail", "50", "ctr-1"}
 	if len(cmd) != len(expected) {
 		t.Fatalf("expected %v, got %v", expected, cmd)
 	}
@@ -515,7 +308,7 @@ func TestBuildContainerLogsCommand(t *testing.T) {
 	}
 
 	// With sinceSec=30 and timestamps=true
-	cmd2 := buildContainerLogsCommand("docker", "ctr-1", 50, 30, true)
+	cmd2 := buildContainerLogsCommand(testContainerRuntimeDocker, "ctr-1", 50, 30, true)
 	if !containsArg(cmd2, "--since") {
 		t.Fatalf("expected --since in cmd: %v", cmd2)
 	}
@@ -524,36 +317,6 @@ func TestBuildContainerLogsCommand(t *testing.T) {
 	}
 	if !containsArg(cmd2, "--timestamps") {
 		t.Fatalf("expected --timestamps in cmd: %v", cmd2)
-	}
-}
-
-func TestFirstTerminatedContainerStatus(t *testing.T) {
-	// Empty ContainerStatuses -> returns false
-	emptyStatus := corev1.PodStatus{}
-	_, ok := firstTerminatedContainerStatus(emptyStatus)
-	if ok {
-		t.Fatal("expected false for empty ContainerStatuses")
-	}
-
-	// ContainerStatuses with a Terminated state -> returns true and ExitCode
-	exitCode := int32(42)
-	statusWithTerminated := corev1.PodStatus{
-		ContainerStatuses: []corev1.ContainerStatus{
-			{
-				State: corev1.ContainerState{
-					Terminated: &corev1.ContainerStateTerminated{
-						ExitCode: exitCode,
-					},
-				},
-			},
-		},
-	}
-	terminated, ok2 := firstTerminatedContainerStatus(statusWithTerminated)
-	if !ok2 {
-		t.Fatal("expected true for ContainerStatuses with Terminated state")
-	}
-	if terminated.ExitCode != exitCode {
-		t.Fatalf("expected ExitCode=%d, got %d", exitCode, terminated.ExitCode)
 	}
 }
 
@@ -645,96 +408,12 @@ func TestSanitizeContainerEnv(t *testing.T) {
 	}
 }
 
-func TestResolveK8sRunContainerName(t *testing.T) {
-	// nil pod -> "task"
-	if name := resolveK8sRunContainerName(nil); name != "task" {
-		t.Fatalf("expected 'task' for nil pod, got %q", name)
-	}
-
-	// Pod with container named "task" -> "task"
-	podWithTask := &corev1.Pod{
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{Name: "task"},
-			},
-		},
-	}
-	if name := resolveK8sRunContainerName(podWithTask); name != "task" {
-		t.Fatalf("expected 'task', got %q", name)
-	}
-
-	// Pod with no containers -> "task"
-	podEmpty := &corev1.Pod{
-		Spec: corev1.PodSpec{},
-	}
-	if name := resolveK8sRunContainerName(podEmpty); name != "task" {
-		t.Fatalf("expected 'task' for pod with no containers, got %q", name)
-	}
-
-	// Pod with one container named "runner" -> "runner"
-	podWithRunner := &corev1.Pod{
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{Name: "runner"},
-			},
-		},
-	}
-	if name := resolveK8sRunContainerName(podWithRunner); name != "runner" {
-		t.Fatalf("expected 'runner', got %q", name)
-	}
-}
-
-func TestWaitForK8sContainerPodTerminal_AlreadyTerminated(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},
-		Status:     corev1.PodStatus{Phase: corev1.PodSucceeded},
-	}
-	client := k8sfake.NewSimpleClientset(pod)
-	result, err := waitForK8sContainerPodTerminal(context.Background(), client, "default", "test-pod", 5*time.Second)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Status.Phase != corev1.PodSucceeded {
-		t.Fatalf("expected Succeeded, got %v", result.Status.Phase)
-	}
-}
-
-func TestWaitForK8sContainerPodTerminal_AlreadyFailed(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "failed-pod", Namespace: "default"},
-		Status:     corev1.PodStatus{Phase: corev1.PodFailed},
-	}
-	client := k8sfake.NewSimpleClientset(pod)
-	result, err := waitForK8sContainerPodTerminal(context.Background(), client, "default", "failed-pod", 5*time.Second)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.Status.Phase != corev1.PodFailed {
-		t.Fatalf("expected Failed, got %v", result.Status.Phase)
-	}
-}
-
-func TestNewContainerLogsHandlerWithKubernetes(t *testing.T) {
-	runner := &fakeContainerRunner{}
-	client := k8sfake.NewSimpleClientset()
-	h := NewContainerLogsHandlerWithKubernetes(runner, client, "  test-ns  ")
-	if h == nil {
-		t.Fatal("expected non-nil handler")
-	}
-	if h.defaultNamespace != "test-ns" {
-		t.Fatalf("expected defaultNamespace='test-ns', got %q", h.defaultNamespace)
-	}
-	if h.client == nil {
-		t.Fatal("expected k8s client to be set")
-	}
-}
-
 func TestBuildSimulatedContainerRunResult_Detach(t *testing.T) {
 	opts := simulatedContainerRunOptions{
-		sessionID:     "sess1",
-		imageRef:      "nginx:latest",
-		containerName: "mycontainer",
-		command:       []string{"nginx"},
+		sessionID:     testContainerSessionID1,
+		imageRef:      testContainerImageNginxLatest,
+		containerName: testContainerNameMycontainer,
+		command:       []string{testContainerCmdNginx},
 		envPairs:      []string{"FOO=bar"},
 		detach:        true,
 		remove:        false,
@@ -748,7 +427,7 @@ func TestBuildSimulatedContainerRunResult_Detach(t *testing.T) {
 	if output[containerSourceSimulated] != true {
 		t.Fatal("expected simulated=true")
 	}
-	if output["image_ref"] != "nginx:latest" {
+	if output["image_ref"] != testContainerImageNginxLatest {
 		t.Fatalf("expected image_ref='nginx:latest', got %q", output["image_ref"])
 	}
 }
@@ -773,11 +452,11 @@ func TestHandleContainerRunError_NonStrict(t *testing.T) {
 	cmdResult := app.CommandResult{ExitCode: 1, Output: "pull failed"}
 	result, domErr := handleContainerRunError(
 		containerRunContext{
-			sessionID: "sess1", imageRef: "nginx:latest", containerName: "mybox",
-			command: []string{"nginx"}, envPairs: []string{},
+			sessionID: testContainerSessionID1, imageRef: testContainerImageNginxLatest, containerName: "mybox",
+			command: []string{testContainerCmdNginx}, envPairs: []string{},
 			detach: false, remove: true, strict: false,
 		},
-		"docker", cmdResult, errors.New("exit 1"),
+		testContainerRuntimeDocker, cmdResult, errors.New("exit 1"),
 	)
 	if domErr != nil {
 		t.Fatalf("expected nil error for non-strict mode, got %v", domErr)
@@ -792,11 +471,11 @@ func TestHandleContainerRunError_Strict(t *testing.T) {
 	cmdResult := app.CommandResult{ExitCode: 1, Output: "docker error"}
 	result, domErr := handleContainerRunError(
 		containerRunContext{
-			sessionID: "sess1", imageRef: "nginx:latest", containerName: "mybox",
-			command: []string{"nginx"}, envPairs: []string{},
+			sessionID: testContainerSessionID1, imageRef: testContainerImageNginxLatest, containerName: "mybox",
+			command: []string{testContainerCmdNginx}, envPairs: []string{},
 			detach: false, remove: true, strict: true,
 		},
-		"docker", cmdResult, errors.New("exit 1"),
+		testContainerRuntimeDocker, cmdResult, errors.New("exit 1"),
 	)
 	if domErr == nil {
 		t.Fatal("expected domain error for strict mode")
@@ -807,74 +486,5 @@ func TestHandleContainerRunError_Strict(t *testing.T) {
 	}
 	if output[containerSourceSimulated] != false {
 		t.Fatal("expected simulated=false in strict mode error")
-	}
-}
-
-func TestInvokeK8sLogs_PodNotFound(t *testing.T) {
-	client := k8sfake.NewSimpleClientset()
-	runner := &fakeContainerRunner{}
-	h := NewContainerLogsHandlerWithKubernetes(runner, client, "default")
-	session := domain.Session{
-		WorkspacePath: t.TempDir(),
-		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
-	}
-	_, domErr := h.Invoke(context.Background(), session, json.RawMessage(`{"container_id":"nosuchpod1"}`))
-	if domErr == nil {
-		t.Fatal("expected not_found error for missing pod")
-	}
-	if domErr.Code != app.ErrorCodeNotFound {
-		t.Fatalf("expected not_found error code, got %q", domErr.Code)
-	}
-}
-
-func TestInvokeK8sLogs_PodExists_ReturnsOutput(t *testing.T) {
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "mypod123", Namespace: "default"},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{{Name: "task"}},
-		},
-		Status: corev1.PodStatus{Phase: corev1.PodRunning},
-	}
-	client := k8sfake.NewSimpleClientset(pod)
-	runner := &fakeContainerRunner{}
-	h := NewContainerLogsHandlerWithKubernetes(runner, client, "default")
-	session := domain.Session{
-		WorkspacePath: t.TempDir(),
-		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
-	}
-	result, domErr := h.Invoke(context.Background(), session, json.RawMessage(`{"container_id":"mypod123"}`))
-	if domErr != nil {
-		t.Fatalf("unexpected error: %v", domErr)
-	}
-	output := result.Output.(map[string]any)
-	if output["pod_name"] != "mypod123" {
-		t.Fatalf("expected pod_name='mypod123', got %q", output["pod_name"])
-	}
-	if output["container"] != "task" {
-		t.Fatalf("expected container='task', got %q", output["container"])
-	}
-	if output["source"] != "k8s_sdk" {
-		t.Fatalf("expected source='k8s_sdk', got %q", output["source"])
-	}
-}
-
-func TestInvokeK8sLogs_GenericFetchError(t *testing.T) {
-	client := k8sfake.NewSimpleClientset()
-	// Inject a reactor that returns a generic (non-NotFound) error for Get
-	client.PrependReactor("get", "pods", func(_ k8stesting.Action) (bool, k8sruntime.Object, error) {
-		return true, nil, fmt.Errorf("internal server error")
-	})
-	runner := &fakeContainerRunner{}
-	h := NewContainerLogsHandlerWithKubernetes(runner, client, "default")
-	session := domain.Session{
-		WorkspacePath: t.TempDir(),
-		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
-	}
-	_, domErr := h.Invoke(context.Background(), session, json.RawMessage(`{"container_id":"anypod1"}`))
-	if domErr == nil {
-		t.Fatal("expected error when pod Get fails with generic error")
-	}
-	if domErr.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("expected execution_failed, got %q", domErr.Code)
 	}
 }

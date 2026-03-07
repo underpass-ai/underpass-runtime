@@ -12,6 +12,13 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testNATSProfileID   = "dev.nats"
+	testNATSAllowedKey  = "allowed_profiles"
+	testNATSSubjectEcho = "sandbox.echo"
+	testNATSBadURL      = "://bad-url"
+)
+
 type fakeNATSClient struct {
 	request func(serverURL, subject string, payload []byte, timeout time.Duration) ([]byte, error)
 	publish func(serverURL, subject string, payload []byte, timeout time.Duration) error
@@ -55,7 +62,7 @@ func TestNATSRequestHandler_Success(t *testing.T) {
 	session := domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
-			"allowed_profiles": "dev.nats",
+			testNATSAllowedKey: testNATSProfileID,
 		},
 	}
 
@@ -65,10 +72,10 @@ func TestNATSRequestHandler_Success(t *testing.T) {
 	}
 
 	output := result.Output.(map[string]any)
-	if output["profile_id"] != "dev.nats" {
+	if output["profile_id"] != testNATSProfileID {
 		t.Fatalf("unexpected profile_id: %#v", output["profile_id"])
 	}
-	if output["subject"] != "sandbox.echo" {
+	if output["subject"] != testNATSSubjectEcho {
 		t.Fatalf("unexpected subject: %#v", output["subject"])
 	}
 	encoded := output["response_base64"].(string)
@@ -83,7 +90,7 @@ func TestNATSRequestHandler_DeniesSubjectOutsideProfileScope(t *testing.T) {
 	session := domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
-			"allowed_profiles": "dev.nats",
+			testNATSAllowedKey: testNATSProfileID,
 		},
 	}
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.nats","subject":"prod.secret"}`))
@@ -91,7 +98,7 @@ func TestNATSRequestHandler_DeniesSubjectOutsideProfileScope(t *testing.T) {
 		t.Fatal("expected policy error")
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
@@ -124,7 +131,7 @@ func TestNATSPublishHandler_DeniesReadOnlyProfile(t *testing.T) {
 	session := domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
-			"allowed_profiles": "dev.nats",
+			testNATSAllowedKey: testNATSProfileID,
 		},
 	}
 
@@ -133,7 +140,7 @@ func TestNATSPublishHandler_DeniesReadOnlyProfile(t *testing.T) {
 		t.Fatal("expected read_only policy denial")
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 	if err.Message != "profile is read_only" {
 		t.Fatalf("unexpected error message: %q", err.Message)
@@ -152,7 +159,7 @@ func TestNATSPublishHandler_ExecutionError(t *testing.T) {
 		t.Fatal("expected execution error")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
@@ -168,7 +175,7 @@ func TestNATSSubscribePullHandler_Success(t *testing.T) {
 	session := domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
-			"allowed_profiles": "dev.nats",
+			testNATSAllowedKey: testNATSProfileID,
 		},
 	}
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.nats","subject":"sandbox.jobs","max_messages":2,"max_bytes":16}`))
@@ -191,7 +198,7 @@ func TestNATSSubscribePullHandler_ExecutionError(t *testing.T) {
 	session := domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
-			"allowed_profiles": "dev.nats",
+			testNATSAllowedKey: testNATSProfileID,
 		},
 	}
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.nats","subject":"sandbox.jobs"}`))
@@ -199,7 +206,7 @@ func TestNATSSubscribePullHandler_ExecutionError(t *testing.T) {
 		t.Fatal("expected execution error")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
@@ -216,13 +223,13 @@ func TestNATSHandlers_NamesAndLiveClientErrors(t *testing.T) {
 
 	client := &liveNATSClient{}
 	ctx := context.Background()
-	if _, err := client.Request(ctx, "://bad-url", "sandbox.echo", []byte("x"), 5*time.Millisecond); err == nil {
+	if _, err := client.Request(ctx, testNATSBadURL, testNATSSubjectEcho, []byte("x"), 5*time.Millisecond); err == nil {
 		t.Fatal("expected live NATS request error for invalid url")
 	}
-	if err := client.Publish(ctx, "://bad-url", "sandbox.echo", []byte("x"), 5*time.Millisecond); err == nil {
+	if client.Publish(ctx, testNATSBadURL, testNATSSubjectEcho, []byte("x"), 5*time.Millisecond) == nil {
 		t.Fatal("expected live NATS publish error for invalid url")
 	}
-	if _, err := client.SubscribePull(ctx, "://bad-url", "sandbox.echo", 5*time.Millisecond, 1); err == nil {
+	if _, err := client.SubscribePull(ctx, testNATSBadURL, testNATSSubjectEcho, 5*time.Millisecond, 1); err == nil {
 		t.Fatal("expected live NATS subscribe error for invalid url")
 	}
 }
@@ -231,7 +238,7 @@ func writableNATSSession() domain.Session {
 	return domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
-			"allowed_profiles":         "dev.nats",
+			testNATSAllowedKey:         "dev.nats",
 			"connection_profiles_json": `[{"id":"dev.nats","kind":"nats","read_only":false,"scopes":{"subjects":["sandbox.>","dev.>"]}}]`,
 		},
 	}
@@ -254,7 +261,7 @@ func TestNATSProfileAndPayloadHelpers(t *testing.T) {
 	}
 
 	profile := connectionProfile{
-		ID:     "dev.nats",
+		ID:     testNATSProfileID,
 		Kind:   "nats",
 		Scopes: map[string]any{"subjects": []any{"sandbox.>", "dev.*"}},
 	}
@@ -291,7 +298,7 @@ func TestResolveProfileEndpoint_IgnoresMetadataOverride(t *testing.T) {
 		map[string]string{
 			"connection_profile_endpoints_json": `{"dev.nats":"nats://metadata:4222"}`,
 		},
-		"dev.nats",
+		testNATSProfileID,
 	)
 	if endpoint != "" {
 		t.Fatalf("expected metadata endpoint to be ignored, got %q", endpoint)
@@ -306,7 +313,7 @@ func TestResolveProfileEndpoint_UsesServerEnv(t *testing.T) {
 		map[string]string{
 			"connection_profile_endpoints_json": `{"dev.nats":"nats://metadata:4222"}`,
 		},
-		"dev.nats",
+		testNATSProfileID,
 	)
 	if endpoint != "nats://env:4222" {
 		t.Fatalf("expected server-side endpoint to be used, got %q", endpoint)
@@ -317,7 +324,7 @@ func TestResolveProfileEndpoint_AllowlistRejectsDisallowedHost(t *testing.T) {
 	t.Setenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON", `{"dev.nats":"nats://nats.internal:4222"}`)
 	t.Setenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON", `{"dev.nats":["sandbox.nats.internal"]}`)
 
-	endpoint := resolveProfileEndpoint(map[string]string{}, "dev.nats")
+	endpoint := resolveProfileEndpoint(map[string]string{}, testNATSProfileID)
 	if endpoint != "" {
 		t.Fatalf("expected endpoint to be rejected by allowlist, got %q", endpoint)
 	}
@@ -347,7 +354,7 @@ func TestNATSSubscribePullHandler_ValidationPaths(t *testing.T) {
 	readOnlySession := domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
-			"allowed_profiles": "dev.nats",
+			testNATSAllowedKey: testNATSProfileID,
 		},
 	}
 
@@ -374,7 +381,7 @@ func TestResolveProfileEndpoint_AllowlistAllowsWildcardAndCIDR(t *testing.T) {
 	t.Setenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON", `{"dev.nats":"nats://mq.dev.svc.cluster.local:4222","dev.redis":"10.0.1.22:6379"}`)
 	t.Setenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON", `{"dev.nats":["*.svc.cluster.local"],"dev.redis":["10.0.0.0/8"]}`)
 
-	natsEndpoint := resolveProfileEndpoint(map[string]string{}, "dev.nats")
+	natsEndpoint := resolveProfileEndpoint(map[string]string{}, testNATSProfileID)
 	if natsEndpoint == "" {
 		t.Fatal("expected wildcard host rule to allow nats endpoint")
 	}

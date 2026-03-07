@@ -55,18 +55,18 @@ const (
 
 // Dockerfile heuristic rule identifiers.
 const (
-	sweRuleUnpinnedBaseImage  = "dockerfile.unpinned_base_image"
-	sweRuleAddInsteadOfCopy   = "dockerfile.add_instead_of_copy"
-	sweRulePipeToShell        = "dockerfile.pipe_to_shell"
-	sweRuleChmod777           = "dockerfile.chmod_777"
-	sweRuleAptRecommends      = "dockerfile.apt_install_recommends"
-	sweRuleMissingUser        = "dockerfile.missing_user"
-	sweRuleMsgUnpinnedBase    = "Base image should be pinned to a fixed version or digest."
-	sweRuleMsgAddOverCopy     = "Prefer COPY over ADD unless archive extraction is required."
-	sweRuleMsgPipeToShell     = "Avoid piping remote content directly into a shell."
-	sweRuleMsgChmod777        = "Avoid world-writable permissions (chmod 777)."
-	sweRuleMsgAptRecommends   = "Use --no-install-recommends to reduce image attack surface."
-	sweRuleMsgMissingUser     = "Dockerfile does not define a non-root USER instruction."
+	sweRuleUnpinnedBaseImage = "dockerfile.unpinned_base_image"
+	sweRuleAddInsteadOfCopy  = "dockerfile.add_instead_of_copy"
+	sweRulePipeToShell       = "dockerfile.pipe_to_shell"
+	sweRuleChmod777          = "dockerfile.chmod_777"
+	sweRuleAptRecommends     = "dockerfile.apt_install_recommends"
+	sweRuleMissingUser       = "dockerfile.missing_user"
+	sweRuleMsgUnpinnedBase   = "Base image should be pinned to a fixed version or digest."
+	sweRuleMsgAddOverCopy    = "Prefer COPY over ADD unless archive extraction is required."
+	sweRuleMsgPipeToShell    = "Avoid piping remote content directly into a shell."
+	sweRuleMsgChmod777       = "Avoid world-writable permissions (chmod 777)."
+	sweRuleMsgAptRecommends  = "Use --no-install-recommends to reduce image attack surface."
+	sweRuleMsgMissingUser    = "Dockerfile does not define a non-root USER instruction."
 )
 
 // Quality gate rule names.

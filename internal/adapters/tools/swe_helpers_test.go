@@ -12,6 +12,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testSeverityMedium  = "medium"
+	testMsgNotSupported = "not supported"
+)
+
 type fakeSWERuntimeCommandRunner struct {
 	calls []app.CommandSpec
 	run   func(callIndex int, spec app.CommandSpec) (app.CommandResult, error)
@@ -92,7 +97,7 @@ func TestRuntimeSecurityHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalizeSeverityThreshold failed: %v", err)
 	}
-	if threshold != "medium" {
+	if threshold != testSeverityMedium {
 		t.Fatalf("unexpected normalized threshold: %q", threshold)
 	}
 	if _, err := normalizeSeverityThreshold("severe"); err == nil {
@@ -158,7 +163,7 @@ func TestIntFromAny_AllBranches(t *testing.T) {
 		{float32(3.9), 3},
 		{float64(4.7), 4},
 		{json.Number("99"), 99},
-		{json.Number("3.5"), 3},  // fallback to Float64 parse
+		{json.Number("3.5"), 3}, // fallback to Float64 parse
 		{"42", 42},
 		{"bad", 0},
 		{nil, 0},
@@ -226,12 +231,12 @@ func TestNormalizeSeverityThreshold_AllBranches(t *testing.T) {
 		want  string
 		err   bool
 	}{
-		{"", "medium", false},
+		{"", testSeverityMedium, false},
 		{"low", "low", false},
 		{"high", "high", false},
 		{"critical", "critical", false},
-		{"medium", "medium", false},
-		{"moderate", "medium", false},
+		{testSeverityMedium, testSeverityMedium, false},
+		{"moderate", testSeverityMedium, false},
 		{"CRITICAL", "critical", false},
 		{"invalid", "", true},
 	}
@@ -253,7 +258,7 @@ func TestSeverityListForThreshold_AllBranches(t *testing.T) {
 	if levels := severityListForThreshold("low"); len(levels) != 4 {
 		t.Fatalf("expected 4 levels for low, got %d", len(levels))
 	}
-	if levels := severityListForThreshold("medium"); len(levels) != 3 {
+	if levels := severityListForThreshold(testSeverityMedium); len(levels) != 3 {
 		t.Fatalf("expected 3 levels for medium, got %d", len(levels))
 	}
 }
@@ -265,7 +270,7 @@ func TestNormalizeFindingSeverity_AllBranches(t *testing.T) {
 	if got := normalizeFindingSeverity("HIGH"); got != "high" {
 		t.Fatalf("expected high, got %q", got)
 	}
-	if got := normalizeFindingSeverity("MODERATE"); got != "medium" {
+	if got := normalizeFindingSeverity("MODERATE"); got != testSeverityMedium {
 		t.Fatalf("expected medium, got %q", got)
 	}
 	if got := normalizeFindingSeverity("LOW"); got != "low" {
@@ -277,19 +282,29 @@ func TestNormalizeFindingSeverity_AllBranches(t *testing.T) {
 }
 
 func TestSecuritySeverityRank_AllBranches(t *testing.T) {
-	if securitySeverityRank("critical") != 4 { t.Fatal("critical should be 4") }
-	if securitySeverityRank("high") != 3 { t.Fatal("high should be 3") }
-	if securitySeverityRank("medium") != 2 { t.Fatal("medium should be 2") }
-	if securitySeverityRank("low") != 1 { t.Fatal("low should be 1") }
-	if securitySeverityRank("bogus") != 0 { t.Fatal("unknown should be 0") }
+	if securitySeverityRank("critical") != 4 {
+		t.Fatal("critical should be 4")
+	}
+	if securitySeverityRank("high") != 3 {
+		t.Fatal("high should be 3")
+	}
+	if securitySeverityRank(testSeverityMedium) != 2 {
+		t.Fatal("medium should be 2")
+	}
+	if securitySeverityRank("low") != 1 {
+		t.Fatal("low should be 1")
+	}
+	if securitySeverityRank("bogus") != 0 {
+		t.Fatal("unknown should be 0")
+	}
 }
 
 func TestDependencyInventoryError(t *testing.T) {
-	notExist := dependencyInventoryError(os.ErrNotExist, "not supported")
-	if notExist.Message != "not supported" {
+	notExist := dependencyInventoryError(os.ErrNotExist, testMsgNotSupported)
+	if notExist.Message != testMsgNotSupported {
 		t.Fatalf("expected 'not supported', got %q", notExist.Message)
 	}
-	other := dependencyInventoryError(errors.New("boom"), "not supported")
+	other := dependencyInventoryError(errors.New("boom"), testMsgNotSupported)
 	if other.Message != "boom" {
 		t.Fatalf("expected 'boom', got %q", other.Message)
 	}
@@ -363,7 +378,7 @@ func TestDetectProjectTypeOrError_Success(t *testing.T) {
 	}
 	detected, domErr := detectProjectTypeOrError(context.Background(), runner, session, "no toolchain")
 	if domErr != nil {
-		t.Fatalf("unexpected error: %#v", domErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, domErr)
 	}
 	if detected.Name != "go" {
 		t.Fatalf("expected go project type, got %q", detected.Name)

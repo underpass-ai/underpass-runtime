@@ -12,6 +12,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testRedisKey        = "sandbox:todo:1"
+	testErrMsgKeyDenial = "expected key policy denial"
+)
+
 type fakeRedisClient struct {
 	get    func(endpoint, key string) (string, error)
 	mget   func(endpoint string, keys []string) ([]any, error)
@@ -82,7 +87,7 @@ func writableRedisSession() domain.Session {
 func TestRedisGetHandler_Success(t *testing.T) {
 	handler := NewRedisGetHandler(&fakeRedisClient{
 		get: func(endpoint, key string) (string, error) {
-			if endpoint == "" || key != "sandbox:todo:1" {
+			if endpoint == "" || key != testRedisKey {
 				t.Fatalf("unexpected get request: endpoint=%q key=%q", endpoint, key)
 			}
 			return "hello", nil
@@ -98,7 +103,7 @@ func TestRedisGetHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["found"] != true {
 		t.Fatalf("expected found=true, got %#v", output["found"])
@@ -113,10 +118,10 @@ func TestRedisGetHandler_DeniesKeyOutsideProfileScopes(t *testing.T) {
 
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.redis","key":"prod:secret"}`))
 	if err == nil {
-		t.Fatal("expected key policy denial")
+		t.Fatal(testErrMsgKeyDenial)
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
@@ -126,7 +131,7 @@ func TestRedisScanHandler_Success(t *testing.T) {
 			if match != "sandbox:*" {
 				t.Fatalf("unexpected scan match: %s", match)
 			}
-			return []string{"sandbox:todo:1", "sandbox:todo:2"}, 0, nil
+			return []string{testRedisKey, "sandbox:todo:2"}, 0, nil
 		},
 	})
 	session := domain.Session{
@@ -139,7 +144,7 @@ func TestRedisScanHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["count"] != 2 {
 		t.Fatalf("unexpected scan count: %#v", output["count"])
@@ -161,14 +166,14 @@ func TestRedisExistsHandler_MapsExecutionErrors(t *testing.T) {
 		t.Fatal("expected execution error")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
 func TestRedisSetHandler_Success(t *testing.T) {
 	handler := NewRedisSetHandler(&fakeRedisClient{
 		set: func(endpoint, key string, value []byte, ttl time.Duration) error {
-			if endpoint == "" || key != "sandbox:todo:1" {
+			if endpoint == "" || key != testRedisKey {
 				t.Fatalf("unexpected set target: endpoint=%q key=%q", endpoint, key)
 			}
 			if string(value) != "hello" {
@@ -192,7 +197,7 @@ func TestRedisSetHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["written"] != true {
 		t.Fatalf("expected written=true, got %#v", output["written"])
@@ -214,7 +219,7 @@ func TestRedisSetHandler_RequiresTTL(t *testing.T) {
 		t.Fatal("expected invalid ttl error")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
@@ -228,10 +233,10 @@ func TestRedisSetHandler_DeniesKeyOutsideProfileScopes(t *testing.T) {
 		json.RawMessage(`{"profile_id":"dev.redis","key":"prod:secret","value":"hello","ttl_seconds":60}`),
 	)
 	if err == nil {
-		t.Fatal("expected key policy denial")
+		t.Fatal(testErrMsgKeyDenial)
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
@@ -250,7 +255,7 @@ func TestRedisSetHandler_DeniesReadOnlyProfile(t *testing.T) {
 		t.Fatal("expected read_only policy denial")
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 	if err.Message != "profile is read_only" {
 		t.Fatalf("unexpected error message: %q", err.Message)
@@ -281,7 +286,7 @@ func TestRedisDelHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["deleted"] != int64(2) {
 		t.Fatalf("expected deleted=2, got %#v", output["deleted"])
@@ -298,10 +303,10 @@ func TestRedisDelHandler_DeniesKeyOutsideProfileScopes(t *testing.T) {
 		json.RawMessage(`{"profile_id":"dev.redis","keys":["prod:secret"]}`),
 	)
 	if err == nil {
-		t.Fatal("expected key policy denial")
+		t.Fatal(testErrMsgKeyDenial)
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
@@ -320,7 +325,7 @@ func TestRedisDelHandler_DeniesReadOnlyProfile(t *testing.T) {
 		t.Fatal("expected read_only policy denial")
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 	if err.Message != "profile is read_only" {
 		t.Fatalf("unexpected error message: %q", err.Message)
@@ -371,7 +376,7 @@ func TestRedisMGetHandler_SuccessAndTruncation(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["found_count"] != 2 {
 		t.Fatalf("unexpected found_count: %#v", output["found_count"])
@@ -430,7 +435,7 @@ func TestLiveRedisClientMethods_EndpointValidation(t *testing.T) {
 	if _, err := client.Exists(ctx, "", []string{"k"}); err == nil {
 		t.Fatal("expected exists endpoint validation error")
 	}
-	if err := client.Set(ctx, "", "k", []byte("v"), time.Second); err == nil {
+	if client.Set(ctx, "", "k", []byte("v"), time.Second) == nil {
 		t.Fatal("expected set endpoint validation error")
 	}
 	if _, err := client.Del(ctx, "", []string{"k"}); err == nil {

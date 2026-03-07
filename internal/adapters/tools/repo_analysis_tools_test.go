@@ -12,6 +12,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testSymbolCreateTodo    = "CreateTodo"
+	testUnexpectedSourceFmt = "unexpected source: %#v"
+)
+
 type fakeRepoAnalysisRunner struct {
 	result app.CommandResult
 	err    error
@@ -32,14 +37,14 @@ func TestRepoTestFailuresSummaryHandler_WithProvidedOutput(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"output":`+mustJSONQuote(output)+`}`))
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	parsed := result.Output.(map[string]any)
 	if parsed["failed_count"] != 3 {
 		t.Fatalf("expected failed_count=3, got %#v", parsed["failed_count"])
 	}
 	if parsed["source"] != "provided_output" {
-		t.Fatalf("unexpected source: %#v", parsed["source"])
+		t.Fatalf(testUnexpectedSourceFmt, parsed["source"])
 	}
 	failures, ok := parsed["failed_tests"].([]summarizedFailure)
 	if !ok {
@@ -66,7 +71,7 @@ func TestRepoStacktraceSummaryHandler_WithProvidedOutput(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"output":`+mustJSONQuote(output)+`}`))
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	parsed := result.Output.(map[string]any)
 	if parsed["trace_count"] != 2 {
@@ -108,7 +113,7 @@ func TestRepoTestFailuresSummaryHandler_RunsTestsWhenOutputMissing(t *testing.T)
 	}
 	parsed := result.Output.(map[string]any)
 	if parsed["source"] != "test_run" {
-		t.Fatalf("unexpected source: %#v", parsed["source"])
+		t.Fatalf(testUnexpectedSourceFmt, parsed["source"])
 	}
 	if parsed["exit_code"] != 1 {
 		t.Fatalf("unexpected exit_code: %#v", parsed["exit_code"])
@@ -131,7 +136,7 @@ func TestRepoChangedFilesHandler_WithProvidedOutput(t *testing.T) {
 		json.RawMessage(`{"output":`+mustJSONQuote(output)+`,"include_untracked":false}`),
 	)
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	parsed := result.Output.(map[string]any)
 	if parsed["changed_count"] != 3 {
@@ -167,7 +172,7 @@ func TestRepoSymbolSearchHandler_WithRunnerOutput(t *testing.T) {
 		},
 	}
 	handler := NewRepoSymbolSearchHandler(runner)
-	session := domain.Session{WorkspacePath: "/workspace/repo", AllowedPaths: []string{"."}}
+	session := domain.Session{WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(
 		context.Background(),
@@ -175,7 +180,7 @@ func TestRepoSymbolSearchHandler_WithRunnerOutput(t *testing.T) {
 		json.RawMessage(`{"symbol":"CreateTodo","path":".","max_results":10}`),
 	)
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	parsed := result.Output.(map[string]any)
 	if parsed["matches_count"] != 2 {
@@ -207,7 +212,7 @@ func TestRepoFindReferencesHandler_ExcludesDeclarations(t *testing.T) {
 		},
 	}
 	handler := NewRepoFindReferencesHandler(runner)
-	session := domain.Session{WorkspacePath: "/workspace/repo", AllowedPaths: []string{"."}}
+	session := domain.Session{WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(
 		context.Background(),
@@ -215,7 +220,7 @@ func TestRepoFindReferencesHandler_ExcludesDeclarations(t *testing.T) {
 		json.RawMessage(`{"symbol":"CreateTodo","include_declarations":false}`),
 	)
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	parsed := result.Output.(map[string]any)
 	if parsed["references_count"] != 1 {
@@ -266,7 +271,7 @@ func TestRepoChangedFilesHandler_RunsGitWhenOutputMissing(t *testing.T) {
 		},
 	}
 	handler := NewRepoChangedFilesHandler(runner)
-	session := domain.Session{WorkspacePath: "/workspace/repo", AllowedPaths: []string{"."}}
+	session := domain.Session{WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{}`))
 	if err != nil {
@@ -274,7 +279,7 @@ func TestRepoChangedFilesHandler_RunsGitWhenOutputMissing(t *testing.T) {
 	}
 	output := result.Output.(map[string]any)
 	if output["source"] != "git" {
-		t.Fatalf("unexpected source: %#v", output["source"])
+		t.Fatalf(testUnexpectedSourceFmt, output["source"])
 	}
 	if output["changed_count"] != 3 {
 		t.Fatalf("unexpected changed_count: %#v", output["changed_count"])
@@ -307,8 +312,8 @@ func TestRepoAnalysisParsingHelpers(t *testing.T) {
 	matches := parseRepoSearchMatches(
 		"/workspace/repo/internal/todo.go:10:func CreateTodo() {}\n"+
 			"/workspace/repo/internal/service.go:20:return CreateTodo()\n",
-		"/workspace/repo",
-		"CreateTodo",
+		testWorkspaceRepoPath,
+		testSymbolCreateTodo,
 		false,
 		true,
 	)
@@ -318,7 +323,7 @@ func TestRepoAnalysisParsingHelpers(t *testing.T) {
 	if matches[0].Column <= 0 {
 		t.Fatalf("expected inferred column > 0, got %d", matches[0].Column)
 	}
-	if inferMatchColumn("no symbol here", "CreateTodo", false, true) != 0 {
+	if inferMatchColumn("no symbol here", testSymbolCreateTodo, false, true) != 0 {
 		t.Fatalf("expected inferMatchColumn fallback column 0")
 	}
 
@@ -343,7 +348,7 @@ func TestRunRepoHelpersWithMissingRunner(t *testing.T) {
 	}
 	if _, err := runRepoSymbolSearch(context.Background(), errorRunner, session, repoSymbolSearchSpec{
 		Path:          "../outside",
-		Symbol:        "CreateTodo",
+		Symbol:        testSymbolCreateTodo,
 		MaxResults:    10,
 		UseRegex:      false,
 		CaseSensitive: true,

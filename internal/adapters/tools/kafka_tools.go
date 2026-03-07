@@ -24,8 +24,8 @@ const (
 	kafkaKeyPartition             = "partition"
 	kafkaOffsetLatest             = "latest"
 	kafkaOffsetEarliest           = "earliest"
-	kafkaOffsetAbsolute              = "absolute"
-	errKafkaOffsetInvalid            = "offset must be earliest/latest or a non-negative integer"
+	kafkaOffsetAbsolute           = "absolute"
+	errKafkaOffsetInvalid         = "offset must be earliest/latest or a non-negative integer"
 )
 
 type KafkaConsumeHandler struct {
@@ -128,7 +128,7 @@ func (h *KafkaConsumeHandler) Invoke(ctx context.Context, session domain.Session
 		TimeoutMS:   2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid kafka.consume args",
@@ -242,13 +242,13 @@ func kafkaConsumeFormatMessages(messages []kafkaConsumedMessage, maxBytes int) (
 		totalBytes += len(keyBytes) + len(valueBytes)
 		out = append(out, map[string]any{
 			kafkaKeyPartition: msg.Partition,
-			"offset":         msg.Offset,
-			"timestamp_unix": msg.Time.Unix(),
-			"key_base64":     base64.StdEncoding.EncodeToString(keyBytes),
-			"value_base64":   base64.StdEncoding.EncodeToString(valueBytes),
-			"size_bytes":     len(keyBytes) + len(valueBytes),
-			"key_trimmed":    keyTrimmed,
-			"value_trimmed":  valueTrimmed,
+			"offset":          msg.Offset,
+			"timestamp_unix":  msg.Time.Unix(),
+			"key_base64":      base64.StdEncoding.EncodeToString(keyBytes),
+			"value_base64":    base64.StdEncoding.EncodeToString(valueBytes),
+			"size_bytes":      len(keyBytes) + len(valueBytes),
+			"key_trimmed":     keyTrimmed,
+			"value_trimmed":   valueTrimmed,
 		})
 	}
 	return out, totalBytes, truncated
@@ -297,7 +297,7 @@ func (h *KafkaProduceHandler) Invoke(ctx context.Context, session domain.Session
 		MaxBytes:      1024 * 1024,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid kafka.produce args",
@@ -392,9 +392,9 @@ func (h *KafkaProduceHandler) Invoke(ctx context.Context, session domain.Session
 			kafkaKeyProfileID: profile.ID,
 			"topic":           topic,
 			kafkaKeyPartition: request.Partition,
-			"key_bytes":   len(keyBytes),
-			"value_bytes": len(valueBytes),
-			"produced":    true,
+			"key_bytes":       len(keyBytes),
+			"value_bytes":     len(valueBytes),
+			"produced":        true,
 		},
 	}, nil
 }
@@ -409,7 +409,7 @@ func (h *KafkaTopicMetadataHandler) Invoke(ctx context.Context, session domain.S
 		Topic     string `json:"topic"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid kafka.topic_metadata args",
@@ -455,12 +455,12 @@ func (h *KafkaTopicMetadataHandler) Invoke(ctx context.Context, session domain.S
 	for _, partition := range partitions {
 		outputPartitions = append(outputPartitions, map[string]any{
 			kafkaKeyPartition: partition.PartitionID,
-			"leader_host":   partition.LeaderHost,
-			"leader_port":   partition.LeaderPort,
-			"replica_ids":   partition.ReplicaIDs,
-			"isr_ids":       partition.ISRIDs,
-			"replica_count": len(partition.ReplicaIDs),
-			"isr_count":     len(partition.ISRIDs),
+			"leader_host":     partition.LeaderHost,
+			"leader_port":     partition.LeaderPort,
+			"replica_ids":     partition.ReplicaIDs,
+			"isr_ids":         partition.ISRIDs,
+			"replica_count":   len(partition.ReplicaIDs),
+			"isr_count":       len(partition.ISRIDs),
 		})
 	}
 
@@ -802,4 +802,3 @@ func topicPatternMatch(pattern, topic string) bool {
 	}
 	return false
 }
-

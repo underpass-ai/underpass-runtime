@@ -79,7 +79,7 @@ func (h *MongoFindHandler) Invoke(ctx context.Context, session domain.Session, a
 		TimeoutMS: 3000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid mongo.find args",
@@ -173,7 +173,7 @@ func (h *MongoAggregateHandler) Invoke(ctx context.Context, session domain.Sessi
 		TimeoutMS: 3000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid mongo.aggregate args",

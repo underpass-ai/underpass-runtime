@@ -12,6 +12,15 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testLicenseUnknown       = "unknown"
+	testLicenseUnknownPolicy = "unknown_policy"
+	testLicenseNameLeftPad   = "left-pad"
+	testLicenseGPL30         = "GPL-3.0"
+	testLicenseVersion100    = "1.0.0"
+	testLicenseCommandCargo  = "cargo"
+)
+
 func TestSecurityLicenseCheckHandler_DeniedLicenseFailsStatus(t *testing.T) {
 	root := t.TempDir()
 	packageJSON := `{"name":"demo","version":"1.0.0","private":true}`
@@ -34,16 +43,7 @@ func TestSecurityLicenseCheckHandler_DeniedLicenseFailsStatus(t *testing.T) {
 			if spec.Command != "npm" {
 				t.Fatalf("expected npm command, got %q", spec.Command)
 			}
-			if callIndex == 0 {
-				if len(spec.Args) != 3 || spec.Args[0] != "ls" || spec.Args[1] != "--json" || spec.Args[2] != "--all" {
-					t.Fatalf("unexpected dependency inventory args: %#v", spec.Args)
-				}
-			}
-			if callIndex == 1 {
-				if len(spec.Args) != 4 || spec.Args[3] != "--long" {
-					t.Fatalf("unexpected license enrichment args: %#v", spec.Args)
-				}
-			}
+			assertNpmLicenseArgs(t, callIndex, spec)
 			return app.CommandResult{ExitCode: 0, Output: npmOutput}, nil
 		},
 	}
@@ -51,9 +51,9 @@ func TestSecurityLicenseCheckHandler_DeniedLicenseFailsStatus(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":            ".",
-		"denied_licenses": []string{"GPL-3.0"},
-		"unknown_policy":  "warn",
+		"path":                   ".",
+		"denied_licenses":        []string{testLicenseGPL30},
+		testLicenseUnknownPolicy: "warn",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected security.license_check error: %#v", err)
@@ -71,6 +71,20 @@ func TestSecurityLicenseCheckHandler_DeniedLicenseFailsStatus(t *testing.T) {
 	}
 	if output["denied_count"] != 1 {
 		t.Fatalf("expected denied_count=1, got %#v", output["denied_count"])
+	}
+}
+
+func assertNpmLicenseArgs(t *testing.T, callIndex int, spec app.CommandSpec) {
+	t.Helper()
+	if callIndex == 0 {
+		if len(spec.Args) != 3 || spec.Args[0] != "ls" || spec.Args[1] != "--json" || spec.Args[2] != "--all" {
+			t.Fatalf("unexpected dependency inventory args: %#v", spec.Args)
+		}
+	}
+	if callIndex == 1 {
+		if len(spec.Args) != 4 || spec.Args[3] != "--long" {
+			t.Fatalf("unexpected license enrichment args: %#v", spec.Args)
+		}
 	}
 }
 
@@ -96,8 +110,8 @@ func TestSecurityLicenseCheckHandler_UnknownPolicyDeny(t *testing.T) {
 		},
 	}
 	result, err := NewSecurityLicenseCheckHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"path":           ".",
-		"unknown_policy": "deny",
+		"path":                   ".",
+		testLicenseUnknownPolicy: "deny",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected security.license_check invocation error: %#v", err)
@@ -114,75 +128,82 @@ func TestRuntimeLicenseParsingAndEnrichment(t *testing.T) {
     {"name":"tokio","version":"1.0.0","license":""}
   ]
 }`
-	rustMap, err := parseRustLicenseMap(metadata, 50)
-	if err != nil {
-		t.Fatalf("parseRustLicenseMap failed: %v", err)
-	}
-	if len(rustMap) != 1 {
-		t.Fatalf("unexpected rust license map size: %d", len(rustMap))
-	}
 
-	nodeRunner := &fakeSWERuntimeCommandRunner{
-		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command != "npm" {
-				t.Fatalf("expected npm command, got %q", spec.Command)
-			}
-			return app.CommandResult{
-				ExitCode: 0,
-				Output:   `{"dependencies":{"left-pad":{"version":"1.3.0","license":"MIT"}}}`,
-			}, nil
-		},
-	}
-	nodeEntries := []dependencyEntry{{Name: "left-pad", Version: "1.3.0", Ecosystem: "node", License: "unknown"}}
-	enrichedNode, command, _, err := enrichDependencyLicenses(
-		context.Background(),
-		nodeRunner,
-		domain.Session{WorkspacePath: t.TempDir()},
-		licenseEnrichmentInput{
-			detected: projectType{Name: "node"}, scanPath: ".",
-			entries: nodeEntries, maxDependencies: 100,
-		},
-	)
-	if err != nil {
-		t.Fatalf("enrichDependencyLicenses node failed: %v", err)
-	}
-	if len(command) == 0 || command[0] != "npm" {
-		t.Fatalf("unexpected node enrichment command: %#v", command)
-	}
-	if len(enrichedNode) != 1 || enrichedNode[0].License != "MIT" {
-		t.Fatalf("unexpected node enriched entries: %#v", enrichedNode)
-	}
+	t.Run("parse_rust_license_map", func(t *testing.T) {
+		rustMap, err := parseRustLicenseMap(metadata, 50)
+		if err != nil {
+			t.Fatalf("parseRustLicenseMap failed: %v", err)
+		}
+		if len(rustMap) != 1 {
+			t.Fatalf("unexpected rust license map size: %d", len(rustMap))
+		}
+	})
 
-	rustRunner := &fakeSWERuntimeCommandRunner{
-		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command != "cargo" {
-				t.Fatalf("expected cargo command, got %q", spec.Command)
-			}
-			return app.CommandResult{
-				ExitCode: 0,
-				Output:   metadata,
-			}, nil
-		},
-	}
-	rustEntries := []dependencyEntry{{Name: "serde", Version: "1.0.0", Ecosystem: "rust", License: "unknown"}}
-	enrichedRust, rustCommand, _, err := enrichDependencyLicenses(
-		context.Background(),
-		rustRunner,
-		domain.Session{WorkspacePath: t.TempDir()},
-		licenseEnrichmentInput{
-			detected: projectType{Name: "rust"}, scanPath: ".",
-			entries: rustEntries, maxDependencies: 100,
-		},
-	)
-	if err != nil {
-		t.Fatalf("enrichDependencyLicenses rust failed: %v", err)
-	}
-	if len(rustCommand) == 0 || rustCommand[0] != "cargo" {
-		t.Fatalf("unexpected rust enrichment command: %#v", rustCommand)
-	}
-	if len(enrichedRust) != 1 || enrichedRust[0].License != "MIT" {
-		t.Fatalf("unexpected rust enriched entries: %#v", enrichedRust)
-	}
+	t.Run("enrich_node", func(t *testing.T) {
+		nodeRunner := &fakeSWERuntimeCommandRunner{
+			run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
+				if spec.Command != "npm" {
+					t.Fatalf("expected npm command, got %q", spec.Command)
+				}
+				return app.CommandResult{
+					ExitCode: 0,
+					Output:   `{"dependencies":{"left-pad":{"version":"1.3.0","license":"MIT"}}}`,
+				}, nil
+			},
+		}
+		nodeEntries := []dependencyEntry{{Name: testLicenseNameLeftPad, Version: "1.3.0", Ecosystem: "node", License: testLicenseUnknown}}
+		enrichedNode, command, _, err := enrichDependencyLicenses(
+			context.Background(),
+			nodeRunner,
+			domain.Session{WorkspacePath: t.TempDir()},
+			licenseEnrichmentInput{
+				detected: projectType{Name: "node"}, scanPath: ".",
+				entries: nodeEntries, maxDependencies: 100,
+			},
+		)
+		if err != nil {
+			t.Fatalf("enrichDependencyLicenses node failed: %v", err)
+		}
+		if len(command) == 0 || command[0] != "npm" {
+			t.Fatalf("unexpected node enrichment command: %#v", command)
+		}
+		if len(enrichedNode) != 1 || enrichedNode[0].License != "MIT" {
+			t.Fatalf("unexpected node enriched entries: %#v", enrichedNode)
+		}
+	})
+
+	t.Run("enrich_rust", func(t *testing.T) {
+		rustRunner := &fakeSWERuntimeCommandRunner{
+			run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
+				if spec.Command != testLicenseCommandCargo {
+					t.Fatalf("expected cargo command, got %q", spec.Command)
+				}
+				return app.CommandResult{
+					ExitCode: 0,
+					Output:   metadata,
+				}, nil
+			},
+		}
+		rustEntries := []dependencyEntry{{Name: "serde", Version: testLicenseVersion100, Ecosystem: "rust", License: testLicenseUnknown}}
+		enrichedRust, rustCommand, _, err := enrichDependencyLicenses(
+			context.Background(),
+			rustRunner,
+			domain.Session{WorkspacePath: t.TempDir()},
+			licenseEnrichmentInput{
+				detected: projectType{Name: "rust"}, scanPath: ".",
+				entries: rustEntries, maxDependencies: 100,
+			},
+		)
+		if err != nil {
+			t.Fatalf("enrichDependencyLicenses rust failed: %v", err)
+		}
+		if len(rustCommand) == 0 || rustCommand[0] != testLicenseCommandCargo {
+			t.Fatalf("unexpected rust enrichment command: %#v", rustCommand)
+		}
+		if len(enrichedRust) != 1 || enrichedRust[0].License != "MIT" {
+			t.Fatalf("unexpected rust enriched entries: %#v", enrichedRust)
+		}
+	})
 }
 
 func TestSecurityLicenseCheckHandler_InvalidArgs(t *testing.T) {
@@ -213,7 +234,7 @@ func TestCheckTokensAgainstAllowed_AllBranches(t *testing.T) {
 
 	// token not found, unknown=true
 	status, reason = checkTokensAgainstAllowed([]string{"GPL"}, map[string]struct{}{"MIT": {}}, true)
-	if status != "unknown" {
+	if status != testLicenseUnknown {
 		t.Fatalf("expected unknown, got %q", status)
 	}
 
@@ -235,7 +256,7 @@ func TestParseLicenseCheckRequest_AllBranches(t *testing.T) {
 	// valid with all fields
 	params, err := parseLicenseCheckRequest(json.RawMessage(`{"path":".","unknown_policy":"deny","denied_licenses":["GPL-3.0"],"allowed_licenses":["MIT"]}`))
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	if params.unknownPolicy != "deny" {
 		t.Fatalf("expected deny, got %q", params.unknownPolicy)
@@ -244,7 +265,7 @@ func TestParseLicenseCheckRequest_AllBranches(t *testing.T) {
 	// empty unknown_policy defaults to warn
 	params2, err2 := parseLicenseCheckRequest(json.RawMessage(`{"path":"."}`))
 	if err2 != nil {
-		t.Fatalf("unexpected error: %#v", err2)
+		t.Fatalf(testUnexpectedErrorGoFmt, err2)
 	}
 	if params2.unknownPolicy != "warn" {
 		t.Fatalf("expected warn default, got %q", params2.unknownPolicy)
@@ -255,7 +276,7 @@ func TestNormalizeFoundLicense(t *testing.T) {
 	if got := normalizeFoundLicense("mit"); got != "MIT" {
 		t.Fatalf("expected MIT, got %q", got)
 	}
-	if got := normalizeFoundLicense(""); got != "unknown" {
+	if got := normalizeFoundLicense(""); got != testLicenseUnknown {
 		t.Fatalf("expected unknown, got %q", got)
 	}
 	if got := normalizeFoundLicense("Apache-2.0 OR MIT"); !strings.Contains(got, "APACHE-2.0") || !strings.Contains(got, "MIT") {
@@ -275,17 +296,17 @@ func TestNormalizeFoundLicense(t *testing.T) {
 
 func TestApplyDependencyLicenses(t *testing.T) {
 	entries := []dependencyEntry{
-		{Name: "left-pad", Version: "1.0", Ecosystem: "node", License: "unknown"},
-		{Name: "right-pad", Version: "2.0", Ecosystem: "node", License: "unknown"},
+		{Name: testLicenseNameLeftPad, Version: "1.0", Ecosystem: "node", License: testLicenseUnknown},
+		{Name: "right-pad", Version: "2.0", Ecosystem: "node", License: testLicenseUnknown},
 	}
 	licenseMap := map[string]string{
-		dependencyLicenseLookupKey("node", "left-pad", "1.0"): "MIT",
+		dependencyLicenseLookupKey("node", testLicenseNameLeftPad, "1.0"): "MIT",
 	}
 	applyDependencyLicenses(entries, licenseMap)
 	if entries[0].License != "MIT" {
 		t.Fatalf("expected MIT, got %q", entries[0].License)
 	}
-	if entries[1].License != "unknown" {
+	if entries[1].License != testLicenseUnknown {
 		t.Fatalf("expected unknown unchanged, got %q", entries[1].License)
 	}
 
@@ -328,11 +349,11 @@ func TestSecurityLicenseCheckHandler_EnrichmentFailsButEntriesExist(t *testing.T
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}, Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes}}
 
 	result, toolErr := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":           ".",
-		"unknown_policy": "warn",
+		"path":                   ".",
+		testLicenseUnknownPolicy: "warn",
 	}))
 	if toolErr != nil {
-		t.Fatalf("unexpected error: %#v", toolErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, toolErr)
 	}
 	output := result.Output.(map[string]any)
 	// Even though enrichment failed, the handler should still produce results
@@ -374,14 +395,14 @@ func TestSecurityLicenseCheckHandler_InventoryRunErrWithEmptyEnriched(t *testing
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}, Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes}}
 
 	result, toolErr := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":           ".",
-		"unknown_policy": "warn",
+		"path":                   ".",
+		testLicenseUnknownPolicy: "warn",
 	}))
 	// With 0 dependencies the result should still be returned (pass status).
 	// inventory.RunErr is nil here since runner.Run doesn't return an error,
 	// so the handler returns normally with zero deps.
 	if toolErr != nil {
-		t.Fatalf("unexpected error: %#v", toolErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, toolErr)
 	}
 	output := result.Output.(map[string]any)
 	if output["dependencies_checked"].(int) != 0 {
@@ -422,11 +443,11 @@ func TestSecurityLicenseCheckHandler_WarnStatus(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, toolErr := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"path":           ".",
-		"unknown_policy": "warn",
+		"path":                   ".",
+		testLicenseUnknownPolicy: "warn",
 	}))
 	if toolErr != nil {
-		t.Fatalf("unexpected error: %#v", toolErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, toolErr)
 	}
 	output := result.Output.(map[string]any)
 	if output["status"] != "warn" {
@@ -461,7 +482,7 @@ func TestEnrichDependencyLicenses_EmptyEntries(t *testing.T) {
 		},
 	)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(enriched) != 0 {
 		t.Fatalf("expected empty enriched, got %d entries", len(enriched))
@@ -498,13 +519,13 @@ func TestEnrichDependencyLicenses_DefaultSwitchCase(t *testing.T) {
 		},
 	)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(enriched) != 1 {
 		t.Fatalf("expected 1 enriched entry, got %d", len(enriched))
 	}
 	// Empty license should be normalized to "unknown" in the enriched copy.
-	if enriched[0].License != "unknown" {
+	if enriched[0].License != testLicenseUnknown {
 		t.Fatalf("expected unknown license, got %q", enriched[0].License)
 	}
 	if command != nil {
@@ -530,7 +551,7 @@ func TestEnrichDependencyLicenses_NodeParseErrorNoRunErr(t *testing.T) {
 		},
 	}
 	entries := []dependencyEntry{
-		{Name: "left-pad", Version: "1.0.0", Ecosystem: "node", License: "unknown"},
+		{Name: testLicenseNameLeftPad, Version: testLicenseVersion100, Ecosystem: "node", License: testLicenseUnknown},
 	}
 	enriched, command, _, err := enrichDependencyLicenses(
 		context.Background(),
@@ -565,7 +586,7 @@ func TestEnrichDependencyLicenses_RustParseErrorNoRunErr(t *testing.T) {
 		},
 	}
 	entries := []dependencyEntry{
-		{Name: "serde", Version: "1.0.0", Ecosystem: "rust", License: "unknown"},
+		{Name: "serde", Version: testLicenseVersion100, Ecosystem: "rust", License: testLicenseUnknown},
 	}
 	_, command, _, err := enrichDependencyLicenses(
 		context.Background(),
@@ -581,7 +602,7 @@ func TestEnrichDependencyLicenses_RustParseErrorNoRunErr(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected parse error for rust, got nil")
 	}
-	if len(command) == 0 || command[0] != "cargo" {
+	if len(command) == 0 || command[0] != testLicenseCommandCargo {
 		t.Fatalf("expected cargo command, got %v", command)
 	}
 }
@@ -594,7 +615,7 @@ func TestParseRustLicenseMap_EmptyName(t *testing.T) {
 	metadata := `{"packages":[{"name":"","version":"1.0.0","license":"MIT"}]}`
 	m, err := parseRustLicenseMap(metadata, 50)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(m) != 0 {
 		t.Fatalf("expected empty map for empty-name package, got %d entries", len(m))
@@ -613,7 +634,7 @@ func TestParseRustLicenseMap_Truncation(t *testing.T) {
 	]}`
 	m, err := parseRustLicenseMap(metadata, 2)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(m) != 2 {
 		t.Fatalf("expected 2 entries (truncated), got %d", len(m))
@@ -632,7 +653,7 @@ func TestParseRustLicenseMap_EmptyLicense(t *testing.T) {
 	]}`
 	m, err := parseRustLicenseMap(metadata, 50)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(m) != 1 {
 		t.Fatalf("expected 1 entry (empty license skipped), got %d", len(m))
@@ -655,7 +676,7 @@ func TestParseRustLicenseMap_EmptyLicense(t *testing.T) {
 
 func TestNormalizeFoundLicense_UnknownSingleToken(t *testing.T) {
 	// "UNKNOWN" produces one token ["UNKNOWN"], len==1, matches tokens[0]=="UNKNOWN"
-	if got := normalizeFoundLicense("UNKNOWN"); got != "unknown" {
+	if got := normalizeFoundLicense("UNKNOWN"); got != testLicenseUnknown {
 		t.Fatalf("expected unknown, got %q", got)
 	}
 }
@@ -670,7 +691,7 @@ func TestNormalizeFoundLicense_NAInput(t *testing.T) {
 	// However "NONE" goes through licenseExpressionTokens → parts=["NONE"]
 	// → normalizeLicenseToken("NONE") = "UNKNOWN" → tokens=["UNKNOWN"]
 	// → len==1, tokens[0]=="UNKNOWN" → returns "unknown"
-	if got := normalizeFoundLicense("NONE"); got != "unknown" {
+	if got := normalizeFoundLicense("NONE"); got != testLicenseUnknown {
 		t.Fatalf("expected unknown for NONE, got %q", got)
 	}
 }
@@ -701,8 +722,8 @@ func TestNormalizeFoundLicense_SingleNonUnknownToken(t *testing.T) {
 }
 
 func TestLicenseClassification_Verdict(t *testing.T) {
-	denied := []dependencyEntry{{Name: "bad", Version: "1.0", Ecosystem: "go", License: "GPL-3.0"}}
-	c := classifyLicenseEntries(denied, nil, []string{"GPL-3.0"}, "warn")
+	denied := []dependencyEntry{{Name: "bad", Version: "1.0", Ecosystem: "go", License: testLicenseGPL30}}
+	c := classifyLicenseEntries(denied, nil, []string{testLicenseGPL30}, "warn")
 	if c.Status != "fail" || c.ExitCode != 1 || c.DeniedCount != 1 {
 		t.Fatalf("expected fail/1/denied=1, got %s/%d/denied=%d", c.Status, c.ExitCode, c.DeniedCount)
 	}

@@ -15,15 +15,21 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testMkdirErrorFmt     = "mkdir: %v"
+	testWriteFileErrorFmt = "write file: %v"
+	testDistATxt          = "dist/a.txt"
+)
+
 func TestArtifactUploadHandler_UploadsFileAsArtifact(t *testing.T) {
 	workspace := t.TempDir()
 	filePath := filepath.Join(workspace, "dist", "app.txt")
 	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
+		t.Fatalf(testMkdirErrorFmt, err)
 	}
 	const content = "hello artifact\n"
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
-		t.Fatalf("write file: %v", err)
+		t.Fatalf(testWriteFileErrorFmt, err)
 	}
 
 	handler := NewArtifactUploadHandler(nil)
@@ -39,7 +45,7 @@ func TestArtifactUploadHandler_UploadsFileAsArtifact(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["artifact_name"] != "release.txt" {
 		t.Fatalf("unexpected artifact_name: %#v", output["artifact_name"])
@@ -73,7 +79,7 @@ func TestArtifactUploadHandler_PathRequired(t *testing.T) {
 		t.Fatal("expected invalid_argument error")
 	}
 	if err.Code != "invalid_argument" {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }
 
@@ -81,11 +87,11 @@ func TestArtifactDownloadHandler_Base64(t *testing.T) {
 	workspace := t.TempDir()
 	filePath := filepath.Join(workspace, "bin", "payload.bin")
 	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
+		t.Fatalf(testMkdirErrorFmt, err)
 	}
 	content := []byte{0x00, 0x01, 0x02, 0x03}
 	if err := os.WriteFile(filePath, content, 0o644); err != nil {
-		t.Fatalf("write file: %v", err)
+		t.Fatalf(testWriteFileErrorFmt, err)
 	}
 
 	handler := NewArtifactDownloadHandler(nil)
@@ -115,7 +121,7 @@ func TestArtifactDownloadHandler_UTF8Truncated(t *testing.T) {
 	filePath := filepath.Join(workspace, "notes.txt")
 	longContent := strings.Repeat("a", 2048)
 	if err := os.WriteFile(filePath, []byte(longContent), 0o644); err != nil {
-		t.Fatalf("write file: %v", err)
+		t.Fatalf(testWriteFileErrorFmt, err)
 	}
 
 	handler := NewArtifactDownloadHandler(nil)
@@ -142,7 +148,7 @@ func TestArtifactDownloadHandler_UTF8Truncated(t *testing.T) {
 func TestArtifactListHandler_ListsPattern(t *testing.T) {
 	workspace := t.TempDir()
 	files := map[string]string{
-		"dist/a.txt":       "a",
+		testDistATxt:       "a",
 		"dist/b.log":       "b",
 		"dist/sub/c.txt":   "c",
 		"dist/sub/skip.md": "d",
@@ -150,10 +156,10 @@ func TestArtifactListHandler_ListsPattern(t *testing.T) {
 	for rel, content := range files {
 		full := filepath.Join(workspace, rel)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir: %v", err)
+			t.Fatalf(testMkdirErrorFmt, err)
 		}
 		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
-			t.Fatalf("write file: %v", err)
+			t.Fatalf(testWriteFileErrorFmt, err)
 		}
 	}
 
@@ -178,7 +184,7 @@ func TestArtifactListHandler_ListsPattern(t *testing.T) {
 		paths = append(paths, entry.Path)
 	}
 	slices.Sort(paths)
-	expected := []string{"dist/a.txt", "dist/sub/c.txt"}
+	expected := []string{testDistATxt, "dist/sub/c.txt"}
 	if !slices.Equal(paths, expected) {
 		t.Fatalf("unexpected listed paths: %#v", paths)
 	}
@@ -241,7 +247,7 @@ func TestArtifactListHandler_KubernetesRemoteListing(t *testing.T) {
 	}
 	output := result.Output.(map[string]any)
 	entries := output["artifacts"].([]artifactListEntry)
-	if len(entries) != 1 || entries[0].Path != "dist/a.txt" {
+	if len(entries) != 1 || entries[0].Path != testDistATxt {
 		t.Fatalf("unexpected remote list entries: %#v", entries)
 	}
 }
@@ -279,7 +285,7 @@ func TestCollectFlatArtifactEntries_TwoFiles(t *testing.T) {
 
 	entries, err := collectFlatArtifactEntries(workspace, workspace, "", 10)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d: %v", len(entries), entries)
@@ -302,13 +308,13 @@ func TestCollectFlatArtifactEntries_MaxEntriesLimit(t *testing.T) {
 	// Create three files
 	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
 		if err := os.WriteFile(filepath.Join(workspace, name), []byte("x"), 0o644); err != nil {
-			t.Fatalf("write file: %v", err)
+			t.Fatalf(testWriteFileErrorFmt, err)
 		}
 	}
 
 	entries, err := collectFlatArtifactEntries(workspace, workspace, "", 1)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(entries) > 1 {
 		t.Fatalf("expected at most 1 entry, got %d", len(entries))

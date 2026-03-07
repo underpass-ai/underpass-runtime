@@ -19,27 +19,48 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/app"
 )
 
+const (
+	testHTTPTenantAuth        = "tenant-auth"
+	testHTTPRoleDeveloper     = "developer"
+	testHTTPSharedToken       = "workspace-shared-token"
+	testHTTPActorAuth         = "actor-auth"
+	testHTTPKeyTenantID       = "tenant_id"
+	testHTTPKeyActorID        = "actor_id"
+	testHTTPKeyRoles          = "roles"
+	testHTTPKeyPrincipal      = "principal"
+	testHTTPKeySession        = "session"
+	testHTTPKeyID             = "id"
+	testHTTPKeyInvocation     = "invocation"
+	testHTTPSourceRepoPath    = "source_repo_path"
+	testPathMetrics           = "/metrics"
+	testPathSessionTools      = "/tools"
+	testPathFSReadFileInvoke  = "/tools/fs.read_file/invoke"
+	testPathInvocationsPrefix = "/v1/invocations/"
+	testPathSessionsPrefix    = "/v1/sessions/"
+	testSeedFile              = "seed.txt"
+)
+
 func TestHTTPAPI_EndToEndToolExecutionInWorkspace(t *testing.T) {
 	handler, sourcePath := setupHTTPHandler(t)
 
 	createPayload := map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-1",
-			"roles":     []string{"developer"},
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-1",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
-		"source_repo_path":   sourcePath,
-		"expires_in_seconds": 3600,
+		testHTTPSourceRepoPath: sourcePath,
+		"expires_in_seconds":   3600,
 	}
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", createPayload)
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, createPayload)
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201, got %d body=%s", createResp.StatusCode, createResp.Body.String())
 	}
 
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	session := createBody["session"].(map[string]any)
-	sessionID := session["id"].(string)
+	session := createBody[testHTTPKeySession].(map[string]any)
+	sessionID := session[testHTTPKeyID].(string)
 	workspacePath := session["workspace_path"].(string)
 
 	invokePayload := map[string]any{
@@ -50,7 +71,7 @@ func TestHTTPAPI_EndToEndToolExecutionInWorkspace(t *testing.T) {
 			"create_parents": true,
 		},
 	}
-	invokeResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions/"+sessionID+"/tools/fs.write_file/invoke", invokePayload)
+	invokeResp := doJSONRequest(t, handler, http.MethodPost, testPathSessionsPrefix+sessionID+"/tools/fs.write_file/invoke", invokePayload)
 	if invokeResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d body=%s", invokeResp.StatusCode, invokeResp.Body.String())
 	}
@@ -60,14 +81,14 @@ func TestHTTPAPI_EndToEndToolExecutionInWorkspace(t *testing.T) {
 	}
 
 	readPayload := map[string]any{"args": map[string]any{"path": "notes/result.txt"}}
-	readResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions/"+sessionID+"/tools/fs.read_file/invoke", readPayload)
+	readResp := doJSONRequest(t, handler, http.MethodPost, testPathSessionsPrefix+sessionID+testPathFSReadFileInvoke, readPayload)
 	if readResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 on fs.read_file, got %d body=%s", readResp.StatusCode, readResp.Body.String())
 	}
 
 	var readBody map[string]any
 	mustDecode(t, readResp.Body.Bytes(), &readBody)
-	invocation := readBody["invocation"].(map[string]any)
+	invocation := readBody[testHTTPKeyInvocation].(map[string]any)
 	output := invocation["output"].(map[string]any)
 	if output["content"].(string) != "workspace ok" {
 		t.Fatalf("unexpected read content: %#v", output)
@@ -78,19 +99,19 @@ func TestHTTPAPI_ApprovalRequiredAndRouteErrors(t *testing.T) {
 	handler, _ := setupHTTPHandler(t)
 
 	createPayload := map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-2",
-			"roles":     []string{"developer"},
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-2",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
 	}
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", createPayload)
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, createPayload)
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", createResp.StatusCode)
 	}
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
 	denyPayload := map[string]any{
 		"approved": false,
@@ -99,17 +120,17 @@ func TestHTTPAPI_ApprovalRequiredAndRouteErrors(t *testing.T) {
 			"content": "denied",
 		},
 	}
-	denyResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions/"+sessionID+"/tools/fs.write_file/invoke", denyPayload)
+	denyResp := doJSONRequest(t, handler, http.MethodPost, testPathSessionsPrefix+sessionID+"/tools/fs.write_file/invoke", denyPayload)
 	if denyResp.StatusCode != http.StatusPreconditionRequired {
 		t.Fatalf("expected 428, got %d body=%s", denyResp.StatusCode, denyResp.Body.String())
 	}
 
-	notFoundResp := doJSONRequest(t, handler, http.MethodGet, "/v1/sessions/"+sessionID+"/unknown", nil)
+	notFoundResp := doJSONRequest(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID+"/unknown", nil)
 	if notFoundResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", notFoundResp.StatusCode)
 	}
 
-	methodResp := doJSONRequest(t, handler, http.MethodGet, "/v1/sessions", nil)
+	methodResp := doJSONRequest(t, handler, http.MethodGet, testSharedSessionsPath, nil)
 	if methodResp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d", methodResp.StatusCode)
 	}
@@ -122,7 +143,7 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 	if healthResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 healthz, got %d", healthResp.StatusCode)
 	}
-	metricsResp := doJSONRequest(t, handler, http.MethodGet, "/metrics", nil)
+	metricsResp := doJSONRequest(t, handler, http.MethodGet, testPathMetrics, nil)
 	if metricsResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 metrics, got %d body=%s", metricsResp.StatusCode, metricsResp.Body.String())
 	}
@@ -130,13 +151,13 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 		t.Fatalf("expected metrics payload, got: %s", metricsResp.Body.String())
 	}
 
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-3",
-			"roles":     []string{"developer"},
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-3",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
-		"source_repo_path": sourcePath,
+		testHTTPSourceRepoPath: sourcePath,
 	})
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201 create, got %d body=%s", createResp.StatusCode, createResp.Body.String())
@@ -144,10 +165,10 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
-	invokeResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions/"+sessionID+"/tools/fs.read_file/invoke", map[string]any{
-		"args": map[string]any{"path": "seed.txt"},
+	invokeResp := doJSONRequest(t, handler, http.MethodPost, testPathSessionsPrefix+sessionID+testPathFSReadFileInvoke, map[string]any{
+		"args": map[string]any{"path": testSeedFile},
 	})
 	if invokeResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 invoke, got %d body=%s", invokeResp.StatusCode, invokeResp.Body.String())
@@ -155,24 +176,24 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 
 	var invokeBody map[string]any
 	mustDecode(t, invokeResp.Body.Bytes(), &invokeBody)
-	invocationID := invokeBody["invocation"].(map[string]any)["id"].(string)
+	invocationID := invokeBody[testHTTPKeyInvocation].(map[string]any)[testHTTPKeyID].(string)
 
-	getResp := doJSONRequest(t, handler, http.MethodGet, "/v1/invocations/"+invocationID, nil)
+	getResp := doJSONRequest(t, handler, http.MethodGet, testPathInvocationsPrefix+invocationID, nil)
 	if getResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 invocation get, got %d", getResp.StatusCode)
 	}
 
-	logsResp := doJSONRequest(t, handler, http.MethodGet, "/v1/invocations/"+invocationID+"/logs", nil)
+	logsResp := doJSONRequest(t, handler, http.MethodGet, testPathInvocationsPrefix+invocationID+"/logs", nil)
 	if logsResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 invocation logs, got %d", logsResp.StatusCode)
 	}
 
-	artifactsResp := doJSONRequest(t, handler, http.MethodGet, "/v1/invocations/"+invocationID+"/artifacts", nil)
+	artifactsResp := doJSONRequest(t, handler, http.MethodGet, testPathInvocationsPrefix+invocationID+"/artifacts", nil)
 	if artifactsResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 invocation artifacts, got %d", artifactsResp.StatusCode)
 	}
 
-	postInvokeMetrics := doJSONRequest(t, handler, http.MethodGet, "/metrics", nil)
+	postInvokeMetrics := doJSONRequest(t, handler, http.MethodGet, testPathMetrics, nil)
 	if postInvokeMetrics.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 metrics after invoke, got %d", postInvokeMetrics.StatusCode)
 	}
@@ -180,17 +201,17 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 		t.Fatalf("expected fs.read_file succeeded counter in metrics, got: %s", postInvokeMetrics.Body.String())
 	}
 
-	malformedResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions/"+sessionID+"/tools/fs.read_file/invoke", json.RawMessage(`{"args":`))
+	malformedResp := doJSONRequest(t, handler, http.MethodPost, testPathSessionsPrefix+sessionID+testPathFSReadFileInvoke, json.RawMessage(`{"args":`))
 	if malformedResp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400 malformed invoke body, got %d", malformedResp.StatusCode)
 	}
 
-	invMethodResp := doJSONRequest(t, handler, http.MethodPost, "/v1/invocations/"+invocationID+"/logs", map[string]any{})
+	invMethodResp := doJSONRequest(t, handler, http.MethodPost, testPathInvocationsPrefix+invocationID+"/logs", map[string]any{})
 	if invMethodResp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 invocation logs method, got %d", invMethodResp.StatusCode)
 	}
 
-	missingInvResp := doJSONRequest(t, handler, http.MethodGet, "/v1/invocations/missing", nil)
+	missingInvResp := doJSONRequest(t, handler, http.MethodGet, testPathInvocationsPrefix+"missing", nil)
 	if missingInvResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404 missing invocation, got %d", missingInvResp.StatusCode)
 	}
@@ -199,21 +220,21 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 func TestHTTPAPI_TrustedHeadersUsesAuthenticatedPrincipal(t *testing.T) {
 	authCfg := DefaultAuthConfig()
 	authCfg.Mode = authModeTrustedHeaders
-	authCfg.SharedToken = "workspace-shared-token"
+	authCfg.SharedToken = testHTTPSharedToken
 
 	handler, _ := setupHTTPHandler(t, authCfg)
 	headers := map[string]string{
-		authCfg.TokenHeader:  "workspace-shared-token",
-		authCfg.TenantHeader: "tenant-auth",
-		authCfg.ActorHeader:  "actor-auth",
+		authCfg.TokenHeader:  testHTTPSharedToken,
+		authCfg.TenantHeader: testHTTPTenantAuth,
+		authCfg.ActorHeader:  testHTTPActorAuth,
 		authCfg.RolesHeader:  "devops,developer",
 	}
 
-	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "payload-tenant",
-			"actor_id":  "payload-actor",
-			"roles":     []string{"admin"},
+	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: "payload-tenant",
+			testHTTPKeyActorID:  "payload-actor",
+			testHTTPKeyRoles:    []string{"admin"},
 		},
 	}, headers)
 	if createResp.StatusCode != http.StatusCreated {
@@ -222,9 +243,9 @@ func TestHTTPAPI_TrustedHeadersUsesAuthenticatedPrincipal(t *testing.T) {
 
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	session := createBody["session"].(map[string]any)
-	principal := session["principal"].(map[string]any)
-	if principal["tenant_id"] != "tenant-auth" || principal["actor_id"] != "actor-auth" {
+	session := createBody[testHTTPKeySession].(map[string]any)
+	principal := session[testHTTPKeyPrincipal].(map[string]any)
+	if principal[testHTTPKeyTenantID] != testHTTPTenantAuth || principal[testHTTPKeyActorID] != testHTTPActorAuth {
 		t.Fatalf("expected principal from trusted headers, got %#v", principal)
 	}
 }
@@ -232,18 +253,18 @@ func TestHTTPAPI_TrustedHeadersUsesAuthenticatedPrincipal(t *testing.T) {
 func TestHTTPAPI_TrustedHeadersRejectsMissingToken(t *testing.T) {
 	authCfg := DefaultAuthConfig()
 	authCfg.Mode = authModeTrustedHeaders
-	authCfg.SharedToken = "workspace-shared-token"
+	authCfg.SharedToken = testHTTPSharedToken
 
 	handler, _ := setupHTTPHandler(t, authCfg)
 	headers := map[string]string{
-		authCfg.TenantHeader: "tenant-auth",
-		authCfg.ActorHeader:  "actor-auth",
+		authCfg.TenantHeader: testHTTPTenantAuth,
+		authCfg.ActorHeader:  testHTTPActorAuth,
 	}
 
-	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-auth",
-			"actor_id":  "actor-auth",
+	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testHTTPTenantAuth,
+			testHTTPKeyActorID:  testHTTPActorAuth,
 		},
 	}, headers)
 	if createResp.StatusCode != http.StatusUnauthorized {
@@ -254,36 +275,36 @@ func TestHTTPAPI_TrustedHeadersRejectsMissingToken(t *testing.T) {
 func TestHTTPAPI_TrustedHeadersEnforcesSessionOwnership(t *testing.T) {
 	authCfg := DefaultAuthConfig()
 	authCfg.Mode = authModeTrustedHeaders
-	authCfg.SharedToken = "workspace-shared-token"
+	authCfg.SharedToken = testHTTPSharedToken
 
 	handler, _ := setupHTTPHandler(t, authCfg)
 	ownerHeaders := map[string]string{
-		authCfg.TokenHeader:  "workspace-shared-token",
-		authCfg.TenantHeader: "tenant-auth",
+		authCfg.TokenHeader:  testHTTPSharedToken,
+		authCfg.TenantHeader: testHTTPTenantAuth,
 		authCfg.ActorHeader:  "actor-owner",
-		authCfg.RolesHeader:  "developer",
+		authCfg.RolesHeader:  testHTTPRoleDeveloper,
 	}
 
-	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, "/v1/sessions", map[string]any{}, ownerHeaders)
+	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{}, ownerHeaders)
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201 create, got %d body=%s", createResp.StatusCode, createResp.Body.String())
 	}
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
-	ownerListResp := doJSONRequestWithHeaders(t, handler, http.MethodGet, "/v1/sessions/"+sessionID+"/tools", nil, ownerHeaders)
+	ownerListResp := doJSONRequestWithHeaders(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID+testPathSessionTools, nil, ownerHeaders)
 	if ownerListResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected owner access to session tools, got %d body=%s", ownerListResp.StatusCode, ownerListResp.Body.String())
 	}
 
 	otherHeaders := map[string]string{
-		authCfg.TokenHeader:  "workspace-shared-token",
-		authCfg.TenantHeader: "tenant-auth",
+		authCfg.TokenHeader:  testHTTPSharedToken,
+		authCfg.TenantHeader: testHTTPTenantAuth,
 		authCfg.ActorHeader:  "actor-other",
-		authCfg.RolesHeader:  "developer",
+		authCfg.RolesHeader:  testHTTPRoleDeveloper,
 	}
-	otherListResp := doJSONRequestWithHeaders(t, handler, http.MethodGet, "/v1/sessions/"+sessionID+"/tools", nil, otherHeaders)
+	otherListResp := doJSONRequestWithHeaders(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID+testPathSessionTools, nil, otherHeaders)
 	if otherListResp.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403 for non-owner, got %d body=%s", otherListResp.StatusCode, otherListResp.Body.String())
 	}
@@ -295,7 +316,7 @@ func setupHTTPHandler(t *testing.T, authCfg ...AuthConfig) (http.Handler, string
 	workspaceRoot := t.TempDir()
 	artifactRoot := t.TempDir()
 	sourcePath := t.TempDir()
-	if err := os.WriteFile(filepath.Join(sourcePath, "seed.txt"), []byte("seed"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(sourcePath, testSeedFile), []byte("seed"), 0o644); err != nil {
 		t.Fatalf("write source seed failed: %v", err)
 	}
 
@@ -303,7 +324,7 @@ func setupHTTPHandler(t *testing.T, authCfg ...AuthConfig) (http.Handler, string
 	workspaceManager := workspaceadapter.NewLocalManager(workspaceRoot)
 	catalog := tooladapter.NewCatalog(tooladapter.DefaultCapabilities())
 	commandRunner := tooladapter.NewLocalCommandRunner()
-	engine := tooladapter.NewEngine(
+	handlers := []tooladapter.Handler{ //nolint:prealloc // k8s handlers appended conditionally via build tags
 		tooladapter.NewFSListHandler(commandRunner),
 		tooladapter.NewFSReadHandler(commandRunner),
 		tooladapter.NewFSWriteHandler(commandRunner),
@@ -349,11 +370,6 @@ func setupHTTPHandler(t *testing.T, authCfg ...AuthConfig) (http.Handler, string
 		tooladapter.NewImageBuildHandler(commandRunner),
 		tooladapter.NewImagePushHandler(commandRunner),
 		tooladapter.NewImageInspectHandler(commandRunner),
-		tooladapter.NewK8sGetPodsHandler(nil, "default"),
-		tooladapter.NewK8sGetServicesHandler(nil, "default"),
-		tooladapter.NewK8sGetDeploymentsHandler(nil, "default"),
-		tooladapter.NewK8sGetImagesHandler(nil, "default"),
-		tooladapter.NewK8sGetLogsHandler(nil, "default"),
 		tooladapter.NewSecurityScanDependenciesHandler(commandRunner),
 		tooladapter.NewSBOMGenerateHandler(commandRunner),
 		tooladapter.NewSecurityScanSecretsHandler(commandRunner),
@@ -379,7 +395,9 @@ func setupHTTPHandler(t *testing.T, authCfg ...AuthConfig) (http.Handler, string
 		tooladapter.NewPythonTestHandler(commandRunner),
 		tooladapter.NewCBuildHandler(commandRunner),
 		tooladapter.NewCTestHandler(commandRunner),
-	)
+	}
+	handlers = append(handlers, k8sToolHandlers()...)
+	engine := tooladapter.NewEngine(handlers...)
 	artifactStore := storage.NewLocalArtifactStore(artifactRoot)
 	policyEngine := policy.NewStaticPolicy()
 	auditLogger := audit.NewLoggerAudit(logger)
@@ -454,41 +472,41 @@ func TestHTTPAPI_MethodNotAllowedEdgeCases(t *testing.T) {
 	handler, sourcePath := setupHTTPHandler(t)
 
 	// POST /metrics → 405
-	metricsResp := doJSONRequest(t, handler, http.MethodPost, "/metrics", map[string]any{})
+	metricsResp := doJSONRequest(t, handler, http.MethodPost, testPathMetrics, map[string]any{})
 	if metricsResp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 POST /metrics, got %d", metricsResp.StatusCode)
 	}
 
 	// Create a session to get a valid sessionID for route tests.
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-edge",
-			"roles":     []string{"developer"},
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-edge",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
-		"source_repo_path": sourcePath,
+		testHTTPSourceRepoPath: sourcePath,
 	})
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201 create session, got %d body=%s", createResp.StatusCode, createResp.Body.String())
 	}
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
 	// GET /v1/sessions/{id} (len==1, non-DELETE) → 405
-	sessionGetResp := doJSONRequest(t, handler, http.MethodGet, "/v1/sessions/"+sessionID, nil)
+	sessionGetResp := doJSONRequest(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID, nil)
 	if sessionGetResp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 GET /v1/sessions/{id}, got %d", sessionGetResp.StatusCode)
 	}
 
 	// POST /v1/sessions/{id}/tools (len==2, non-GET) → 405
-	toolsPostResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions/"+sessionID+"/tools", map[string]any{})
+	toolsPostResp := doJSONRequest(t, handler, http.MethodPost, testPathSessionsPrefix+sessionID+testPathSessionTools, map[string]any{})
 	if toolsPostResp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 POST /v1/sessions/{id}/tools, got %d", toolsPostResp.StatusCode)
 	}
 
 	// DELETE /v1/sessions/{id}/tools/fs.read_file/invoke (len==4, non-POST) → 405
-	invokeDeleteResp := doJSONRequest(t, handler, http.MethodDelete, "/v1/sessions/"+sessionID+"/tools/fs.read_file/invoke", nil)
+	invokeDeleteResp := doJSONRequest(t, handler, http.MethodDelete, testPathSessionsPrefix+sessionID+testPathFSReadFileInvoke, nil)
 	if invokeDeleteResp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 DELETE /v1/sessions/{id}/tools/{tool}/invoke, got %d", invokeDeleteResp.StatusCode)
 	}
@@ -498,45 +516,45 @@ func TestHTTPAPI_InvocationRouteEdgeCases(t *testing.T) {
 	handler, sourcePath := setupHTTPHandler(t)
 
 	// Create a session and invoke a tool to get a valid invocation ID.
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-inv-edge",
-			"roles":     []string{"developer"},
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-inv-edge",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
 		},
-		"source_repo_path": sourcePath,
+		testHTTPSourceRepoPath: sourcePath,
 	})
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201, got %d body=%s", createResp.StatusCode, createResp.Body.String())
 	}
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
-	invokeResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions/"+sessionID+"/tools/fs.read_file/invoke", map[string]any{
-		"args": map[string]any{"path": "seed.txt"},
+	invokeResp := doJSONRequest(t, handler, http.MethodPost, testPathSessionsPrefix+sessionID+testPathFSReadFileInvoke, map[string]any{
+		"args": map[string]any{"path": testSeedFile},
 	})
 	if invokeResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 invoke, got %d body=%s", invokeResp.StatusCode, invokeResp.Body.String())
 	}
 	var invokeBody map[string]any
 	mustDecode(t, invokeResp.Body.Bytes(), &invokeBody)
-	invocationID := invokeBody["invocation"].(map[string]any)["id"].(string)
+	invocationID := invokeBody[testHTTPKeyInvocation].(map[string]any)[testHTTPKeyID].(string)
 
 	// POST /v1/invocations/{id} (len==1, non-GET) → 405
-	invPostResp := doJSONRequest(t, handler, http.MethodPost, "/v1/invocations/"+invocationID, map[string]any{})
+	invPostResp := doJSONRequest(t, handler, http.MethodPost, testPathInvocationsPrefix+invocationID, map[string]any{})
 	if invPostResp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 POST /v1/invocations/{id}, got %d", invPostResp.StatusCode)
 	}
 
 	// POST /v1/invocations/{id}/artifacts (len==2 artifacts, non-GET) → 405
-	artifactsPostResp := doJSONRequest(t, handler, http.MethodPost, "/v1/invocations/"+invocationID+"/artifacts", map[string]any{})
+	artifactsPostResp := doJSONRequest(t, handler, http.MethodPost, testPathInvocationsPrefix+invocationID+"/artifacts", map[string]any{})
 	if artifactsPostResp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405 POST /v1/invocations/{id}/artifacts, got %d", artifactsPostResp.StatusCode)
 	}
 
 	// GET /v1/invocations/{id}/unknown → 404 (route not found in invocations)
-	invUnknownResp := doJSONRequest(t, handler, http.MethodGet, "/v1/invocations/"+invocationID+"/unknown", nil)
+	invUnknownResp := doJSONRequest(t, handler, http.MethodGet, testPathInvocationsPrefix+invocationID+"/unknown", nil)
 	if invUnknownResp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404 unknown invocation sub-route, got %d", invUnknownResp.StatusCode)
 	}
@@ -546,7 +564,7 @@ func TestHTTPAPI_DecodeBodyNilBody(t *testing.T) {
 	handler, _ := setupHTTPHandler(t)
 
 	// Construct a POST /v1/sessions request with a nil body to exercise the decodeBody nil guard.
-	req := httptest.NewRequest(http.MethodPost, "/v1/sessions", nil)
+	req := httptest.NewRequest(http.MethodPost, testSharedSessionsPath, nil)
 	req.Body = nil
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()

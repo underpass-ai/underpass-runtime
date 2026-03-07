@@ -9,6 +9,10 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testProfileDevRedis = "dev.redis"
+)
+
 func TestConnListProfiles_DefaultProfiles(t *testing.T) {
 	handler := NewConnListProfilesHandler()
 	session := domain.Session{AllowedPaths: []string{"."}}
@@ -20,7 +24,7 @@ func TestConnListProfiles_DefaultProfiles(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	count, ok := output["count"].(int)
 	if !ok || count < 5 {
@@ -33,7 +37,7 @@ func TestConnListProfiles_FilteredByAllowlist(t *testing.T) {
 	session := domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
-			"allowed_profiles": "dev.redis",
+			"allowed_profiles": testProfileDevRedis,
 		},
 	}
 
@@ -68,7 +72,7 @@ func TestConnDescribeProfile_Success(t *testing.T) {
 	session := domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
-			"allowed_profiles": "dev.redis",
+			"allowed_profiles": testProfileDevRedis,
 		},
 	}
 
@@ -82,7 +86,7 @@ func TestConnDescribeProfile_Success(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected profile map, got %#v", output["profile"])
 	}
-	if profile["id"] != "dev.redis" {
+	if profile["id"] != testProfileDevRedis {
 		t.Fatalf("unexpected profile id: %#v", profile["id"])
 	}
 }

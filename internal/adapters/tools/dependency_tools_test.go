@@ -14,6 +14,13 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testExpectedTruncatedTrue = "expected truncated=true"
+	testExpected2Dependencies = "expected 2 dependencies, got %d"
+	testVersion100            = "1.0.0"
+	testMapKeyVersion         = "version"
+)
+
 func TestSecurityScanDependenciesHandler_Go(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
@@ -46,7 +53,7 @@ func TestSecurityScanDependenciesHandler_Go(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["dependencies_count"] != 2 {
 		t.Fatalf("unexpected dependencies_count: %#v", output["dependencies_count"])
@@ -84,7 +91,7 @@ func TestSBOMGenerateHandler_GeneratesCycloneDXArtifact(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["artifact_name"] != "sbom.cdx.json" {
 		t.Fatalf("unexpected artifact_name: %#v", output["artifact_name"])
@@ -283,7 +290,7 @@ func TestCollectDependencyInventory_WithSubpath(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: t.TempDir()}, projectType{Name: "go"}, "subdir", 100)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) == 0 {
 		t.Fatal("expected dependencies")
@@ -370,10 +377,10 @@ func TestCollectDependencyInventory_PythonBranch(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: root}, projectType{Name: "python"}, ".", 100)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) != 2 {
-		t.Fatalf("expected 2 dependencies, got %d", len(result.Dependencies))
+		t.Fatalf(testExpected2Dependencies, len(result.Dependencies))
 	}
 	if result.Dependencies[0].Ecosystem != "python" {
 		t.Fatalf("expected python ecosystem, got %q", result.Dependencies[0].Ecosystem)
@@ -395,10 +402,10 @@ func TestCollectDependencyInventory_RustBranch(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: root}, projectType{Name: "rust"}, ".", 100)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) != 2 {
-		t.Fatalf("expected 2 dependencies, got %d", len(result.Dependencies))
+		t.Fatalf(testExpected2Dependencies, len(result.Dependencies))
 	}
 	if result.Command[0] != "cargo" {
 		t.Fatalf("expected cargo in command, got %q", result.Command[0])
@@ -420,7 +427,7 @@ func TestCollectDependencyInventory_JavaMavenBranch(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: root}, projectType{Name: "java", Flavor: "maven"}, ".", 100)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) != 1 {
 		t.Fatalf("expected 1 dependency, got %d", len(result.Dependencies))
@@ -445,7 +452,7 @@ func TestCollectDependencyInventory_JavaGradleBranch(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: root}, projectType{Name: "java", Flavor: "gradle"}, ".", 100)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) != 1 {
 		t.Fatalf("expected 1 dependency, got %d", len(result.Dependencies))
@@ -498,7 +505,7 @@ func TestBuildSBOMResult_PreviewTruncation(t *testing.T) {
 	for i := range deps {
 		deps[i] = dependencyEntry{
 			Name:      fmt.Sprintf("pkg-%d", i),
-			Version:   "1.0.0",
+			Version:   testVersion100,
 			Ecosystem: "go",
 			License:   "MIT",
 		}
@@ -512,12 +519,12 @@ func TestBuildSBOMResult_PreviewTruncation(t *testing.T) {
 	}
 	result, domErr := buildSBOMResult("go", inventory)
 	if domErr != nil {
-		t.Fatalf("unexpected error: %#v", domErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, domErr)
 	}
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["components_count"] != 30 {
 		t.Fatalf("expected 30 total components, got %v", output["components_count"])
@@ -537,9 +544,9 @@ func TestBuildSBOMResult_PreviewTruncation(t *testing.T) {
 
 func TestWalkNodeDependencies_Truncation(t *testing.T) {
 	tree := map[string]any{
-		"alpha": map[string]any{"version": "1.0.0"},
-		"bravo": map[string]any{"version": "2.0.0"},
-		"charlie": map[string]any{"version": "3.0.0"},
+		"alpha":   map[string]any{testMapKeyVersion: testVersion100},
+		"bravo":   map[string]any{testMapKeyVersion: "2.0.0"},
+		"charlie": map[string]any{testMapKeyVersion: "3.0.0"},
 	}
 	var out []dependencyEntry
 	seen := map[string]struct{}{}
@@ -548,7 +555,7 @@ func TestWalkNodeDependencies_Truncation(t *testing.T) {
 	walkNodeDependencies(tree, 2, seen, &out, &truncated)
 
 	if len(out) != 2 {
-		t.Fatalf("expected 2 dependencies, got %d", len(out))
+		t.Fatalf(testExpected2Dependencies, len(out))
 	}
 	if !truncated {
 		t.Fatal("expected truncated=true when maxDependencies reached")
@@ -561,7 +568,7 @@ func TestWalkNodeDependencies_Truncation(t *testing.T) {
 
 func TestExtractNodePackageNode_NonMapValue(t *testing.T) {
 	tree := map[string]any{
-		"good": map[string]any{"version": "1.0"},
+		"good": map[string]any{testMapKeyVersion: "1.0"},
 		"bad":  "not-a-map",
 	}
 
@@ -589,7 +596,7 @@ func TestAppendNodeDependencyEntry_Duplicate(t *testing.T) {
 	seen := map[string]struct{}{}
 	var out []dependencyEntry
 
-	node := map[string]any{"version": "1.0.0"}
+	node := map[string]any{testMapKeyVersion: testVersion100}
 	appendNodeDependencyEntry("express", node, seen, &out)
 	if len(out) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(out))
@@ -606,7 +613,7 @@ func TestAppendNodeDependencyEntry_EmptyVersion(t *testing.T) {
 	seen := map[string]struct{}{}
 	var out []dependencyEntry
 
-	node := map[string]any{"version": ""}
+	node := map[string]any{testMapKeyVersion: ""}
 	appendNodeDependencyEntry("lodash", node, seen, &out)
 	if len(out) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(out))
@@ -624,14 +631,14 @@ func TestParseRustDependencyInventory_DuplicatesAndTruncation(t *testing.T) {
 	output := "serde v1.0.0\nserde v1.0.0\nregex v1.10.3\ntokio v1.36.0\nhyper v0.14.0\n"
 	deps, truncated, err := parseRustDependencyInventory(output, 3)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	// serde appears twice but dedup should give: serde, regex, tokio = 3, then hyper is truncated
 	if len(deps) != 3 {
 		t.Fatalf("expected 3 deps after dedup+truncation, got %d", len(deps))
 	}
 	if !truncated {
-		t.Fatal("expected truncated=true")
+		t.Fatal(testExpectedTruncatedTrue)
 	}
 }
 
@@ -639,14 +646,14 @@ func TestParseRustDependencyInventory_VPrefixStripping(t *testing.T) {
 	output := "serde v1.0.0\nregex 1.10.3\n"
 	deps, _, err := parseRustDependencyInventory(output, 10)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	for _, d := range deps {
 		if strings.HasPrefix(d.Version, "v") {
 			t.Fatalf("v-prefix not stripped for %q: version=%q", d.Name, d.Version)
 		}
 	}
-	if deps[0].Version != "1.0.0" {
+	if deps[0].Version != testVersion100 {
 		t.Fatalf("expected 1.0.0 for serde, got %q", deps[0].Version)
 	}
 }
@@ -660,7 +667,7 @@ func TestParseMavenDependencyInventory_SpacesInGroupSkipped(t *testing.T) {
 		"[INFO] org.apache.commons:commons-lang3:jar:3.13.0:runtime\n"
 	deps, _, err := parseMavenDependencyInventory(output, 10)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(deps) != 1 {
 		t.Fatalf("expected 1 dep (spaces line skipped), got %d", len(deps))
@@ -674,7 +681,7 @@ func TestParseMavenDependencyInventory_LessThan4PartsSkipped(t *testing.T) {
 	output := "[INFO] too:few:parts\n[INFO] org.apache.commons:commons-lang3:jar:3.13.0:runtime\n"
 	deps, _, err := parseMavenDependencyInventory(output, 10)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(deps) != 1 {
 		t.Fatalf("expected 1 dep (<4 parts line skipped), got %d", len(deps))
@@ -688,14 +695,14 @@ func TestParseMavenDependencyInventory_DuplicatesAndTruncation(t *testing.T) {
 		"[INFO] org.slf4j:slf4j-api:jar:1.7.36:runtime\n"
 	deps, truncated, err := parseMavenDependencyInventory(output, 2)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	// After dedup: commons-lang3, guava = 2 unique. slf4j truncated.
 	if len(deps) != 2 {
 		t.Fatalf("expected 2 deps after dedup+truncation, got %d", len(deps))
 	}
 	if !truncated {
-		t.Fatal("expected truncated=true")
+		t.Fatal(testExpectedTruncatedTrue)
 	}
 }
 
@@ -710,13 +717,13 @@ func TestParseGradleDependencyInventory_DuplicatesAndTruncation(t *testing.T) {
 		"+--- org.jetbrains.kotlin:kotlin-stdlib:1.9.0\n"
 	deps, truncated, err := parseGradleDependencyInventory(output, 2)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	// After dedup: slf4j-api, guava = 2 unique. kotlin-stdlib truncated.
 	if len(deps) != 2 {
 		t.Fatalf("expected 2 deps after dedup+truncation, got %d", len(deps))
 	}
 	if !truncated {
-		t.Fatal("expected truncated=true")
+		t.Fatal(testExpectedTruncatedTrue)
 	}
 }

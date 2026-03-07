@@ -1,3 +1,5 @@
+//go:build k8s
+
 package tools
 
 import (
@@ -600,7 +602,7 @@ func decodeK8sArgs(args json.RawMessage, destination any) *domain.Error {
 	if len(args) == 0 {
 		return nil
 	}
-	if err := json.Unmarshal(args, destination); err != nil {
+	if json.Unmarshal(args, destination) != nil {
 		return &domain.Error{
 			Code:      app.ErrorCodeInvalidArgument,
 			Message:   "invalid k8s tool args",

@@ -245,11 +245,11 @@ func runTrivyScan(
 }
 
 type heuristicFallbackResult struct {
-	command    []string
-	findings   []map[string]any
-	truncated  bool
-	scanner    string
-	rawOutput  string
+	command   []string
+	findings  []map[string]any
+	truncated bool
+	scanner   string
+	rawOutput string
 }
 
 // heuristicFallbackInput groups the prior scan state passed to
@@ -578,7 +578,7 @@ func countSecurityFindingsBySeverity(findings []map[string]any) map[string]int {
 		sweSeverityHigh:     0,
 		sweSeverityMedium:   0,
 		sweSeverityLow:      0,
-		sweUnknown:              0,
+		sweUnknown:          0,
 	}
 	for _, finding := range findings {
 		severity := normalizeFindingSeverity(asString(finding["severity"]))

@@ -145,7 +145,7 @@ func (h *RustBuildHandler) Invoke(ctx context.Context, session domain.Session, a
 		Release bool   `json:"release"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid rust.build args", Retryable: false}
 		}
 	}
@@ -170,7 +170,7 @@ func (h *RustTestHandler) Invoke(ctx context.Context, session domain.Session, ar
 		Target string `json:"target"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid rust.test args", Retryable: false}
 		}
 	}
@@ -192,7 +192,7 @@ func (h *RustClippyHandler) Invoke(ctx context.Context, session domain.Session, 
 		DenyWarnings bool `json:"deny_warnings"`
 	}{DenyWarnings: true}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid rust.clippy args", Retryable: false}
 		}
 	}
@@ -213,7 +213,7 @@ func (h *RustFormatHandler) Invoke(ctx context.Context, session domain.Session, 
 		Check bool `json:"check"`
 	}{Check: true}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid rust.format args", Retryable: false}
 		}
 	}
@@ -235,7 +235,7 @@ func (h *NodeInstallHandler) Invoke(ctx context.Context, session domain.Session,
 		IgnoreScripts bool `json:"ignore_scripts"`
 	}{UseCI: true, IgnoreScripts: true}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid node.install args", Retryable: false}
 		}
 	}
@@ -259,7 +259,7 @@ func (h *NodeBuildHandler) Invoke(ctx context.Context, session domain.Session, a
 		Target string `json:"target"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid node.build args", Retryable: false}
 		}
 	}
@@ -281,7 +281,7 @@ func (h *NodeTestHandler) Invoke(ctx context.Context, session domain.Session, ar
 		Target string `json:"target"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid node.test args", Retryable: false}
 		}
 	}
@@ -303,7 +303,7 @@ func (h *NodeLintHandler) Invoke(ctx context.Context, session domain.Session, ar
 		Target string `json:"target"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid node.lint args", Retryable: false}
 		}
 	}
@@ -325,7 +325,7 @@ func (h *NodeTypecheckHandler) Invoke(ctx context.Context, session domain.Sessio
 		Target string `json:"target"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid node.typecheck args", Retryable: false}
 		}
 	}
@@ -349,7 +349,7 @@ func (h *PythonInstallDepsHandler) Invoke(ctx context.Context, session domain.Se
 		ConstraintsFile  string `json:"constraints_file"`
 	}{UseVenv: true}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid python.install_deps args", Retryable: false}
 		}
 	}
@@ -363,13 +363,12 @@ func (h *PythonInstallDepsHandler) Invoke(ctx context.Context, session domain.Se
 
 	runner := ensureRunner(h.runner)
 	venvPath := workspaceVenvDir
-	setupResult, setupErr := runner.Run(ctx, session, app.CommandSpec{
+	if setupResult, setupErr := runner.Run(ctx, session, app.CommandSpec{
 		Cwd:      session.WorkspacePath,
 		Command:  "python3",
 		Args:     []string{"-m", "venv", venvPath},
 		MaxBytes: 1024 * 1024,
-	})
-	if setupErr != nil {
+	}); setupErr != nil {
 		result := structuredToolRunResult(setupResult.ExitCode, setupResult.Output, artifactPythonInstall, "", 0.0)
 		return result, toToolError(setupErr, setupResult.Output)
 	}
@@ -441,7 +440,7 @@ func (h *PythonValidateHandler) Invoke(ctx context.Context, session domain.Sessi
 		Target string `json:"target"`
 	}{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid python.validate args", Retryable: false}
 		}
 	}
@@ -465,7 +464,7 @@ func (h *PythonTestHandler) Invoke(ctx context.Context, session domain.Session, 
 		MaxFail    int    `json:"max_fail"`
 	}{MaxFail: 1}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid python.test args", Retryable: false}
 		}
 	}
@@ -504,7 +503,7 @@ func (h *CBuildHandler) Invoke(ctx context.Context, session domain.Session, args
 		Standard   string `json:"standard"`
 	}{Standard: "c11"}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid c.build args", Retryable: false}
 		}
 	}
@@ -546,7 +545,7 @@ func (h *CTestHandler) Invoke(ctx context.Context, session domain.Session, args 
 		Run        bool   `json:"run"`
 	}{Standard: "c11", Run: true}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid c.test args", Retryable: false}
 		}
 	}

@@ -101,7 +101,7 @@ func (h *RedisGetHandler) Invoke(ctx context.Context, session domain.Session, ar
 		TimeoutMS: 2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid redis.get args",
@@ -199,7 +199,7 @@ func (h *RedisMGetHandler) Invoke(ctx context.Context, session domain.Session, a
 		TimeoutMS: 3000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid redis.mget args",
@@ -293,7 +293,7 @@ func (h *RedisScanHandler) Invoke(ctx context.Context, session domain.Session, a
 		TimeoutMS: 3000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid redis.scan args",
@@ -405,7 +405,7 @@ func (h *RedisTTLHandler) Invoke(ctx context.Context, session domain.Session, ar
 		TimeoutMS: 2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid redis.ttl args",
@@ -489,7 +489,7 @@ func (h *RedisExistsHandler) Invoke(ctx context.Context, session domain.Session,
 		TimeoutMS: 2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid redis.exists args",
@@ -561,7 +561,7 @@ func (h *RedisSetHandler) Invoke(ctx context.Context, session domain.Session, ar
 		TimeoutMS:     2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid redis.set args",
@@ -680,7 +680,7 @@ func (h *RedisDelHandler) Invoke(ctx context.Context, session domain.Session, ar
 		TimeoutMS: 2000,
 	}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid redis.del args",

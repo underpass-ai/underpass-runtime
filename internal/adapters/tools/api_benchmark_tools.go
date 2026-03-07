@@ -145,7 +145,7 @@ type benchmarkPreparedRequest struct {
 func parseBenchmarkRequest(session domain.Session, args json.RawMessage) (benchmarkPreparedRequest, benchmarkRequest, *domain.Error) {
 	request := benchmarkRequest{}
 	if len(args) > 0 {
-		if err := json.Unmarshal(args, &request); err != nil {
+		if json.Unmarshal(args, &request) != nil {
 			return benchmarkPreparedRequest{}, request, &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "invalid api.benchmark args",

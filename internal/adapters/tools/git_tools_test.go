@@ -15,12 +15,18 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testGitRemoteOrigin    = "origin"
+	testGitBranchLifecycle = "feature/lifecycle"
+	testGitMainTxt         = "main.txt"
+)
+
 func TestGitHandlers_StatusDiffApplyPatch(t *testing.T) {
 	root := initGitRepo(t)
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	ctx := context.Background()
 
-	filePath := filepath.Join(root, "main.txt")
+	filePath := filepath.Join(root, testGitMainTxt)
 	if err := os.WriteFile(filePath, []byte("line1\nline2-modified\n"), 0o644); err != nil {
 		t.Fatalf("write file failed: %v", err)
 	}
@@ -31,12 +37,12 @@ func TestGitHandlers_StatusDiffApplyPatch(t *testing.T) {
 		t.Fatalf("unexpected git status error: %v", statusErr)
 	}
 	statusOutput := statusResult.Output.(map[string]any)["status"].(string)
-	if !strings.Contains(statusOutput, "main.txt") {
+	if !strings.Contains(statusOutput, testGitMainTxt) {
 		t.Fatalf("expected modified file in status, got %q", statusOutput)
 	}
 
 	diff := &GitDiffHandler{}
-	diffResult, diffErr := diff.Invoke(ctx, session, mustJSONGit(t, map[string]any{"paths": []string{"main.txt"}}))
+	diffResult, diffErr := diff.Invoke(ctx, session, mustJSONGit(t, map[string]any{"paths": []string{testGitMainTxt}}))
 	if diffErr != nil {
 		t.Fatalf("unexpected git diff error: %v", diffErr)
 	}
@@ -45,9 +51,8 @@ func TestGitHandlers_StatusDiffApplyPatch(t *testing.T) {
 		t.Fatalf("expected unified diff output, got %q", diffOutput)
 	}
 
-	patch := "diff --git a/main.txt b/main.txt\nindex c0d0fb4..83db48f 100644\n--- a/main.txt\n+++ b/main.txt\n@@ -1,2 +1,2 @@\n line1\n-line2-modified\n+line-two\n"
 	apply := &GitApplyPatchHandler{}
-	applyResult, applyErr := apply.Invoke(ctx, session, mustJSONGit(t, map[string]any{"patch": patch, "check": false}))
+	applyResult, applyErr := apply.Invoke(ctx, session, mustJSONGit(t, map[string]any{"patch": "diff --git a/main.txt b/main.txt\nindex c0d0fb4..83db48f 100644\n--- a/main.txt\n+++ b/main.txt\n@@ -1,2 +1,2 @@\n line1\n-line2-modified\n+line-two\n", "check": false}))
 	if applyErr != nil {
 		t.Fatalf("unexpected git apply error: %v", applyErr)
 	}
@@ -136,148 +141,157 @@ func TestToToolErrorTimeout(t *testing.T) {
 	}
 }
 
+// coerceToMapSlice converts the branches/entries payload from either
+// []map[string]any or []any to a uniform []map[string]any.
+func coerceToMapSlice(t *testing.T, raw any, label string) []map[string]any {
+	t.Helper()
+	if typed, ok := raw.([]map[string]any); ok {
+		return typed
+	}
+	rawSlice, ok := raw.([]any)
+	if !ok {
+		t.Fatalf("unexpected %s payload: %#v", label, raw)
+	}
+	result := make([]map[string]any, 0, len(rawSlice))
+	for _, item := range rawSlice {
+		if entry, okEntry := item.(map[string]any); okEntry {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
 func TestGitHandlers_LifecycleOperations(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testGitRemoteOrigin, remotePath)
 
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	ctx := context.Background()
 
-	checkout := &GitCheckoutHandler{}
-	_, err := checkout.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"ref":    "feature/lifecycle",
-		"create": true,
-	}))
-	if err != nil {
-		t.Fatalf("unexpected git checkout error: %#v", err)
-	}
-
-	branchList := &GitBranchListHandler{}
-	branchesResult, err := branchList.Invoke(ctx, session, mustJSONGit(t, map[string]any{"all": true}))
-	if err != nil {
-		t.Fatalf("unexpected git branch_list error: %#v", err)
-	}
-	output := branchesResult.Output.(map[string]any)
-	branches, ok := output["branches"].([]map[string]any)
-	if !ok {
-		rawBranches, okAny := output["branches"].([]any)
-		if !okAny {
-			t.Fatalf("unexpected branches payload: %#v", output["branches"])
+	t.Run("checkout", func(t *testing.T) {
+		checkout := &GitCheckoutHandler{}
+		_, err := checkout.Invoke(ctx, session, mustJSONGit(t, map[string]any{
+			"ref":    testGitBranchLifecycle,
+			"create": true,
+		}))
+		if err != nil {
+			t.Fatalf("unexpected git checkout error: %#v", err)
 		}
-		branches = make([]map[string]any, 0, len(rawBranches))
-		for _, item := range rawBranches {
-			entry, okEntry := item.(map[string]any)
-			if okEntry {
-				branches = append(branches, entry)
+	})
+
+	t.Run("branch_list", func(t *testing.T) {
+		branchList := &GitBranchListHandler{}
+		branchesResult, err := branchList.Invoke(ctx, session, mustJSONGit(t, map[string]any{"all": true}))
+		if err != nil {
+			t.Fatalf("unexpected git branch_list error: %#v", err)
+		}
+		output := branchesResult.Output.(map[string]any)
+		branches := coerceToMapSlice(t, output["branches"], "branches")
+		foundFeature := false
+		for _, branch := range branches {
+			if strings.TrimSpace(fmt.Sprintf("%v", branch["name"])) == testGitBranchLifecycle {
+				foundFeature = true
+				break
 			}
 		}
-	}
-	foundFeature := false
-	for _, branch := range branches {
-		if strings.TrimSpace(fmt.Sprintf("%v", branch["name"])) == "feature/lifecycle" {
-			foundFeature = true
-			break
+		if !foundFeature {
+			t.Fatalf("expected feature/lifecycle in branch list, got %#v", branches)
 		}
-	}
-	if !foundFeature {
-		t.Fatalf("expected feature/lifecycle in branch list, got %#v", branches)
-	}
+	})
 
-	logHandler := &GitLogHandler{}
-	logResult, err := logHandler.Invoke(ctx, session, mustJSONGit(t, map[string]any{"ref": "HEAD", "max_count": 5}))
-	if err != nil {
-		t.Fatalf("unexpected git log error: %#v", err)
-	}
-	logOutput := logResult.Output.(map[string]any)
-	entries, ok := logOutput["entries"].([]map[string]any)
-	if !ok {
-		rawEntries, okAny := logOutput["entries"].([]any)
-		if !okAny {
-			t.Fatalf("unexpected log entries payload: %#v", logOutput["entries"])
+	t.Run("log", func(t *testing.T) {
+		logHandler := &GitLogHandler{}
+		logResult, err := logHandler.Invoke(ctx, session, mustJSONGit(t, map[string]any{"ref": "HEAD", "max_count": 5}))
+		if err != nil {
+			t.Fatalf("unexpected git log error: %#v", err)
 		}
-		entries = make([]map[string]any, 0, len(rawEntries))
-		for _, item := range rawEntries {
-			entry, okEntry := item.(map[string]any)
-			if okEntry {
-				entries = append(entries, entry)
-			}
+		logOutput := logResult.Output.(map[string]any)
+		entries := coerceToMapSlice(t, logOutput["entries"], "entries")
+		if len(entries) == 0 {
+			t.Fatalf("expected log entries, got %#v", logOutput)
 		}
-	}
-	if len(entries) == 0 {
-		t.Fatalf("expected log entries, got %#v", logOutput)
-	}
+	})
 
-	show := &GitShowHandler{}
-	showResult, err := show.Invoke(ctx, session, mustJSONGit(t, map[string]any{"ref": "HEAD"}))
-	if err != nil {
-		t.Fatalf("unexpected git show error: %#v", err)
-	}
-	showOutput := showResult.Output.(map[string]any)["show"].(string)
-	if !strings.Contains(showOutput, "initial") {
-		t.Fatalf("expected commit summary in git show output, got %q", showOutput)
-	}
+	t.Run("show", func(t *testing.T) {
+		show := &GitShowHandler{}
+		showResult, err := show.Invoke(ctx, session, mustJSONGit(t, map[string]any{"ref": "HEAD"}))
+		if err != nil {
+			t.Fatalf("unexpected git show error: %#v", err)
+		}
+		showOutput := showResult.Output.(map[string]any)["show"].(string)
+		if !strings.Contains(showOutput, "initial") {
+			t.Fatalf("expected commit summary in git show output, got %q", showOutput)
+		}
+	})
 
-	filePath := filepath.Join(root, "main.txt")
-	if err := os.WriteFile(filePath, []byte("line1\\nline2-lifecycle\\n"), 0o644); err != nil {
-		t.Fatalf("write file failed: %v", err)
-	}
+	t.Run("commit", func(t *testing.T) {
+		filePath := filepath.Join(root, testGitMainTxt)
+		if err := os.WriteFile(filePath, []byte("line1\\nline2-lifecycle\\n"), 0o644); err != nil {
+			t.Fatalf("write file failed: %v", err)
+		}
+		commit := &GitCommitHandler{}
+		commitResult, err := commit.Invoke(ctx, session, mustJSONGit(t, map[string]any{
+			"message": "feat: lifecycle commit",
+			"all":     true,
+		}))
+		if err != nil {
+			t.Fatalf("unexpected git commit error: %#v", err)
+		}
+		commitOutput := commitResult.Output.(map[string]any)
+		if committed, ok := commitOutput["committed"].(bool); !ok || !committed {
+			t.Fatalf("expected committed=true, got %#v", commitOutput)
+		}
+		if strings.TrimSpace(fmt.Sprintf("%v", commitOutput["commit"])) == "" {
+			t.Fatalf("expected non-empty commit hash, got %#v", commitOutput)
+		}
+	})
 
-	commit := &GitCommitHandler{}
-	commitResult, err := commit.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"message": "feat: lifecycle commit",
-		"all":     true,
-	}))
-	if err != nil {
-		t.Fatalf("unexpected git commit error: %#v", err)
-	}
-	commitOutput := commitResult.Output.(map[string]any)
-	if committed, ok := commitOutput["committed"].(bool); !ok || !committed {
-		t.Fatalf("expected committed=true, got %#v", commitOutput)
-	}
-	if strings.TrimSpace(fmt.Sprintf("%v", commitOutput["commit"])) == "" {
-		t.Fatalf("expected non-empty commit hash, got %#v", commitOutput)
-	}
+	t.Run("fetch", func(t *testing.T) {
+		fetch := &GitFetchHandler{}
+		_, err := fetch.Invoke(ctx, session, mustJSONGit(t, map[string]any{
+			"remote": testGitRemoteOrigin,
+			"prune":  true,
+		}))
+		if err != nil {
+			t.Fatalf("unexpected git fetch error: %#v", err)
+		}
+	})
 
-	fetch := &GitFetchHandler{}
-	_, err = fetch.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote": "origin",
-		"prune":  true,
-	}))
-	if err != nil {
-		t.Fatalf("unexpected git fetch error: %#v", err)
-	}
+	t.Run("push", func(t *testing.T) {
+		push := &GitPushHandler{}
+		_, err := push.Invoke(ctx, session, mustJSONGit(t, map[string]any{
+			"remote":       testGitRemoteOrigin,
+			"refspec":      "HEAD:refs/heads/feature/lifecycle",
+			"set_upstream": true,
+		}))
+		if err != nil {
+			t.Fatalf("unexpected git push error: %#v", err)
+		}
+	})
 
-	push := &GitPushHandler{}
-	_, err = push.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote":       "origin",
-		"refspec":      "HEAD:refs/heads/feature/lifecycle",
-		"set_upstream": true,
-	}))
-	if err != nil {
-		t.Fatalf("unexpected git push error: %#v", err)
-	}
-
-	pull := &GitPullHandler{}
-	_, err = pull.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote":  "origin",
-		"refspec": "feature/lifecycle",
-	}))
-	if err != nil {
-		t.Fatalf("unexpected git pull error: %#v", err)
-	}
+	t.Run("pull", func(t *testing.T) {
+		pull := &GitPullHandler{}
+		_, err := pull.Invoke(ctx, session, mustJSONGit(t, map[string]any{
+			"remote":  testGitRemoteOrigin,
+			"refspec": testGitBranchLifecycle,
+		}))
+		if err != nil {
+			t.Fatalf("unexpected git pull error: %#v", err)
+		}
+	})
 }
 
 func TestGitHandlers_AllowlistPolicies(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testGitRemoteOrigin, remotePath)
 
 	session := domain.Session{
 		WorkspacePath: root,
 		AllowedPaths:  []string{"."},
 		Metadata: map[string]string{
-			"allowed_git_remotes":      "origin",
+			"allowed_git_remotes":      testGitRemoteOrigin,
 			"allowed_git_ref_prefixes": "refs/heads/release-,refs/tags/release-",
 		},
 	}
@@ -301,7 +315,7 @@ func TestGitHandlers_AllowlistPolicies(t *testing.T) {
 	}
 
 	_, err = push.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote":  "origin",
+		"remote":  testGitRemoteOrigin,
 		"refspec": "HEAD:refs/heads/feature/nope",
 	}))
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
@@ -310,7 +324,7 @@ func TestGitHandlers_AllowlistPolicies(t *testing.T) {
 
 	fetch := &GitFetchHandler{}
 	_, err = fetch.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote":  "origin",
+		"remote":  testGitRemoteOrigin,
 		"refspec": "refs/heads/release-2026",
 	}))
 	if err != nil && err.Code == app.ErrorCodePolicyDenied {
@@ -326,10 +340,10 @@ func initGitRepo(t *testing.T) string {
 	runGit(t, root, "config", "user.email", "tester@example.com")
 	runGit(t, root, "config", "user.name", "Tester")
 
-	if err := os.WriteFile(filepath.Join(root, "main.txt"), []byte("line1\nline2\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testGitMainTxt), []byte("line1\nline2\n"), 0o644); err != nil {
 		t.Fatalf("write seed file failed: %v", err)
 	}
-	runGit(t, root, "add", "main.txt")
+	runGit(t, root, "add", testGitMainTxt)
 	runGit(t, root, "commit", "-m", "initial")
 
 	return root
