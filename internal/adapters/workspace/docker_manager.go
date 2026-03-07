@@ -17,6 +17,18 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	labelManagedBy    = "managed-by"
+	labelSessionID    = "session-id"
+	labelTenantID     = "tenant-id"
+	labelRuntimeValue = "underpass-runtime"
+
+	defaultDockerImage     = "alpine:3.20"
+	defaultWorkdir         = "/workspace/repo"
+	defaultContainerPrefix = "ws"
+	maxContainerNameLen    = 63
+)
+
 // DockerClient is a minimal interface over the Docker Engine API.
 type DockerClient interface {
 	ContainerCreate(ctx context.Context, config *container.Config, hostConfig *container.HostConfig, networkingConfig *network.NetworkingConfig, platform *ocispec.Platform, containerName string) (container.CreateResponse, error)
@@ -55,13 +67,13 @@ type DockerManager struct {
 // NewDockerManager creates a workspace manager that uses Docker containers.
 func NewDockerManager(cfg DockerManagerConfig, client DockerClient) *DockerManager {
 	if cfg.DefaultImage == "" {
-		cfg.DefaultImage = "alpine:3.20"
+		cfg.DefaultImage = defaultDockerImage
 	}
 	if cfg.Workdir == "" {
-		cfg.Workdir = "/workspace/repo"
+		cfg.Workdir = defaultWorkdir
 	}
 	if cfg.ContainerPrefix == "" {
-		cfg.ContainerPrefix = "ws"
+		cfg.ContainerPrefix = defaultContainerPrefix
 	}
 	if cfg.TTL == 0 {
 		cfg.TTL = time.Hour
@@ -91,9 +103,9 @@ func (m *DockerManager) CreateSession(ctx context.Context, req app.CreateSession
 		Cmd:        []string{"sleep", "infinity"},
 		WorkingDir: m.cfg.Workdir,
 		Labels: map[string]string{
-			"managed-by": "underpass-runtime",
-			"session-id": sessionID,
-			"tenant-id":  req.Principal.TenantID,
+			labelManagedBy: labelRuntimeValue,
+			labelSessionID: sessionID,
+			labelTenantID:  req.Principal.TenantID,
 		},
 	}
 
@@ -200,7 +212,7 @@ func (m *DockerManager) GetSession(ctx context.Context, sessionID string) (domai
 	if err != nil {
 		return domain.Session{}, false, err
 	}
-	if info.State == nil || !info.State.Running {
+	if info.ContainerJSONBase == nil || info.State == nil || !info.State.Running {
 		return domain.Session{}, false, nil
 	}
 
@@ -224,7 +236,6 @@ func (m *DockerManager) CloseSession(ctx context.Context, sessionID string) erro
 	m.mu.Unlock()
 
 	if m.cfg.SessionStore != nil {
-		_ = m.cfg.SessionStore.Delete(ctx, sessionID)
 		if !ok {
 			session, found, _ := m.cfg.SessionStore.Get(ctx, sessionID)
 			if found && session.Runtime.ContainerID != "" {
@@ -232,6 +243,7 @@ func (m *DockerManager) CloseSession(ctx context.Context, sessionID string) erro
 				ok = true
 			}
 		}
+		_ = m.cfg.SessionStore.Delete(ctx, sessionID)
 	}
 
 	if !ok || containerID == "" {
@@ -264,7 +276,7 @@ func (m *DockerManager) containerName(sessionID string) string {
 		}
 		return '-'
 	}, name)
-	if len(name) > 63 {
+	if len(name) > maxContainerNameLen {
 		name = name[:63]
 	}
 	return strings.TrimRight(name, "-")

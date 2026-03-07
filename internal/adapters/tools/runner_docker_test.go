@@ -19,6 +19,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testExecID      = "exec-1"
+	testContainerID = "c1"
+)
+
 type fakeDockerExecClient struct {
 	execCreateID  string
 	execCreateErr error
@@ -60,7 +65,7 @@ func (f *fakeDockerExecClient) ContainerExecInspect(_ context.Context, _ string)
 
 func TestDockerCommandRunner_Run(t *testing.T) {
 	client := &fakeDockerExecClient{
-		execCreateID: "exec-1",
+		execCreateID: testExecID,
 		stdout:       []byte("hello world"),
 		execInspect:  container.ExecInspect{ExitCode: 0},
 	}
@@ -69,7 +74,7 @@ func TestDockerCommandRunner_Run(t *testing.T) {
 	session := domain.Session{
 		Runtime: domain.RuntimeRef{
 			Kind:        domain.RuntimeKindDocker,
-			ContainerID: "container-1",
+			ContainerID: testContainerID,
 			Workdir:     "/workspace/repo",
 		},
 	}
@@ -99,7 +104,7 @@ func TestDockerCommandRunner_ExitError(t *testing.T) {
 	session := domain.Session{
 		Runtime: domain.RuntimeRef{
 			Kind:        domain.RuntimeKindDocker,
-			ContainerID: "container-1",
+			ContainerID: testContainerID,
 		},
 	}
 	result, err := runner.Run(context.Background(), session, app.CommandSpec{
@@ -147,7 +152,7 @@ func TestDockerCommandRunner_ExecCreateError(t *testing.T) {
 	}
 	runner := NewDockerCommandRunner(client)
 	session := domain.Session{
-		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindDocker, ContainerID: "c1"},
+		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindDocker, ContainerID: testContainerID},
 	}
 	_, err := runner.Run(context.Background(), session, app.CommandSpec{Command: "echo"})
 	if err == nil {
@@ -162,7 +167,7 @@ func TestDockerCommandRunner_ExecAttachError(t *testing.T) {
 	}
 	runner := NewDockerCommandRunner(client)
 	session := domain.Session{
-		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindDocker, ContainerID: "c1"},
+		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindDocker, ContainerID: testContainerID},
 	}
 	_, err := runner.Run(context.Background(), session, app.CommandSpec{Command: "echo"})
 	if err == nil {
@@ -172,7 +177,7 @@ func TestDockerCommandRunner_ExecAttachError(t *testing.T) {
 
 func TestDockerCommandRunner_WorkdirResolution(t *testing.T) {
 	client := &fakeDockerExecClient{
-		execCreateID: "exec-1",
+		execCreateID: testExecID,
 		execInspect:  container.ExecInspect{ExitCode: 0},
 	}
 	runner := NewDockerCommandRunner(client)
@@ -181,7 +186,7 @@ func TestDockerCommandRunner_WorkdirResolution(t *testing.T) {
 		WorkspacePath: "/fallback",
 		Runtime: domain.RuntimeRef{
 			Kind:        domain.RuntimeKindDocker,
-			ContainerID: "c1",
+			ContainerID: testContainerID,
 			Workdir:     "/runtime-dir",
 		},
 	}
@@ -194,7 +199,7 @@ func TestDockerCommandRunner_WorkdirResolution(t *testing.T) {
 
 func TestDockerCommandRunner_StdoutStderr(t *testing.T) {
 	client := &fakeDockerExecClient{
-		execCreateID: "exec-1",
+		execCreateID: testExecID,
 		stdout:       []byte("out"),
 		stderr:       []byte("err"),
 		execInspect:  container.ExecInspect{ExitCode: 0},
@@ -202,7 +207,7 @@ func TestDockerCommandRunner_StdoutStderr(t *testing.T) {
 	runner := NewDockerCommandRunner(client)
 
 	session := domain.Session{
-		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindDocker, ContainerID: "c1"},
+		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindDocker, ContainerID: testContainerID},
 	}
 	result, err := runner.Run(context.Background(), session, app.CommandSpec{Command: "test"})
 	if err != nil {
