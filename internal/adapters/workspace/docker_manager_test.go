@@ -259,11 +259,11 @@ func TestDockerManager_ResourceLimits(t *testing.T) {
 		Principal: domain.Principal{TenantID: "t1"},
 	})
 
-	if client.createdHost.Resources.NanoCPUs != 2e9 {
-		t.Fatalf("expected 2e9 nanocpus, got %d", client.createdHost.Resources.NanoCPUs)
+	if client.createdHost.NanoCPUs != 2e9 {
+		t.Fatalf("expected 2e9 nanocpus, got %d", client.createdHost.NanoCPUs)
 	}
-	if client.createdHost.Resources.Memory != 1024*1024*1024 {
-		t.Fatalf("expected 1GiB memory, got %d", client.createdHost.Resources.Memory)
+	if client.createdHost.Memory != 1024*1024*1024 {
+		t.Fatalf("expected 1GiB memory, got %d", client.createdHost.Memory)
 	}
 }
 

@@ -99,10 +99,10 @@ func (m *DockerManager) CreateSession(ctx context.Context, req app.CreateSession
 
 	hostCfg := &container.HostConfig{}
 	if m.cfg.CPULimit > 0 {
-		hostCfg.Resources.NanoCPUs = m.cfg.CPULimit * 1e9
+		hostCfg.NanoCPUs = m.cfg.CPULimit * 1e9
 	}
 	if m.cfg.MemoryLimit > 0 {
-		hostCfg.Resources.Memory = m.cfg.MemoryLimit
+		hostCfg.Memory = m.cfg.MemoryLimit
 	}
 
 	var netCfg *network.NetworkingConfig
@@ -198,7 +198,7 @@ func (m *DockerManager) GetSession(ctx context.Context, sessionID string) (domai
 
 	info, err := m.client.ContainerInspect(ctx, containerID)
 	if err != nil {
-		return domain.Session{}, false, nil
+		return domain.Session{}, false, err
 	}
 	if info.State == nil || !info.State.Running {
 		return domain.Session{}, false, nil
