@@ -96,6 +96,7 @@ func main() {
 		CommandRunner: commandRunner,
 		K8sClient:     k8sClientOrNil(k8s),
 		K8sNamespace:  workspaceNamespace,
+		DockerClient:  dockerClientOrNil(workspaceBackend),
 	})
 	artifactStore := storage.NewLocalArtifactStore(artifactRoot)
 	policyEngine := policy.NewStaticPolicy()
@@ -176,6 +177,17 @@ func buildDockerCommandRunner() (app.CommandRunner, error) {
 		return nil, fmt.Errorf("create docker client: %w", err)
 	}
 	return tooladapter.NewDockerCommandRunner(client), nil
+}
+
+func dockerClientOrNil(backend string) any {
+	if backend != workspaceBackendDocker {
+		return nil
+	}
+	client, err := newDockerClient()
+	if err != nil {
+		return nil
+	}
+	return client
 }
 
 func parseDisabledBundles() []string {

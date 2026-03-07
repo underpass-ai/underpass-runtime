@@ -13,6 +13,10 @@ type Config struct {
 	// Typed as any to avoid k8s.io imports in non-k8s builds.
 	K8sClient    any
 	K8sNamespace string
+
+	// DockerClient carries the Docker engine client when backend=docker.
+	// Typed as any to avoid docker imports in builds that don't need it.
+	DockerClient any
 }
 
 // Bundle is a named group of tool handlers built from a shared Config.
@@ -50,6 +54,7 @@ func (r *Registry) RegisterDefaults() {
 	r.Register(MessagingBundle())
 	r.Register(DataBundle())
 	r.Register(ImageBundle())
+	r.Register(DockerBundle())
 }
 
 // Handlers builds all handlers from registered, non-disabled bundles.

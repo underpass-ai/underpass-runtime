@@ -139,27 +139,40 @@ var (
 	}
 )
 
+// containerDockerOps abstracts Docker Engine API operations for container tools.
+// Nil when Docker backend is not configured; tools fall back to CLI probing.
+type containerDockerOps interface {
+	invokePS(ctx context.Context, session domain.Session, all bool, limit int, nameFilter string) (app.ToolRunResult, *domain.Error)
+	invokeLogs(ctx context.Context, session domain.Session, containerID string, tailLines, sinceSec int, timestamps bool, maxBytes int) (app.ToolRunResult, *domain.Error)
+	invokeRun(ctx context.Context, session domain.Session, imageRef string, command, envPairs []string, containerName string, detach, remove bool) (app.ToolRunResult, *domain.Error)
+	invokeExec(ctx context.Context, session domain.Session, containerID string, command []string, timeoutSec, maxBytes int) (app.ToolRunResult, *domain.Error)
+}
+
 type ContainerPSHandler struct {
 	runner           app.CommandRunner
 	k8sOps           containerK8sOps
+	dockerOps        containerDockerOps
 	defaultNamespace string
 }
 
 type ContainerLogsHandler struct {
 	runner           app.CommandRunner
 	k8sOps           containerK8sOps
+	dockerOps        containerDockerOps
 	defaultNamespace string
 }
 
 type ContainerRunHandler struct {
 	runner           app.CommandRunner
 	k8sOps           containerK8sOps
+	dockerOps        containerDockerOps
 	defaultNamespace string
 }
 
 type ContainerExecHandler struct {
 	runner           app.CommandRunner
 	k8sOps           containerK8sOps
+	dockerOps        containerDockerOps
 	defaultNamespace string
 }
 
@@ -222,6 +235,9 @@ func (h *ContainerPSHandler) Invoke(ctx context.Context, session domain.Session,
 	strict := resolveContainerStrictFlag(request.Strict)
 	if isKubernetesRuntime(session) && h.k8sOps != nil {
 		return h.k8sOps.invokePS(ctx, session, request.All, limit, nameFilter)
+	}
+	if isDockerRuntime(session) && h.dockerOps != nil {
+		return h.dockerOps.invokePS(ctx, session, request.All, limit, nameFilter)
 	}
 
 	runner := ensureRunner(h.runner)
@@ -372,6 +388,9 @@ func (h *ContainerRunHandler) Invoke(ctx context.Context, session domain.Session
 			detach:        request.Detach,
 			remove:        request.Remove,
 		})
+	}
+	if isDockerRuntime(session) && h.dockerOps != nil {
+		return h.dockerOps.invokeRun(ctx, session, imageRef, command, envPairs, containerName, request.Detach, request.Remove)
 	}
 
 	runner := ensureRunner(h.runner)
@@ -579,6 +598,9 @@ func (h *ContainerLogsHandler) Invoke(ctx context.Context, session domain.Sessio
 	if isKubernetesRuntime(session) && h.k8sOps != nil {
 		return h.k8sOps.invokeLogs(ctx, session, containerID, tailLines, sinceSec, request.Timestamps, maxBytes)
 	}
+	if isDockerRuntime(session) && h.dockerOps != nil {
+		return h.dockerOps.invokeLogs(ctx, session, containerID, tailLines, sinceSec, request.Timestamps, maxBytes)
+	}
 
 	runner := ensureRunner(h.runner)
 	runtime, probeOutput := detectContainerRuntime(ctx, runner, session)
@@ -672,6 +694,9 @@ func (h *ContainerExecHandler) Invoke(ctx context.Context, session domain.Sessio
 	}
 	if isKubernetesRuntime(session) && h.k8sOps != nil {
 		return h.k8sOps.invokeExec(ctx, session, containerID, command, timeoutSec, maxBytes)
+	}
+	if isDockerRuntime(session) && h.dockerOps != nil {
+		return h.dockerOps.invokeExec(ctx, session, containerID, command, timeoutSec, maxBytes)
 	}
 
 	runner := ensureRunner(h.runner)
