@@ -226,3 +226,29 @@ func TestBuildCommandRunnerLocal(t *testing.T) {
 		t.Fatal("expected non-nil local command runner")
 	}
 }
+
+func TestParseDisabledBundles(t *testing.T) {
+	t.Setenv("WORKSPACE_DISABLED_BUNDLES", "")
+	if got := parseDisabledBundles(); got != nil {
+		t.Fatalf("expected nil for empty, got %v", got)
+	}
+
+	t.Setenv("WORKSPACE_DISABLED_BUNDLES", "messaging,data")
+	got := parseDisabledBundles()
+	if len(got) != 2 || got[0] != "messaging" || got[1] != "data" {
+		t.Fatalf("expected [messaging data], got %v", got)
+	}
+
+	t.Setenv("WORKSPACE_DISABLED_BUNDLES", " messaging , , data ")
+	got = parseDisabledBundles()
+	if len(got) != 2 || got[0] != "messaging" || got[1] != "data" {
+		t.Fatalf("expected trimmed [messaging data], got %v", got)
+	}
+}
+
+func TestBuildToolRegistry_Local(t *testing.T) {
+	registry := buildToolRegistry(nil, "default")
+	if registry == nil {
+		t.Fatal("expected non-nil registry")
+	}
+}

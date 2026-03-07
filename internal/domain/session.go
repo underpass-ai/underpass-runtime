@@ -26,12 +26,14 @@ type RuntimeKind string
 const (
 	RuntimeKindLocal      RuntimeKind = "local"
 	RuntimeKindKubernetes RuntimeKind = "kubernetes"
+	RuntimeKindDocker     RuntimeKind = "docker"
 )
 
 type RuntimeRef struct {
-	Kind      RuntimeKind `json:"kind,omitempty"`
-	Namespace string      `json:"namespace,omitempty"`
-	PodName   string      `json:"pod_name,omitempty"`
-	Container string      `json:"container,omitempty"`
-	Workdir   string      `json:"workdir,omitempty"`
+	Kind        RuntimeKind `json:"kind,omitempty"`
+	Namespace   string      `json:"namespace,omitempty"`
+	PodName     string      `json:"pod_name,omitempty"`
+	Container   string      `json:"container,omitempty"`
+	ContainerID string      `json:"container_id,omitempty"`
+	Workdir     string      `json:"workdir,omitempty"`
 }
