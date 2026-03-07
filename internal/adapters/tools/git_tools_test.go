@@ -15,6 +15,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testGitRemoteOrigin      = "origin"
+	testGitBranchLifecycle   = "feature/lifecycle"
+)
+
 func TestGitHandlers_StatusDiffApplyPatch(t *testing.T) {
 	root := initGitRepo(t)
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
@@ -139,14 +144,14 @@ func TestToToolErrorTimeout(t *testing.T) {
 func TestGitHandlers_LifecycleOperations(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testGitRemoteOrigin, remotePath)
 
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	ctx := context.Background()
 
 	checkout := &GitCheckoutHandler{}
 	_, err := checkout.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"ref":    "feature/lifecycle",
+		"ref":    testGitBranchLifecycle,
 		"create": true,
 	}))
 	if err != nil {
@@ -175,7 +180,7 @@ func TestGitHandlers_LifecycleOperations(t *testing.T) {
 	}
 	foundFeature := false
 	for _, branch := range branches {
-		if strings.TrimSpace(fmt.Sprintf("%v", branch["name"])) == "feature/lifecycle" {
+		if strings.TrimSpace(fmt.Sprintf("%v", branch["name"])) == testGitBranchLifecycle {
 			foundFeature = true
 			break
 		}
@@ -241,7 +246,7 @@ func TestGitHandlers_LifecycleOperations(t *testing.T) {
 
 	fetch := &GitFetchHandler{}
 	_, err = fetch.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote": "origin",
+		"remote": testGitRemoteOrigin,
 		"prune":  true,
 	}))
 	if err != nil {
@@ -250,7 +255,7 @@ func TestGitHandlers_LifecycleOperations(t *testing.T) {
 
 	push := &GitPushHandler{}
 	_, err = push.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote":       "origin",
+		"remote":       testGitRemoteOrigin,
 		"refspec":      "HEAD:refs/heads/feature/lifecycle",
 		"set_upstream": true,
 	}))
@@ -260,8 +265,8 @@ func TestGitHandlers_LifecycleOperations(t *testing.T) {
 
 	pull := &GitPullHandler{}
 	_, err = pull.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote":  "origin",
-		"refspec": "feature/lifecycle",
+		"remote":  testGitRemoteOrigin,
+		"refspec": testGitBranchLifecycle,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected git pull error: %#v", err)
@@ -271,13 +276,13 @@ func TestGitHandlers_LifecycleOperations(t *testing.T) {
 func TestGitHandlers_AllowlistPolicies(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testGitRemoteOrigin, remotePath)
 
 	session := domain.Session{
 		WorkspacePath: root,
 		AllowedPaths:  []string{"."},
 		Metadata: map[string]string{
-			"allowed_git_remotes":      "origin",
+			"allowed_git_remotes":      testGitRemoteOrigin,
 			"allowed_git_ref_prefixes": "refs/heads/release-,refs/tags/release-",
 		},
 	}
@@ -301,7 +306,7 @@ func TestGitHandlers_AllowlistPolicies(t *testing.T) {
 	}
 
 	_, err = push.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote":  "origin",
+		"remote":  testGitRemoteOrigin,
 		"refspec": "HEAD:refs/heads/feature/nope",
 	}))
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
@@ -310,7 +315,7 @@ func TestGitHandlers_AllowlistPolicies(t *testing.T) {
 
 	fetch := &GitFetchHandler{}
 	_, err = fetch.Invoke(ctx, session, mustJSONGit(t, map[string]any{
-		"remote":  "origin",
+		"remote":  testGitRemoteOrigin,
 		"refspec": "refs/heads/release-2026",
 	}))
 	if err != nil && err.Code == app.ErrorCodePolicyDenied {

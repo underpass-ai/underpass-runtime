@@ -8,13 +8,21 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testProfileDevNats       = "dev.nats"
+	testEnvProfileEndpoints  = "WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON"
+	testEnvHostAllowlist     = "WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON"
+	testNatsFallbackEndpoint = "nats://fallback:4222"
+	testNatsAnyHostEndpoint  = "nats://any.host:4222"
+)
+
 // ---------------------------------------------------------------------------
 // resolveTypedProfile
 // ---------------------------------------------------------------------------
 
 func TestResolveTypedProfile_EmptyID(t *testing.T) {
 	session := domain.Session{AllowedPaths: []string{"."}}
-	_, _, err := resolveTypedProfile(session, "", []string{"nats"}, "dev.nats", "nats://localhost:4222")
+	_, _, err := resolveTypedProfile(session, "", []string{"nats"}, testProfileDevNats, "nats://localhost:4222")
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected invalid_argument for empty ID, got %#v", err)
 	}
@@ -22,7 +30,7 @@ func TestResolveTypedProfile_EmptyID(t *testing.T) {
 
 func TestResolveTypedProfile_WhitespaceID(t *testing.T) {
 	session := domain.Session{AllowedPaths: []string{"."}}
-	_, _, err := resolveTypedProfile(session, "   ", []string{"nats"}, "dev.nats", "nats://localhost:4222")
+	_, _, err := resolveTypedProfile(session, "   ", []string{"nats"}, testProfileDevNats, "nats://localhost:4222")
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected invalid_argument for whitespace-only ID, got %#v", err)
 	}
@@ -39,7 +47,7 @@ func TestResolveTypedProfile_NotFound(t *testing.T) {
 func TestResolveTypedProfile_KindMismatch(t *testing.T) {
 	session := domain.Session{AllowedPaths: []string{"."}}
 	// dev.nats exists in defaults with kind "nats"; ask for kind "redis" → mismatch
-	_, _, err := resolveTypedProfile(session, "dev.nats", []string{"redis"}, "", "")
+	_, _, err := resolveTypedProfile(session, testProfileDevNats, []string{"redis"}, "", "")
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected invalid_argument for kind mismatch, got %#v", err)
 	}
@@ -50,40 +58,40 @@ func TestResolveTypedProfile_KindMismatch(t *testing.T) {
 
 func TestResolveTypedProfile_EndpointNotConfigured(t *testing.T) {
 	// Ensure env var is empty so resolveProfileEndpoint returns ""
-	os.Unsetenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON")
+	os.Unsetenv(testEnvProfileEndpoints)
 	session := domain.Session{AllowedPaths: []string{"."}}
 	// dev.nats exists, kind matches, but no env endpoint and profileID != defaultID → empty endpoint
-	_, _, err := resolveTypedProfile(session, "dev.nats", []string{"nats"}, "other.nats", "nats://fallback:4222")
+	_, _, err := resolveTypedProfile(session, testProfileDevNats, []string{"nats"}, "other.nats", testNatsFallbackEndpoint)
 	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("expected execution_failed for unconfigured endpoint, got %#v", err)
 	}
 }
 
 func TestResolveTypedProfile_DefaultEndpointFallback(t *testing.T) {
-	os.Unsetenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON")
+	os.Unsetenv(testEnvProfileEndpoints)
 	session := domain.Session{AllowedPaths: []string{"."}}
-	profile, endpoint, err := resolveTypedProfile(session, "dev.nats", []string{"nats"}, "dev.nats", "nats://fallback:4222")
+	profile, endpoint, err := resolveTypedProfile(session, testProfileDevNats, []string{"nats"}, testProfileDevNats, testNatsFallbackEndpoint)
 	if err != nil {
 		t.Fatalf("unexpected error: %#v", err)
 	}
-	if endpoint != "nats://fallback:4222" {
+	if endpoint != testNatsFallbackEndpoint {
 		t.Fatalf("expected fallback endpoint, got %q", endpoint)
 	}
-	if profile.ID != "dev.nats" {
+	if profile.ID != testProfileDevNats {
 		t.Fatalf("expected profile ID dev.nats, got %q", profile.ID)
 	}
 }
 
 func TestResolveTypedProfile_EnvEndpointUsed(t *testing.T) {
-	os.Setenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON", `{"dev.nats":"nats://custom:4222"}`)
-	os.Setenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON", `{"dev.nats":["custom"]}`)
+	os.Setenv(testEnvProfileEndpoints, `{"dev.nats":"nats://custom:4222"}`)
+	os.Setenv(testEnvHostAllowlist, `{"dev.nats":["custom"]}`)
 	defer func() {
-		os.Unsetenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON")
-		os.Unsetenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON")
+		os.Unsetenv(testEnvProfileEndpoints)
+		os.Unsetenv(testEnvHostAllowlist)
 	}()
 
 	session := domain.Session{AllowedPaths: []string{"."}}
-	_, endpoint, err := resolveTypedProfile(session, "dev.nats", []string{"nats"}, "dev.nats", "nats://fallback:4222")
+	_, endpoint, err := resolveTypedProfile(session, testProfileDevNats, []string{"nats"}, testProfileDevNats, testNatsFallbackEndpoint)
 	if err != nil {
 		t.Fatalf("unexpected error: %#v", err)
 	}
@@ -93,7 +101,7 @@ func TestResolveTypedProfile_EnvEndpointUsed(t *testing.T) {
 }
 
 func TestResolveTypedProfile_MultipleAllowedKinds(t *testing.T) {
-	os.Unsetenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON")
+	os.Unsetenv(testEnvProfileEndpoints)
 	session := domain.Session{AllowedPaths: []string{"."}}
 	// dev.mongo exists with kind "mongo"; allow both "mongo" and "mongodb"
 	profile, endpoint, err := resolveTypedProfile(session, "dev.mongo", []string{"mongo", "mongodb"}, "dev.mongo", "mongodb://fallback:27017")
@@ -109,7 +117,7 @@ func TestResolveTypedProfile_MultipleAllowedKinds(t *testing.T) {
 }
 
 func TestResolveTypedProfile_FilteredByAllowlist(t *testing.T) {
-	os.Unsetenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON")
+	os.Unsetenv(testEnvProfileEndpoints)
 	session := domain.Session{
 		AllowedPaths: []string{"."},
 		Metadata: map[string]string{
@@ -117,7 +125,7 @@ func TestResolveTypedProfile_FilteredByAllowlist(t *testing.T) {
 		},
 	}
 	// dev.nats exists but is filtered out by allowlist
-	_, _, err := resolveTypedProfile(session, "dev.nats", []string{"nats"}, "dev.nats", "nats://fallback:4222")
+	_, _, err := resolveTypedProfile(session, testProfileDevNats, []string{"nats"}, testProfileDevNats, testNatsFallbackEndpoint)
 	if err == nil || err.Code != app.ErrorCodeNotFound {
 		t.Fatalf("expected not_found when profile filtered by allowlist, got %#v", err)
 	}
@@ -216,72 +224,72 @@ func TestHostMatchesAllowRule(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestResolveProfileEndpoint_NoEnvVar(t *testing.T) {
-	os.Unsetenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON")
-	result := resolveProfileEndpoint(nil, "dev.nats")
+	os.Unsetenv(testEnvProfileEndpoints)
+	result := resolveProfileEndpoint(nil, testProfileDevNats)
 	if result != "" {
 		t.Fatalf("expected empty endpoint without env var, got %q", result)
 	}
 }
 
 func TestResolveProfileEndpoint_InvalidJSON(t *testing.T) {
-	os.Setenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON", `{invalid}`)
-	defer os.Unsetenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON")
-	result := resolveProfileEndpoint(nil, "dev.nats")
+	os.Setenv(testEnvProfileEndpoints, `{invalid}`)
+	defer os.Unsetenv(testEnvProfileEndpoints)
+	result := resolveProfileEndpoint(nil, testProfileDevNats)
 	if result != "" {
 		t.Fatalf("expected empty endpoint for invalid JSON, got %q", result)
 	}
 }
 
 func TestResolveProfileEndpoint_MissingProfile(t *testing.T) {
-	os.Setenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON", `{"dev.redis":"redis://localhost:6379"}`)
-	defer os.Unsetenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON")
-	result := resolveProfileEndpoint(nil, "dev.nats")
+	os.Setenv(testEnvProfileEndpoints, `{"dev.redis":"redis://localhost:6379"}`)
+	defer os.Unsetenv(testEnvProfileEndpoints)
+	result := resolveProfileEndpoint(nil, testProfileDevNats)
 	if result != "" {
 		t.Fatalf("expected empty endpoint for missing profile, got %q", result)
 	}
 }
 
 func TestResolveProfileEndpoint_AllowlistDenied(t *testing.T) {
-	os.Setenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON", `{"dev.nats":"nats://evil.com:4222"}`)
-	os.Setenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON", `{"dev.nats":["safe.local"]}`)
+	os.Setenv(testEnvProfileEndpoints, `{"dev.nats":"nats://evil.com:4222"}`)
+	os.Setenv(testEnvHostAllowlist, `{"dev.nats":["safe.local"]}`)
 	defer func() {
-		os.Unsetenv("WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON")
-		os.Unsetenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON")
+		os.Unsetenv(testEnvProfileEndpoints)
+		os.Unsetenv(testEnvHostAllowlist)
 	}()
-	result := resolveProfileEndpoint(nil, "dev.nats")
+	result := resolveProfileEndpoint(nil, testProfileDevNats)
 	if result != "" {
 		t.Fatalf("expected empty endpoint when host not in allowlist, got %q", result)
 	}
 }
 
 func TestProfileEndpointAllowed_NoAllowlist(t *testing.T) {
-	os.Unsetenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON")
+	os.Unsetenv(testEnvHostAllowlist)
 	// No allowlist → allow all
-	if !profileEndpointAllowed("dev.nats", "nats://any.host:4222") {
+	if !profileEndpointAllowed(testProfileDevNats, testNatsAnyHostEndpoint) {
 		t.Fatal("expected allowed when no host allowlist configured")
 	}
 }
 
 func TestProfileEndpointAllowed_InvalidAllowlistJSON(t *testing.T) {
-	os.Setenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON", `{bad`)
-	defer os.Unsetenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON")
-	if profileEndpointAllowed("dev.nats", "nats://any.host:4222") {
+	os.Setenv(testEnvHostAllowlist, `{bad`)
+	defer os.Unsetenv(testEnvHostAllowlist)
+	if profileEndpointAllowed(testProfileDevNats, testNatsAnyHostEndpoint) {
 		t.Fatal("expected denied when allowlist JSON is invalid")
 	}
 }
 
 func TestProfileEndpointAllowed_ProfileNotInAllowlist(t *testing.T) {
-	os.Setenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON", `{"dev.redis":["redis.local"]}`)
-	defer os.Unsetenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON")
-	if profileEndpointAllowed("dev.nats", "nats://any.host:4222") {
+	os.Setenv(testEnvHostAllowlist, `{"dev.redis":["redis.local"]}`)
+	defer os.Unsetenv(testEnvHostAllowlist)
+	if profileEndpointAllowed(testProfileDevNats, testNatsAnyHostEndpoint) {
 		t.Fatal("expected denied when profile not in allowlist")
 	}
 }
 
 func TestProfileEndpointAllowed_EmptyEndpoint(t *testing.T) {
-	os.Setenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON", `{"dev.nats":["localhost"]}`)
-	defer os.Unsetenv("WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON")
-	if profileEndpointAllowed("dev.nats", "") {
+	os.Setenv(testEnvHostAllowlist, `{"dev.nats":["localhost"]}`)
+	defer os.Unsetenv(testEnvHostAllowlist)
+	if profileEndpointAllowed(testProfileDevNats, "") {
 		t.Fatal("expected denied for empty endpoint")
 	}
 }

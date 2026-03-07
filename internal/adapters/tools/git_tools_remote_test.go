@@ -11,6 +11,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testRemoteOrigin             = "origin"
+	testExpectedBadJSONErrFmt    = "expected invalid_argument for bad JSON, got %#v"
+)
+
 // ---------------------------------------------------------------------------
 // executeGitRemoteCommand
 // ---------------------------------------------------------------------------
@@ -18,7 +23,7 @@ import (
 func TestExecuteGitRemoteCommand_DefaultRemote(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testRemoteOrigin, remotePath)
 
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	runner := NewLocalCommandRunner()
@@ -33,7 +38,7 @@ func TestExecuteGitRemoteCommand_DefaultRemote(t *testing.T) {
 		t.Fatalf("unexpected error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output[gitKeyRemote] != "origin" {
+	if output[gitKeyRemote] != testRemoteOrigin {
 		t.Fatalf("expected default remote 'origin', got %q", output[gitKeyRemote])
 	}
 	if output["fetched"] != true {
@@ -47,7 +52,7 @@ func TestExecuteGitRemoteCommand_RemoteDenied(t *testing.T) {
 		WorkspacePath: root,
 		AllowedPaths:  []string{"."},
 		Metadata: map[string]string{
-			"allowed_git_remotes": "origin",
+			"allowed_git_remotes": testRemoteOrigin,
 		},
 	}
 	runner := NewLocalCommandRunner()
@@ -66,13 +71,13 @@ func TestExecuteGitRemoteCommand_RemoteDenied(t *testing.T) {
 func TestExecuteGitRemoteCommand_RefspecDenied(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testRemoteOrigin, remotePath)
 
 	session := domain.Session{
 		WorkspacePath: root,
 		AllowedPaths:  []string{"."},
 		Metadata: map[string]string{
-			"allowed_git_remotes":      "origin",
+			"allowed_git_remotes":      testRemoteOrigin,
 			"allowed_git_ref_prefixes": "refs/heads/release-",
 		},
 	}
@@ -81,7 +86,7 @@ func TestExecuteGitRemoteCommand_RefspecDenied(t *testing.T) {
 	_, err := executeGitRemoteCommand(context.Background(), runner, session, gitRemoteOpts{
 		cmdName:   "push",
 		actionKey: "pushed",
-		remote:    "origin",
+		remote:    testRemoteOrigin,
 		refspec:   "HEAD:refs/heads/feature/nope",
 	})
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
@@ -92,7 +97,7 @@ func TestExecuteGitRemoteCommand_RefspecDenied(t *testing.T) {
 func TestExecuteGitRemoteCommand_PushWithFlags(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testRemoteOrigin, remotePath)
 
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	runner := NewLocalCommandRunner()
@@ -101,7 +106,7 @@ func TestExecuteGitRemoteCommand_PushWithFlags(t *testing.T) {
 		cmdName:   "push",
 		actionKey: "pushed",
 		flags:     []string{"-u"},
-		remote:    "origin",
+		remote:    testRemoteOrigin,
 		refspec:   "HEAD:refs/heads/main",
 	})
 	if err != nil {
@@ -119,7 +124,7 @@ func TestExecuteGitRemoteCommand_PushWithFlags(t *testing.T) {
 func TestExecuteGitRemoteCommand_PullAfterPush(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testRemoteOrigin, remotePath)
 
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	runner := NewLocalCommandRunner()
@@ -128,7 +133,7 @@ func TestExecuteGitRemoteCommand_PullAfterPush(t *testing.T) {
 	_, err := executeGitRemoteCommand(context.Background(), runner, session, gitRemoteOpts{
 		cmdName:   "push",
 		actionKey: "pushed",
-		remote:    "origin",
+		remote:    testRemoteOrigin,
 		refspec:   "HEAD:refs/heads/main",
 	})
 	if err != nil {
@@ -138,7 +143,7 @@ func TestExecuteGitRemoteCommand_PullAfterPush(t *testing.T) {
 	result, err := executeGitRemoteCommand(context.Background(), runner, session, gitRemoteOpts{
 		cmdName:   "pull",
 		actionKey: "pulled",
-		remote:    "origin",
+		remote:    testRemoteOrigin,
 		refspec:   "main",
 	})
 	if err != nil {
@@ -182,7 +187,7 @@ func TestGitPushHandler_EmptyRemoteValidation(t *testing.T) {
 		WorkspacePath: root,
 		AllowedPaths:  []string{"."},
 		Metadata: map[string]string{
-			"allowed_git_remotes": "origin",
+			"allowed_git_remotes": testRemoteOrigin,
 		},
 	}
 
@@ -198,12 +203,12 @@ func TestGitPushHandler_EmptyRemoteValidation(t *testing.T) {
 func TestGitFetchHandler_WithPrune(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testRemoteOrigin, remotePath)
 
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	fetch := &GitFetchHandler{}
 	result, err := fetch.Invoke(context.Background(), session, mustJSONGit(t, map[string]any{
-		"remote": "origin",
+		"remote": testRemoteOrigin,
 		"prune":  true,
 		"tags":   true,
 	}))
@@ -219,9 +224,9 @@ func TestGitFetchHandler_WithPrune(t *testing.T) {
 func TestGitPullHandler_WithRebase(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testRemoteOrigin, remotePath)
 	// Push initial commit so remote has something
-	runGit(t, root, "push", "origin", "HEAD:refs/heads/main")
+	runGit(t, root, "push", testRemoteOrigin, "HEAD:refs/heads/main")
 
 	// Write a file so there's something on the branch
 	filePath := filepath.Join(root, "new.txt")
@@ -234,7 +239,7 @@ func TestGitPullHandler_WithRebase(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	pull := &GitPullHandler{}
 	result, err := pull.Invoke(context.Background(), session, mustJSONGit(t, map[string]any{
-		"remote":  "origin",
+		"remote":  testRemoteOrigin,
 		"refspec": "main",
 		"rebase":  true,
 	}))
@@ -250,12 +255,12 @@ func TestGitPullHandler_WithRebase(t *testing.T) {
 func TestGitPushHandler_ForceWithLease(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
-	runGit(t, root, "remote", "add", "origin", remotePath)
+	runGit(t, root, "remote", "add", testRemoteOrigin, remotePath)
 
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	push := &GitPushHandler{}
 	result, err := push.Invoke(context.Background(), session, mustJSONGit(t, map[string]any{
-		"remote":           "origin",
+		"remote":           testRemoteOrigin,
 		"refspec":          "HEAD:refs/heads/main",
 		"force_with_lease": true,
 		"set_upstream":     true,
@@ -276,7 +281,7 @@ func TestGitPushHandler_InvalidJSON(t *testing.T) {
 	push := &GitPushHandler{}
 	_, err := push.Invoke(context.Background(), session, json.RawMessage(`{bad`))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument for bad JSON, got %#v", err)
+		t.Fatalf(testExpectedBadJSONErrFmt, err)
 	}
 }
 
@@ -287,7 +292,7 @@ func TestGitFetchHandler_InvalidJSON(t *testing.T) {
 	fetch := &GitFetchHandler{}
 	_, err := fetch.Invoke(context.Background(), session, json.RawMessage(`{bad`))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument for bad JSON, got %#v", err)
+		t.Fatalf(testExpectedBadJSONErrFmt, err)
 	}
 }
 
@@ -298,6 +303,6 @@ func TestGitPullHandler_InvalidJSON(t *testing.T) {
 	pull := &GitPullHandler{}
 	_, err := pull.Invoke(context.Background(), session, json.RawMessage(`{bad`))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument for bad JSON, got %#v", err)
+		t.Fatalf(testExpectedBadJSONErrFmt, err)
 	}
 }

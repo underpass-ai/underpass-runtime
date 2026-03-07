@@ -9,10 +9,18 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testRoleDeveloper = "developer"
+	testFieldPath     = "path"
+	testFieldPaths    = "paths"
+	testFieldArgs     = "args"
+	testAllowedDir    = "src"
+)
+
 func TestStaticPolicy_DeniesClusterScopeWithoutRole(t *testing.T) {
 	engine := NewStaticPolicy()
 	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
-		Session: domain.Session{Principal: domain.Principal{Roles: []string{"developer"}}, AllowedPaths: []string{"."}},
+		Session: domain.Session{Principal: domain.Principal{Roles: []string{testRoleDeveloper}}, AllowedPaths: []string{"."}},
 		Capability: domain.Capability{
 			Scope:     domain.ScopeCluster,
 			RiskLevel: domain.RiskLow,
@@ -31,7 +39,7 @@ func TestStaticPolicy_DeniesClusterScopeWithoutRole(t *testing.T) {
 func TestStaticPolicy_RequiresApproval(t *testing.T) {
 	engine := NewStaticPolicy()
 	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
-		Session: domain.Session{Principal: domain.Principal{Roles: []string{"developer"}}, AllowedPaths: []string{"."}},
+		Session: domain.Session{Principal: domain.Principal{Roles: []string{testRoleDeveloper}}, AllowedPaths: []string{"."}},
 		Capability: domain.Capability{
 			Scope:            domain.ScopeWorkspace,
 			RiskLevel:        domain.RiskMedium,
@@ -54,12 +62,12 @@ func TestStaticPolicy_RequiresApproval(t *testing.T) {
 func TestStaticPolicy_DeniesPathOutsideAllowList(t *testing.T) {
 	engine := NewStaticPolicy()
 	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
-		Session: domain.Session{Principal: domain.Principal{Roles: []string{"developer"}}, AllowedPaths: []string{"src"}},
+		Session: domain.Session{Principal: domain.Principal{Roles: []string{testRoleDeveloper}}, AllowedPaths: []string{testAllowedDir}},
 		Capability: domain.Capability{
 			Scope:     domain.ScopeWorkspace,
 			RiskLevel: domain.RiskLow,
 			Policy: domain.PolicyMetadata{
-				PathFields: []domain.PolicyPathField{{Field: "path", WorkspaceRelative: true}},
+				PathFields: []domain.PolicyPathField{{Field: testFieldPath, WorkspaceRelative: true}},
 			},
 		},
 		Approved: true,
@@ -75,8 +83,8 @@ func TestStaticPolicy_DeniesPathOutsideAllowList(t *testing.T) {
 
 func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 	payload := map[string]any{
-		"path": "src/main.go",
-		"paths": []any{
+		testFieldPath: "src/main.go",
+		testFieldPaths: []any{
 			"src/a.go",
 			"src/b.go",
 		},
@@ -86,14 +94,14 @@ func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 		"queues":   []any{"sandbox.jobs"},
 		"keys":     []any{"sandbox:todo:1"},
 		"arg":      "--run=TestTodo",
-		"args":     []any{"-v", "-run=TestTodo"},
+		testFieldArgs: []any{"-v", "-run=TestTodo"},
 	}
 
-	paths, err := extractPathFieldValues(payload, domain.PolicyPathField{Field: "path"})
+	paths, err := extractPathFieldValues(payload, domain.PolicyPathField{Field: testFieldPath})
 	if err != nil || len(paths) != 1 || paths[0] != "src/main.go" {
 		t.Fatalf("unexpected extractPathFieldValues single result: paths=%#v err=%v", paths, err)
 	}
-	paths, err = extractPathFieldValues(payload, domain.PolicyPathField{Field: "paths", Multi: true})
+	paths, err = extractPathFieldValues(payload, domain.PolicyPathField{Field: testFieldPaths, Multi: true})
 	if err != nil || len(paths) != 2 {
 		t.Fatalf("unexpected extractPathFieldValues multi result: paths=%#v err=%v", paths, err)
 	}
@@ -102,7 +110,7 @@ func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 	if err != nil || len(args) != 1 || args[0] != "--run=TestTodo" {
 		t.Fatalf("unexpected extractArgFieldValues single result: args=%#v err=%v", args, err)
 	}
-	args, err = extractArgFieldValues(payload, domain.PolicyArgField{Field: "args", Multi: true})
+	args, err = extractArgFieldValues(payload, domain.PolicyArgField{Field: testFieldArgs, Multi: true})
 	if err != nil || len(args) != 2 {
 		t.Fatalf("unexpected extractArgFieldValues multi result: args=%#v err=%v", args, err)
 	}
@@ -128,10 +136,10 @@ func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 		t.Fatalf("unexpected extractKeyPrefixFieldValues result: values=%#v err=%v", keys, err)
 	}
 
-	if _, err := extractPathFieldValues(payload, domain.PolicyPathField{Field: "paths"}); err == nil {
+	if _, err := extractPathFieldValues(payload, domain.PolicyPathField{Field: testFieldPaths}); err == nil {
 		t.Fatal("expected extractPathFieldValues type error for non-multi array field")
 	}
-	if _, err := extractArgFieldValues(payload, domain.PolicyArgField{Field: "args"}); err == nil {
+	if _, err := extractArgFieldValues(payload, domain.PolicyArgField{Field: testFieldArgs}); err == nil {
 		t.Fatal("expected extractArgFieldValues type error for non-multi array field")
 	}
 }
@@ -140,7 +148,7 @@ func TestStaticPolicy_ArgumentPolicyRules(t *testing.T) {
 	allowed, reason := argsAllowedByPolicy(
 		json.RawMessage(`{"args":["-v","-run=TestTodo"]}`),
 		[]domain.PolicyArgField{{
-			Field:         "args",
+			Field:         testFieldArgs,
 			Multi:         true,
 			MaxItems:      3,
 			MaxLength:     32,
@@ -155,7 +163,7 @@ func TestStaticPolicy_ArgumentPolicyRules(t *testing.T) {
 
 	allowed, reason = argsAllowedByPolicy(
 		json.RawMessage(`{"args":["-v","-run=TestTodo","-race","-short"]}`),
-		[]domain.PolicyArgField{{Field: "args", Multi: true, MaxItems: 3}},
+		[]domain.PolicyArgField{{Field: testFieldArgs, Multi: true, MaxItems: 3}},
 	)
 	if allowed || reason == "" {
 		t.Fatalf("expected max items denial, got allowed=%v reason=%q", allowed, reason)
@@ -163,7 +171,7 @@ func TestStaticPolicy_ArgumentPolicyRules(t *testing.T) {
 
 	allowed, reason = argsAllowedByPolicy(
 		json.RawMessage(`{"args":["-exec=cat"]}`),
-		[]domain.PolicyArgField{{Field: "args", Multi: true, DeniedPrefix: []string{"-exec"}}},
+		[]domain.PolicyArgField{{Field: testFieldArgs, Multi: true, DeniedPrefix: []string{"-exec"}}},
 	)
 	if allowed || reason == "" {
 		t.Fatalf("expected denied prefix rejection, got allowed=%v reason=%q", allowed, reason)
@@ -293,10 +301,10 @@ func TestStaticPolicy_MatchersAndUtilities(t *testing.T) {
 		t.Fatal("expected lookupField miss")
 	}
 
-	if !isPathWithinAllowlist("src/app/main.go", []string{"src"}) {
+	if !isPathWithinAllowlist("src/app/main.go", []string{testAllowedDir}) {
 		t.Fatal("expected path within allowlist")
 	}
-	if isPathWithinAllowlist("../outside", []string{"src"}) {
+	if isPathWithinAllowlist("../outside", []string{testAllowedDir}) {
 		t.Fatal("expected path outside allowlist")
 	}
 }

@@ -13,17 +13,39 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testCIKeyFailedStep         = "failed_step"
+	testCIKeyIncludeStaticAnalysis = "include_static_analysis"
+	testCIKeyIncludeCoverage    = "include_coverage"
+	testCIKeyIncludeQualityGate = "include_quality_gate"
+	testCIKeyFailFast           = "fail_fast"
+	testCIKeyQualityGate        = "quality_gate"
+	testCIKeySteps              = "steps"
+	testCIKeyStatus             = "status"
+	testCIKeyName               = "name"
+	testCIStepStaticAnalysis    = "static_analysis"
+	testCIStatusSkipped         = "skipped"
+	testCIGoModFile             = "go.mod"
+	testCIGoModContent          = "module example.com/demo\n\ngo 1.23\n"
+	testCIFmtWriteGoMod         = "write go.mod failed: %v"
+	testCIOutputValidateOK      = "validate ok"
+	testCIOutputBuildOK         = "build ok"
+	testCIOutputTestsOK         = "tests ok"
+	testCIErrExit1              = "exit 1"
+	testCIProjectUnknown        = "unknown"
+)
+
 func TestCIRunPipelineHandler_FailFast(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
+		t.Fatalf(testCIFmtWriteGoMod, err)
 	}
 
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0:
-				return app.CommandResult{ExitCode: 0, Output: "validate ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputValidateOK}, nil
 			case 1:
 				return app.CommandResult{ExitCode: 2, Output: "build failed"}, errors.New("exit 2")
 			default:
@@ -35,9 +57,9 @@ func TestCIRunPipelineHandler_FailFast(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"fail_fast":               true,
-		"include_static_analysis": false,
-		"include_coverage":        false,
+		testCIKeyFailFast:               true,
+		testCIKeyIncludeStaticAnalysis: false,
+		testCIKeyIncludeCoverage:        false,
 	}))
 	if err == nil {
 		t.Fatal("expected ci.run_pipeline to fail")
@@ -50,26 +72,26 @@ func TestCIRunPipelineHandler_FailFast(t *testing.T) {
 	}
 
 	output := result.Output.(map[string]any)
-	if output["failed_step"] != "build" {
-		t.Fatalf("unexpected failed_step: %#v", output["failed_step"])
+	if output[testCIKeyFailedStep] != "build" {
+		t.Fatalf("unexpected failed_step: %#v", output[testCIKeyFailedStep])
 	}
 }
 
 func TestCIRunPipelineHandler_QualityGateFailure(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
+		t.Fatalf(testCIFmtWriteGoMod, err)
 	}
 
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0:
-				return app.CommandResult{ExitCode: 0, Output: "validate ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputValidateOK}, nil
 			case 1:
-				return app.CommandResult{ExitCode: 0, Output: "build ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputBuildOK}, nil
 			case 2:
-				return app.CommandResult{ExitCode: 0, Output: "tests ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputTestsOK}, nil
 			default:
 				t.Fatalf("unexpected call index %d", callIndex)
 				return app.CommandResult{}, nil
@@ -80,11 +102,11 @@ func TestCIRunPipelineHandler_QualityGateFailure(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
-		"include_static_analysis": false,
-		"include_coverage":        false,
-		"include_quality_gate":    true,
-		"fail_fast":               true,
-		"quality_gate": map[string]any{
+		testCIKeyIncludeStaticAnalysis: false,
+		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeQualityGate:    true,
+		testCIKeyFailFast:               true,
+		testCIKeyQualityGate: map[string]any{
 			"min_coverage_percent": 80,
 			"max_failed_tests":     0,
 		},
@@ -100,15 +122,15 @@ func TestCIRunPipelineHandler_QualityGateFailure(t *testing.T) {
 	}
 
 	output := result.Output.(map[string]any)
-	if output["failed_step"] != "quality_gate" {
-		t.Fatalf("unexpected failed_step: %#v", output["failed_step"])
+	if output[testCIKeyFailedStep] != testCIKeyQualityGate {
+		t.Fatalf("unexpected failed_step: %#v", output[testCIKeyFailedStep])
 	}
-	qualityGate, ok := output["quality_gate"].(map[string]any)
+	qualityGate, ok := output[testCIKeyQualityGate].(map[string]any)
 	if !ok {
-		t.Fatalf("expected quality_gate map, got %T", output["quality_gate"])
+		t.Fatalf("expected quality_gate map, got %T", output[testCIKeyQualityGate])
 	}
-	if qualityGate["status"] != "fail" {
-		t.Fatalf("expected quality gate fail status, got %#v", qualityGate["status"])
+	if qualityGate[testCIKeyStatus] != "fail" {
+		t.Fatalf("expected quality gate fail status, got %#v", qualityGate[testCIKeyStatus])
 	}
 }
 
@@ -122,18 +144,18 @@ func TestCIRunPipelineHandler_NoSupportedToolchain(t *testing.T) {
 
 func TestCIRunPipelineHandler_SuccessPath(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
+		t.Fatalf(testCIFmtWriteGoMod, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0:
-				return app.CommandResult{ExitCode: 0, Output: "validate ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputValidateOK}, nil
 			case 1:
-				return app.CommandResult{ExitCode: 0, Output: "build ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputBuildOK}, nil
 			case 2:
-				return app.CommandResult{ExitCode: 0, Output: "tests ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputTestsOK}, nil
 			case 3:
 				return app.CommandResult{ExitCode: 0, Output: "static ok"}, nil
 			case 4:
@@ -148,11 +170,11 @@ func TestCIRunPipelineHandler_SuccessPath(t *testing.T) {
 	}
 
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"include_static_analysis": true,
-		"include_coverage":        true,
-		"include_quality_gate":    true,
-		"fail_fast":               true,
-		"quality_gate": map[string]any{
+		testCIKeyIncludeStaticAnalysis: true,
+		testCIKeyIncludeCoverage:        true,
+		testCIKeyIncludeQualityGate:    true,
+		testCIKeyFailFast:               true,
+		testCIKeyQualityGate: map[string]any{
 			"min_coverage_percent": 80,
 			"max_failed_tests":     0,
 		},
@@ -164,8 +186,8 @@ func TestCIRunPipelineHandler_SuccessPath(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d", result.ExitCode)
 	}
 	output := result.Output.(map[string]any)
-	if output["failed_step"] != "" {
-		t.Fatalf("expected no failed_step, got %#v", output["failed_step"])
+	if output[testCIKeyFailedStep] != "" {
+		t.Fatalf("expected no failed_step, got %#v", output[testCIKeyFailedStep])
 	}
 }
 
@@ -179,8 +201,8 @@ func TestCIRunPipelineHandler_InvalidArgs(t *testing.T) {
 
 func TestCIRunPipelineHandler_StaticAnalysisFailFast(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
+		t.Fatalf(testCIFmtWriteGoMod, err)
 	}
 	callCount := 0
 	runner := &fakeSWERuntimeCommandRunner{
@@ -188,47 +210,47 @@ func TestCIRunPipelineHandler_StaticAnalysisFailFast(t *testing.T) {
 			callCount++
 			switch callIndex {
 			case 0: // validate
-				return app.CommandResult{ExitCode: 0, Output: "validate ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputValidateOK}, nil
 			case 1: // build
-				return app.CommandResult{ExitCode: 0, Output: "build ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputBuildOK}, nil
 			case 2: // test
 				return app.CommandResult{ExitCode: 0, Output: "FAIL test1\ntests ok"}, nil
 			case 3: // static_analysis
-				return app.CommandResult{ExitCode: 1, Output: "lint failed"}, errors.New("exit 1")
+				return app.CommandResult{ExitCode: 1, Output: "lint failed"}, errors.New(testCIErrExit1)
 			default:
 				return app.CommandResult{ExitCode: 0, Output: "ok"}, nil
 			}
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"include_static_analysis": true,
-		"include_coverage":        false,
-		"include_quality_gate":    false,
-		"fail_fast":               true,
+		testCIKeyIncludeStaticAnalysis: true,
+		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeQualityGate:    false,
+		testCIKeyFailFast:               true,
 	}))
 	if err == nil {
 		t.Fatal("expected pipeline to fail on static analysis")
 	}
 	output := result.Output.(map[string]any)
-	if output["failed_step"] != "static_analysis" {
-		t.Fatalf("expected failed_step=static_analysis, got %#v", output["failed_step"])
+	if output[testCIKeyFailedStep] != testCIStepStaticAnalysis {
+		t.Fatalf("expected failed_step=static_analysis, got %#v", output[testCIKeyFailedStep])
 	}
 }
 
 func TestCIRunPipelineHandler_CoverageStep(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
+		t.Fatalf(testCIFmtWriteGoMod, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0: // validate
-				return app.CommandResult{ExitCode: 0, Output: "validate ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputValidateOK}, nil
 			case 1: // build
-				return app.CommandResult{ExitCode: 0, Output: "build ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputBuildOK}, nil
 			case 2: // test
-				return app.CommandResult{ExitCode: 0, Output: "tests ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputTestsOK}, nil
 			case 3: // coverage
 				return app.CommandResult{ExitCode: 0, Output: "ok\tcoverage: 92.0% of statements"}, nil
 			case 4: // rm cleanup
@@ -239,10 +261,10 @@ func TestCIRunPipelineHandler_CoverageStep(t *testing.T) {
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"include_static_analysis": false,
-		"include_coverage":        true,
-		"include_quality_gate":    false,
-		"fail_fast":               false,
+		testCIKeyIncludeStaticAnalysis: false,
+		testCIKeyIncludeCoverage:        true,
+		testCIKeyIncludeQualityGate:    false,
+		testCIKeyFailFast:               false,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected pipeline error: %#v", err)
@@ -263,18 +285,18 @@ func TestCIRunPipelineHandler_NonGoSkipsCoverage(t *testing.T) {
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"include_static_analysis": false,
-		"include_coverage":        true,
-		"include_quality_gate":    false,
+		testCIKeyIncludeStaticAnalysis: false,
+		testCIKeyIncludeCoverage:        true,
+		testCIKeyIncludeQualityGate:    false,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	steps := output["steps"].([]map[string]any)
+	steps := output[testCIKeySteps].([]map[string]any)
 	for _, step := range steps {
-		if step["name"] == "coverage" && step["status"] != "skipped" {
-			t.Fatalf("expected coverage step to be skipped for node project, got %#v", step["status"])
+		if step[testCIKeyName] == "coverage" && step[testCIKeyStatus] != testCIStatusSkipped {
+			t.Fatalf("expected coverage step to be skipped for node project, got %#v", step[testCIKeyStatus])
 		}
 	}
 	_ = result
@@ -284,14 +306,14 @@ func TestUpdatePipelineQualityMetrics_AllSteps(t *testing.T) {
 	m := qualityGateMetrics{}
 
 	// test failure with output
-	updatePipelineQualityMetrics("test", "FAIL test1\nFAIL test2", errors.New("exit 1"), 1, &m)
+	updatePipelineQualityMetrics("test", "FAIL test1\nFAIL test2", errors.New(testCIErrExit1), 1, &m)
 	if m.FailedTestsCount != 2 {
 		t.Fatalf("expected 2 failed tests, got %d", m.FailedTestsCount)
 	}
 
 	// test failure without parseable output
 	m2 := qualityGateMetrics{}
-	updatePipelineQualityMetrics("test", "some error", errors.New("exit 1"), 1, &m2)
+	updatePipelineQualityMetrics("test", "some error", errors.New(testCIErrExit1), 1, &m2)
 	if m2.FailedTestsCount != 1 {
 		t.Fatalf("expected 1 failed test (fallback), got %d", m2.FailedTestsCount)
 	}
@@ -305,7 +327,7 @@ func TestUpdatePipelineQualityMetrics_AllSteps(t *testing.T) {
 
 	// static_analysis
 	m4 := qualityGateMetrics{}
-	updatePipelineQualityMetrics("static_analysis", "src/main.go:10: error\nsrc/main.go:20: warning", nil, 0, &m4)
+	updatePipelineQualityMetrics(testCIStepStaticAnalysis, "src/main.go:10: error\nsrc/main.go:20: warning", nil, 0, &m4)
 	if m4.DiagnosticsCount == 0 {
 		t.Fatal("expected diagnostics count > 0")
 	}
@@ -353,10 +375,10 @@ func TestCIRunPipelineHandler_StaticAnalysisSkippedNoToolchain(t *testing.T) {
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"include_static_analysis": true,
-		"include_coverage":        false,
-		"include_quality_gate":    false,
-		"fail_fast":               true,
+		testCIKeyIncludeStaticAnalysis: true,
+		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeQualityGate:    false,
+		testCIKeyFailFast:               true,
 	}))
 	// The pipeline may fail at validate/build step because there is no .c source.
 	// But if it gets to static_analysis, the step should be skipped.
@@ -365,10 +387,10 @@ func TestCIRunPipelineHandler_StaticAnalysisSkippedNoToolchain(t *testing.T) {
 	if err == nil {
 		// All steps passed — check that static was skipped
 		output := result.Output.(map[string]any)
-		steps := output["steps"].([]map[string]any)
+		steps := output[testCIKeySteps].([]map[string]any)
 		for _, step := range steps {
-			if step["name"] == "static_analysis" && step["status"] != "skipped" {
-				t.Fatalf("expected static_analysis to be skipped, got %#v", step["status"])
+			if step[testCIKeyName] == testCIStepStaticAnalysis && step[testCIKeyStatus] != testCIStatusSkipped {
+				t.Fatalf("expected static_analysis to be skipped, got %#v", step[testCIKeyStatus])
 			}
 		}
 	}
@@ -380,18 +402,18 @@ func TestCIRunPipelineHandler_FailFastFalse_ContinuesAfterFailure(t *testing.T) 
 	// With fail_fast=false, when a step fails the pipeline should continue
 	// executing remaining steps instead of aborting early.
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
 		t.Fatalf("write go.mod: %v", err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0: // validate — succeeds
-				return app.CommandResult{ExitCode: 0, Output: "validate ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputValidateOK}, nil
 			case 1: // build — FAILS
 				return app.CommandResult{ExitCode: 2, Output: "build failed"}, errors.New("exit 2")
 			case 2: // test — still runs because fail_fast=false
-				return app.CommandResult{ExitCode: 0, Output: "tests ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputTestsOK}, nil
 			case 3: // static_analysis — still runs
 				return app.CommandResult{ExitCode: 0, Output: "static ok"}, nil
 			default:
@@ -400,10 +422,10 @@ func TestCIRunPipelineHandler_FailFastFalse_ContinuesAfterFailure(t *testing.T) 
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"fail_fast":               false,
-		"include_static_analysis": true,
-		"include_coverage":        false,
-		"include_quality_gate":    false,
+		testCIKeyFailFast:               false,
+		testCIKeyIncludeStaticAnalysis: true,
+		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeQualityGate:    false,
 	}))
 	// Pipeline should still report failure (from the build step).
 	if err == nil {
@@ -411,20 +433,20 @@ func TestCIRunPipelineHandler_FailFastFalse_ContinuesAfterFailure(t *testing.T) 
 	}
 	// But all steps after build should have run.
 	output := result.Output.(map[string]any)
-	steps := output["steps"].([]map[string]any)
+	steps := output[testCIKeySteps].([]map[string]any)
 	if len(steps) < 4 {
 		t.Fatalf("expected at least 4 steps (validate, build, test, static_analysis), got %d", len(steps))
 	}
-	if output["failed_step"] != "build" {
-		t.Fatalf("expected failed_step=build, got %#v", output["failed_step"])
+	if output[testCIKeyFailedStep] != "build" {
+		t.Fatalf("expected failed_step=build, got %#v", output[testCIKeyFailedStep])
 	}
 	// Verify test step ran despite build failure.
 	foundTest := false
 	for _, step := range steps {
-		if step["name"] == "test" {
+		if step[testCIKeyName] == "test" {
 			foundTest = true
-			if step["status"] != "succeeded" {
-				t.Fatalf("expected test step to succeed, got %#v", step["status"])
+			if step[testCIKeyStatus] != "succeeded" {
+				t.Fatalf("expected test step to succeed, got %#v", step[testCIKeyStatus])
 			}
 		}
 	}
@@ -447,10 +469,10 @@ func TestCIRunPipelineHandler_BuildCommandResolutionError(t *testing.T) {
 		},
 	}
 	_, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"include_static_analysis": false,
-		"include_coverage":        false,
-		"include_quality_gate":    false,
-		"fail_fast":               true,
+		testCIKeyIncludeStaticAnalysis: false,
+		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeQualityGate:    false,
+		testCIKeyFailFast:               true,
 	}))
 	// Should fail because validate or build can't resolve a C source file.
 	if err == nil {
@@ -465,28 +487,28 @@ func TestCIRunPipelineHandler_TestStepFailFast(t *testing.T) {
 	// Test step fails with fail_fast=true — exercises the runPipelineTestStep
 	// early-return branch (!ps.runStep && failFast).
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
 		t.Fatalf("write go.mod: %v", err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0: // validate
-				return app.CommandResult{ExitCode: 0, Output: "validate ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputValidateOK}, nil
 			case 1: // build
-				return app.CommandResult{ExitCode: 0, Output: "build ok"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputBuildOK}, nil
 			case 2: // test — FAILS
-				return app.CommandResult{ExitCode: 1, Output: "FAIL test1"}, errors.New("exit 1")
+				return app.CommandResult{ExitCode: 1, Output: "FAIL test1"}, errors.New(testCIErrExit1)
 			default:
 				return app.CommandResult{ExitCode: 0, Output: "should not run"}, nil
 			}
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"fail_fast":               true,
-		"include_static_analysis": false,
-		"include_coverage":        false,
-		"include_quality_gate":    false,
+		testCIKeyFailFast:               true,
+		testCIKeyIncludeStaticAnalysis: false,
+		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeQualityGate:    false,
 	}))
 	if err == nil {
 		t.Fatal("expected pipeline to fail on test step")
@@ -495,39 +517,39 @@ func TestCIRunPipelineHandler_TestStepFailFast(t *testing.T) {
 		t.Fatalf("expected 3 calls (validate, build, test), got %d", len(runner.calls))
 	}
 	output := result.Output.(map[string]any)
-	if output["failed_step"] != "test" {
-		t.Fatalf("expected failed_step=test, got %#v", output["failed_step"])
+	if output[testCIKeyFailedStep] != "test" {
+		t.Fatalf("expected failed_step=test, got %#v", output[testCIKeyFailedStep])
 	}
 }
 
 func TestCIRunPipelineHandler_ValidateFailNoAbort(t *testing.T) {
 	// Validate step fails with fail_fast=false — pipeline continues.
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
 		t.Fatalf("write go.mod: %v", err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0: // validate — FAILS
-				return app.CommandResult{ExitCode: 1, Output: "validate failed"}, errors.New("exit 1")
+				return app.CommandResult{ExitCode: 1, Output: "validate failed"}, errors.New(testCIErrExit1)
 			default:
 				return app.CommandResult{ExitCode: 0, Output: "ok"}, nil
 			}
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"fail_fast":               false,
-		"include_static_analysis": false,
-		"include_coverage":        false,
-		"include_quality_gate":    false,
+		testCIKeyFailFast:               false,
+		testCIKeyIncludeStaticAnalysis: false,
+		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeQualityGate:    false,
 	}))
 	if err == nil {
 		t.Fatal("expected pipeline to report failure")
 	}
 	output := result.Output.(map[string]any)
 	// Pipeline should have continued past validate.
-	steps := output["steps"].([]map[string]any)
+	steps := output[testCIKeySteps].([]map[string]any)
 	if len(steps) < 3 {
 		t.Fatalf("expected at least 3 steps with fail_fast=false, got %d", len(steps))
 	}
@@ -537,19 +559,19 @@ func TestCIRunPipelineHandler_ValidateFailFast(t *testing.T) {
 	// Validate step fails with fail_fast=true — exercises the
 	// runPipelineValidateStep early-return branch.
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
 		t.Fatalf("write go.mod: %v", err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(_ int, _ app.CommandSpec) (app.CommandResult, error) {
-			return app.CommandResult{ExitCode: 1, Output: "validate failed"}, errors.New("exit 1")
+			return app.CommandResult{ExitCode: 1, Output: "validate failed"}, errors.New(testCIErrExit1)
 		},
 	}
 	result, err := NewCIRunPipelineHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root}, mustSWERuntimeJSON(t, map[string]any{
-		"fail_fast":               true,
-		"include_static_analysis": false,
-		"include_coverage":        false,
-		"include_quality_gate":    false,
+		testCIKeyFailFast:               true,
+		testCIKeyIncludeStaticAnalysis: false,
+		testCIKeyIncludeCoverage:        false,
+		testCIKeyIncludeQualityGate:    false,
 	}))
 	if err == nil {
 		t.Fatal("expected pipeline to fail at validate step")
@@ -559,8 +581,8 @@ func TestCIRunPipelineHandler_ValidateFailFast(t *testing.T) {
 		t.Fatalf("expected 1 call (validate), got %d", len(runner.calls))
 	}
 	output := result.Output.(map[string]any)
-	if output["failed_step"] != "validate" {
-		t.Fatalf("expected failed_step=validate, got %#v", output["failed_step"])
+	if output[testCIKeyFailedStep] != "validate" {
+		t.Fatalf("expected failed_step=validate, got %#v", output[testCIKeyFailedStep])
 	}
 }
 
@@ -580,14 +602,14 @@ func newTestPipelineState(runner app.CommandRunner, workspacePath string) *pipel
 func TestRunPipelineStaticStep_SkippedOnUnsupported(t *testing.T) {
 	// When staticAnalysisCommandForProject returns an error, the step is skipped.
 	ps := newTestPipelineState(&fakeSWERuntimeCommandRunner{}, t.TempDir())
-	early, _, domErr := runPipelineStaticStep(context.Background(), ps, projectType{Name: "unknown"}, "", true)
+	early, _, domErr := runPipelineStaticStep(context.Background(), ps, projectType{Name: testCIProjectUnknown}, "", true)
 	if early {
 		t.Fatal("expected early=false for skipped step")
 	}
 	if domErr != nil {
 		t.Fatalf("unexpected error: %#v", domErr)
 	}
-	if len(ps.steps) != 1 || ps.steps[0]["status"] != "skipped" {
+	if len(ps.steps) != 1 || ps.steps[0][testCIKeyStatus] != testCIStatusSkipped {
 		t.Fatalf("expected skipped step, got %#v", ps.steps)
 	}
 }
@@ -595,7 +617,7 @@ func TestRunPipelineStaticStep_SkippedOnUnsupported(t *testing.T) {
 func TestRunPipelineBuildStep_CommandResolutionError(t *testing.T) {
 	// When buildCommandForProject returns an error (e.g. C without source).
 	ps := newTestPipelineState(&fakeSWERuntimeCommandRunner{}, t.TempDir())
-	early, _, domErr := runPipelineBuildStep(context.Background(), ps, projectType{Name: "unknown"}, "", true)
+	early, _, domErr := runPipelineBuildStep(context.Background(), ps, projectType{Name: testCIProjectUnknown}, "", true)
 	if !early {
 		t.Fatal("expected early=true for command resolution error")
 	}
@@ -607,7 +629,7 @@ func TestRunPipelineBuildStep_CommandResolutionError(t *testing.T) {
 func TestRunPipelineTestStep_CommandResolutionError(t *testing.T) {
 	// When testCommandForProject returns an error (e.g. unsupported project type).
 	ps := newTestPipelineState(&fakeSWERuntimeCommandRunner{}, t.TempDir())
-	early, _, domErr := runPipelineTestStep(context.Background(), ps, projectType{Name: "unknown"}, "", true)
+	early, _, domErr := runPipelineTestStep(context.Background(), ps, projectType{Name: testCIProjectUnknown}, "", true)
 	if !early {
 		t.Fatal("expected early=true for command resolution error")
 	}

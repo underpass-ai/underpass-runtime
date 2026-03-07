@@ -7,6 +7,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testMissingCapabilityFmt        = "missing capability %q"
+	testExpectedLangOutputSchemaFmt = "%s: expected lang tool OutputSchema"
+)
+
 // langToolOutputSchema is the expected JSON schema for language-specific toolchain tools.
 var langToolOutputSchema = json.RawMessage(`{"type":"object","properties":{"exit_code":{"type":"integer"},"compiled_binary_path":{"type":"string"},"coverage_percent":{"type":"number"},"diagnostics":{"type":"array","items":{"type":"string"}}}}`)
 
@@ -23,7 +28,7 @@ func TestDefaultCapabilities_PolicyConsistency(t *testing.T) {
 	for _, name := range []string{"git.push", "git.fetch", "git.pull"} {
 		cap, ok := capMap[name]
 		if !ok {
-			t.Fatalf("missing capability %q", name)
+			t.Fatalf(testMissingCapabilityFmt, name)
 		}
 		if len(cap.Policy.ArgFields) != 2 {
 			t.Fatalf("%s: expected 2 policy ArgFields, got %d", name, len(cap.Policy.ArgFields))
@@ -40,7 +45,7 @@ func TestDefaultCapabilities_PolicyConsistency(t *testing.T) {
 	for _, name := range []string{"repo.build", "repo.test", "repo.run_tests", "repo.test_failures_summary", "repo.stacktrace_summary"} {
 		cap, ok := capMap[name]
 		if !ok {
-			t.Fatalf("missing capability %q", name)
+			t.Fatalf(testMissingCapabilityFmt, name)
 		}
 		if len(cap.Policy.ArgFields) != 1 {
 			t.Fatalf("%s: expected 1 policy ArgField, got %d", name, len(cap.Policy.ArgFields))
@@ -61,7 +66,7 @@ func TestDefaultCapabilities_PolicyConsistency(t *testing.T) {
 	for _, name := range []string{"k8s.get_pods", "k8s.get_services", "k8s.get_deployments"} {
 		cap, ok := capMap[name]
 		if !ok {
-			t.Fatalf("missing capability %q", name)
+			t.Fatalf(testMissingCapabilityFmt, name)
 		}
 		if cap.Scope != domain.ScopeCluster {
 			t.Fatalf("%s: expected ScopeCluster, got %v", name, cap.Scope)
@@ -81,7 +86,7 @@ func TestDefaultCapabilities_PolicyConsistency(t *testing.T) {
 	for _, name := range []string{"go.build", "go.test"} {
 		cap, ok := capMap[name]
 		if !ok {
-			t.Fatalf("missing capability %q", name)
+			t.Fatalf(testMissingCapabilityFmt, name)
 		}
 		if cap.Scope != domain.ScopeRepo {
 			t.Fatalf("%s: expected ScopeRepo, got %v", name, cap.Scope)
@@ -90,7 +95,7 @@ func TestDefaultCapabilities_PolicyConsistency(t *testing.T) {
 			t.Fatalf("%s: expected CostHint=high, got %q", name, cap.CostHint)
 		}
 		if string(cap.OutputSchema) != string(langToolOutputSchema) {
-			t.Fatalf("%s: expected lang tool OutputSchema", name)
+			t.Fatalf(testExpectedLangOutputSchemaFmt, name)
 		}
 	}
 
@@ -98,13 +103,13 @@ func TestDefaultCapabilities_PolicyConsistency(t *testing.T) {
 	for _, name := range []string{"rust.build", "rust.test", "rust.clippy"} {
 		cap, ok := capMap[name]
 		if !ok {
-			t.Fatalf("missing capability %q", name)
+			t.Fatalf(testMissingCapabilityFmt, name)
 		}
 		if cap.Scope != domain.ScopeRepo {
 			t.Fatalf("%s: expected ScopeRepo, got %v", name, cap.Scope)
 		}
 		if string(cap.OutputSchema) != string(langToolOutputSchema) {
-			t.Fatalf("%s: expected lang tool OutputSchema", name)
+			t.Fatalf(testExpectedLangOutputSchemaFmt, name)
 		}
 	}
 
@@ -112,13 +117,13 @@ func TestDefaultCapabilities_PolicyConsistency(t *testing.T) {
 	for _, name := range []string{"node.build", "node.test", "node.lint", "node.typecheck"} {
 		cap, ok := capMap[name]
 		if !ok {
-			t.Fatalf("missing capability %q", name)
+			t.Fatalf(testMissingCapabilityFmt, name)
 		}
 		if len(cap.Policy.PathFields) != 1 || cap.Policy.PathFields[0].Field != "target" {
 			t.Fatalf("%s: expected PathFields with target, got %#v", name, cap.Policy.PathFields)
 		}
 		if string(cap.OutputSchema) != string(langToolOutputSchema) {
-			t.Fatalf("%s: expected lang tool OutputSchema", name)
+			t.Fatalf(testExpectedLangOutputSchemaFmt, name)
 		}
 	}
 }

@@ -11,11 +11,18 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testRepoGoModFile       = "go.mod"
+	testRepoGoModContent    = "module example.com/repo\n\ngo 1.23\n"
+	testRepoGoTarget        = "./..."
+	testRepoErrWriteGoMod   = "write go.mod failed: %v"
+)
+
 func TestDetectTestCommand(t *testing.T) {
 	root := t.TempDir()
 
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testRepoGoModFile), []byte("module demo\n\ngo 1.23\n"), 0o644); err != nil {
+		t.Fatalf(testRepoErrWriteGoMod, err)
 	}
 	cmd, args, err := detectTestCommand(root, "", nil)
 	if err != nil {
@@ -57,8 +64,8 @@ func TestDetectTestCommand(t *testing.T) {
 
 func TestRepoRunTestsInvoke_GoModule(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/repo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testRepoGoModFile), []byte(testRepoGoModContent), 0o644); err != nil {
+		t.Fatalf(testRepoErrWriteGoMod, err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "sample_test.go"), []byte("package main\nimport \"testing\"\nfunc TestOK(t *testing.T) {}\n"), 0o644); err != nil {
 		t.Fatalf("write test file failed: %v", err)
@@ -96,8 +103,8 @@ func TestRepoRunTestsValidation(t *testing.T) {
 
 func TestRepoDetectProjectTypeInvoke_GoModule(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/repo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testRepoGoModFile), []byte(testRepoGoModContent), 0o644); err != nil {
+		t.Fatalf(testRepoErrWriteGoMod, err)
 	}
 
 	handler := &RepoDetectProjectTypeHandler{}
@@ -115,8 +122,8 @@ func TestRepoDetectProjectTypeInvoke_GoModule(t *testing.T) {
 
 func TestRepoBuildInvoke_GoModule(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/repo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testRepoGoModFile), []byte(testRepoGoModContent), 0o644); err != nil {
+		t.Fatalf(testRepoErrWriteGoMod, err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
 		t.Fatalf("write main.go failed: %v", err)
@@ -214,8 +221,8 @@ func TestFilterRepoExtraArgs_GoAllowAndDeny(t *testing.T) {
 
 func TestRepoBuildInvoke_DeniesDisallowedExtraArgs(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/repo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testRepoGoModFile), []byte(testRepoGoModContent), 0o644); err != nil {
+		t.Fatalf(testRepoErrWriteGoMod, err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
 		t.Fatalf("write main.go failed: %v", err)
@@ -289,7 +296,7 @@ func TestBuildAndTestCommandsAcrossToolchains(t *testing.T) {
 		target   string
 		command  string
 	}{
-		{name: "go", detected: projectType{Name: "go"}, target: "./...", command: "go"},
+		{name: "go", detected: projectType{Name: "go"}, target: testRepoGoTarget, command: "go"},
 		{name: "rust", detected: projectType{Name: "rust"}, target: "", command: "cargo"},
 		{name: "node", detected: projectType{Name: "node"}, target: "", command: "npm"},
 		{name: "python", detected: projectType{Name: "python"}, target: "", command: "python"},
@@ -313,7 +320,7 @@ func TestBuildAndTestCommandsAcrossToolchains(t *testing.T) {
 		target   string
 		command  string
 	}{
-		{name: "go", detected: projectType{Name: "go"}, target: "./...", command: "go"},
+		{name: "go", detected: projectType{Name: "go"}, target: testRepoGoTarget, command: "go"},
 		{name: "rust", detected: projectType{Name: "rust"}, target: "", command: "cargo"},
 		{name: "node", detected: projectType{Name: "node"}, target: "", command: "npm"},
 		{name: "python", detected: projectType{Name: "python"}, target: "", command: "pytest"},

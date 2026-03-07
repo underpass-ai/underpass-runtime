@@ -11,6 +11,15 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testSessionID           = "session-1"
+	testInvocationID        = "inv-1"
+	testToolK8sGetPods      = "k8s.get_pods"
+	testExpectedDeniedStatus = "expected denied invocation status, got %#v"
+	testContentTypePlain    = "text/plain"
+	testToolFSList          = "fs.list"
+)
+
 type fakeWorkspaceManager struct {
 	session   domain.Session
 	found     bool
@@ -167,7 +176,7 @@ func (f *fakeInvocationStore) Get(_ context.Context, invocationID string) (domai
 
 func defaultSession() domain.Session {
 	return domain.Session{
-		ID:            "session-1",
+		ID:            testSessionID,
 		WorkspacePath: "/tmp/workspace",
 		AllowedPaths:  []string{"."},
 		Principal: domain.Principal{
@@ -228,7 +237,7 @@ func TestCloseSessionValidationAndErrors(t *testing.T) {
 	}
 
 	svc = newServiceForTest(&fakeWorkspaceManager{closeErr: errors.New("close")}, &fakeCatalog{}, &fakePolicyEngine{}, &fakeToolEngine{}, &fakeArtifactStore{})
-	err = svc.CloseSession(context.Background(), "session-1")
+	err = svc.CloseSession(context.Background(), testSessionID)
 	if err == nil || err.Code != ErrorCodeInternal {
 		t.Fatalf("expected internal close error, got %#v", err)
 	}
@@ -262,8 +271,8 @@ func TestValidateInvocationAccess(t *testing.T) {
 	session := defaultSession()
 	invStore := &fakeInvocationStore{
 		data: map[string]domain.Invocation{
-			"inv-1": {
-				ID:        "inv-1",
+			testInvocationID: {
+				ID:        testInvocationID,
 				SessionID: session.ID,
 			},
 		},
@@ -278,11 +287,11 @@ func TestValidateInvocationAccess(t *testing.T) {
 		invStore,
 	)
 
-	if err := svc.ValidateInvocationAccess(context.Background(), "inv-1", session.Principal); err != nil {
+	if err := svc.ValidateInvocationAccess(context.Background(), testInvocationID, session.Principal); err != nil {
 		t.Fatalf("expected invocation access allowed, got %#v", err)
 	}
 
-	err := svc.ValidateInvocationAccess(context.Background(), "inv-1", domain.Principal{
+	err := svc.ValidateInvocationAccess(context.Background(), testInvocationID, domain.Principal{
 		TenantID: session.Principal.TenantID,
 		ActorID:  "other-actor",
 	})
@@ -304,13 +313,13 @@ func TestListToolsFiltersAndErrors(t *testing.T) {
 	}}
 
 	svc := newServiceForTest(&fakeWorkspaceManager{session: session, found: false}, catalog, &fakePolicyEngine{}, &fakeToolEngine{}, &fakeArtifactStore{})
-	_, err := svc.ListTools(context.Background(), "session-1")
+	_, err := svc.ListTools(context.Background(), testSessionID)
 	if err == nil || err.Code != ErrorCodeNotFound {
 		t.Fatalf("expected not found, got %#v", err)
 	}
 
 	svc = newServiceForTest(&fakeWorkspaceManager{getErr: errors.New("get")}, catalog, &fakePolicyEngine{}, &fakeToolEngine{}, &fakeArtifactStore{})
-	_, err = svc.ListTools(context.Background(), "session-1")
+	_, err = svc.ListTools(context.Background(), testSessionID)
 	if err == nil || err.Code != ErrorCodeInternal {
 		t.Fatalf("expected internal get error, got %#v", err)
 	}
@@ -322,7 +331,7 @@ func TestListToolsFiltersAndErrors(t *testing.T) {
 		&fakeToolEngine{},
 		&fakeArtifactStore{},
 	)
-	tools, err := svc.ListTools(context.Background(), "session-1")
+	tools, err := svc.ListTools(context.Background(), testSessionID)
 	if err != nil {
 		t.Fatalf("unexpected list error: %v", err)
 	}
@@ -334,12 +343,12 @@ func TestListToolsFiltersAndErrors(t *testing.T) {
 func TestListToolsHidesClusterScopeWhenRuntimeIsNotKubernetes(t *testing.T) {
 	session := defaultSession()
 	catalog := &fakeCatalog{entries: map[string]domain.Capability{
-		"fs.list": {
-			Name:  "fs.list",
+		testToolFSList: {
+			Name:  testToolFSList,
 			Scope: domain.ScopeWorkspace,
 		},
-		"k8s.get_pods": {
-			Name:  "k8s.get_pods",
+		testToolK8sGetPods: {
+			Name:  testToolK8sGetPods,
 			Scope: domain.ScopeCluster,
 		},
 	}}
@@ -355,7 +364,7 @@ func TestListToolsHidesClusterScopeWhenRuntimeIsNotKubernetes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected list error: %v", err)
 	}
-	if len(tools) != 1 || tools[0].Name != "fs.list" {
+	if len(tools) != 1 || tools[0].Name != testToolFSList {
 		t.Fatalf("expected only workspace tool for local runtime, got %#v", tools)
 	}
 
@@ -381,8 +390,8 @@ func TestListToolsHidesK8sDeliveryToolsWhenDisabled(t *testing.T) {
 	session.Runtime.Kind = domain.RuntimeKindKubernetes
 
 	catalog := &fakeCatalog{entries: map[string]domain.Capability{
-		"k8s.get_pods": {
-			Name:  "k8s.get_pods",
+		testToolK8sGetPods: {
+			Name:  testToolK8sGetPods,
 			Scope: domain.ScopeCluster,
 		},
 		"k8s.apply_manifest": {
@@ -402,7 +411,7 @@ func TestListToolsHidesK8sDeliveryToolsWhenDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected list error: %v", err)
 	}
-	if len(tools) != 1 || tools[0].Name != "k8s.get_pods" {
+	if len(tools) != 1 || tools[0].Name != testToolK8sGetPods {
 		t.Fatalf("expected delivery tools hidden by default, got %#v", tools)
 	}
 
@@ -427,7 +436,7 @@ func TestInvokeToolValidationAndPolicyBranches(t *testing.T) {
 		&fakeToolEngine{},
 		&fakeArtifactStore{},
 	)
-	_, err := svc.InvokeTool(context.Background(), "session-1", capability.Name, InvokeToolRequest{})
+	_, err := svc.InvokeTool(context.Background(), testSessionID, capability.Name, InvokeToolRequest{})
 	if err == nil || err.Code != ErrorCodeNotFound {
 		t.Fatalf("expected session not found, got %#v", err)
 	}
@@ -439,7 +448,7 @@ func TestInvokeToolValidationAndPolicyBranches(t *testing.T) {
 		&fakeToolEngine{},
 		&fakeArtifactStore{},
 	)
-	_, err = svc.InvokeTool(context.Background(), "session-1", capability.Name, InvokeToolRequest{})
+	_, err = svc.InvokeTool(context.Background(), testSessionID, capability.Name, InvokeToolRequest{})
 	if err == nil || err.Code != ErrorCodeNotFound {
 		t.Fatalf("expected tool not found, got %#v", err)
 	}
@@ -451,7 +460,7 @@ func TestInvokeToolValidationAndPolicyBranches(t *testing.T) {
 		&fakeToolEngine{},
 		&fakeArtifactStore{},
 	)
-	_, err = svc.InvokeTool(context.Background(), "session-1", capability.Name, InvokeToolRequest{})
+	_, err = svc.InvokeTool(context.Background(), testSessionID, capability.Name, InvokeToolRequest{})
 	if err == nil || err.Code != ErrorCodeInternal {
 		t.Fatalf("expected policy internal error, got %#v", err)
 	}
@@ -463,7 +472,7 @@ func TestInvokeToolValidationAndPolicyBranches(t *testing.T) {
 		&fakeToolEngine{},
 		&fakeArtifactStore{},
 	)
-	invocation, err := svc.InvokeTool(context.Background(), "session-1", capability.Name, InvokeToolRequest{})
+	invocation, err := svc.InvokeTool(context.Background(), testSessionID, capability.Name, InvokeToolRequest{})
 	if err == nil || err.Code != ErrorCodeApprovalRequired {
 		t.Fatalf("expected approval required, got %#v", err)
 	}
@@ -499,7 +508,7 @@ func TestInvokeTool_DeniesWhenRateLimitExceeded(t *testing.T) {
 		t.Fatalf("expected rate-limit policy denied, got %#v", err)
 	}
 	if second.Status != domain.InvocationStatusDenied {
-		t.Fatalf("expected denied invocation status, got %#v", second.Status)
+		t.Fatalf(testExpectedDeniedStatus, second.Status)
 	}
 	if second.Error == nil || !strings.Contains(second.Error.Message, "rate limit") {
 		t.Fatalf("expected rate-limit message, got %#v", second.Error)
@@ -583,7 +592,7 @@ func TestInvokeTool_DeniesWhenConcurrencyLimitExceeded(t *testing.T) {
 		t.Fatalf("expected concurrency policy denied, got %#v", err)
 	}
 	if second.Status != domain.InvocationStatusDenied {
-		t.Fatalf("expected denied invocation status, got %#v", second.Status)
+		t.Fatalf(testExpectedDeniedStatus, second.Status)
 	}
 	if second.Error == nil || !strings.Contains(second.Error.Message, "concurrency limit") {
 		t.Fatalf("expected concurrency limit message, got %#v", second.Error)
@@ -622,7 +631,7 @@ func TestInvokeTool_DeniesWhenOutputQuotaExceeded(t *testing.T) {
 		t.Fatalf("expected output quota policy denied, got %#v", err)
 	}
 	if invocation.Status != domain.InvocationStatusDenied {
-		t.Fatalf("expected denied invocation status, got %#v", invocation.Status)
+		t.Fatalf(testExpectedDeniedStatus, invocation.Status)
 	}
 	if invocation.Error == nil || !strings.Contains(invocation.Error.Message, "output size quota exceeded") {
 		t.Fatalf("expected output quota message, got %#v", invocation.Error)
@@ -639,8 +648,8 @@ func TestInvokeTool_DeniesWhenArtifactCountQuotaExceeded(t *testing.T) {
 		&fakeCatalog{entries: map[string]domain.Capability{capability.Name: capability}},
 		&fakePolicyEngine{decision: PolicyDecision{Allow: true}},
 		&fakeToolEngine{result: ToolRunResult{Artifacts: []ArtifactPayload{
-			{Name: "a.txt", ContentType: "text/plain", Data: []byte("a")},
-			{Name: "b.txt", ContentType: "text/plain", Data: []byte("b")},
+			{Name: "a.txt", ContentType: testContentTypePlain, Data: []byte("a")},
+			{Name: "b.txt", ContentType: testContentTypePlain, Data: []byte("b")},
 		}}},
 		&fakeArtifactStore{},
 	)
@@ -650,7 +659,7 @@ func TestInvokeTool_DeniesWhenArtifactCountQuotaExceeded(t *testing.T) {
 		t.Fatalf("expected artifact count quota policy denied, got %#v", err)
 	}
 	if invocation.Status != domain.InvocationStatusDenied {
-		t.Fatalf("expected denied invocation status, got %#v", invocation.Status)
+		t.Fatalf(testExpectedDeniedStatus, invocation.Status)
 	}
 	if invocation.Error == nil || !strings.Contains(invocation.Error.Message, "artifact count quota exceeded") {
 		t.Fatalf("expected artifact count quota message, got %#v", invocation.Error)
@@ -667,8 +676,8 @@ func TestInvokeTool_DeniesWhenArtifactSizeQuotaExceeded(t *testing.T) {
 		&fakeCatalog{entries: map[string]domain.Capability{capability.Name: capability}},
 		&fakePolicyEngine{decision: PolicyDecision{Allow: true}},
 		&fakeToolEngine{result: ToolRunResult{Artifacts: []ArtifactPayload{
-			{Name: "a.txt", ContentType: "text/plain", Data: []byte("123")},
-			{Name: "b.txt", ContentType: "text/plain", Data: []byte("45")},
+			{Name: "a.txt", ContentType: testContentTypePlain, Data: []byte("123")},
+			{Name: "b.txt", ContentType: testContentTypePlain, Data: []byte("45")},
 		}}},
 		&fakeArtifactStore{},
 	)
@@ -678,7 +687,7 @@ func TestInvokeTool_DeniesWhenArtifactSizeQuotaExceeded(t *testing.T) {
 		t.Fatalf("expected artifact size quota policy denied, got %#v", err)
 	}
 	if invocation.Status != domain.InvocationStatusDenied {
-		t.Fatalf("expected denied invocation status, got %#v", invocation.Status)
+		t.Fatalf(testExpectedDeniedStatus, invocation.Status)
 	}
 	if invocation.Error == nil || !strings.Contains(invocation.Error.Message, "artifact size quota exceeded") {
 		t.Fatalf("expected artifact size quota message, got %#v", invocation.Error)
@@ -696,7 +705,7 @@ func TestInvokeToolExecutionBranches(t *testing.T) {
 		&fakeToolEngine{err: &domain.Error{Code: ErrorCodeExecutionFailed, Message: "failed"}, result: ToolRunResult{ExitCode: 2}},
 		&fakeArtifactStore{},
 	)
-	_, err := svc.InvokeTool(context.Background(), "session-1", capability.Name, InvokeToolRequest{})
+	_, err := svc.InvokeTool(context.Background(), testSessionID, capability.Name, InvokeToolRequest{})
 	if err == nil || err.Code != ErrorCodeExecutionFailed {
 		t.Fatalf("expected execution failed, got %#v", err)
 	}
@@ -710,7 +719,7 @@ func TestInvokeToolExecutionBranches(t *testing.T) {
 		&fakeToolEngine{err: &domain.Error{Code: ErrorCodeTimeout, Message: "timeout"}},
 		&fakeArtifactStore{},
 	)
-	_, err = svc.InvokeTool(context.Background(), "session-1", capabilityTimeout.Name, InvokeToolRequest{})
+	_, err = svc.InvokeTool(context.Background(), testSessionID, capabilityTimeout.Name, InvokeToolRequest{})
 	if err == nil || err.HTTPStatus != 504 {
 		t.Fatalf("expected timeout service error, got %#v", err)
 	}
@@ -722,7 +731,7 @@ func TestInvokeToolExecutionBranches(t *testing.T) {
 		&fakeToolEngine{result: ToolRunResult{Output: map[string]any{"ok": true}}},
 		&fakeArtifactStore{saveErr: errors.New("artifact save")},
 	)
-	_, err = svc.InvokeTool(context.Background(), "session-1", capability.Name, InvokeToolRequest{})
+	_, err = svc.InvokeTool(context.Background(), testSessionID, capability.Name, InvokeToolRequest{})
 	if err == nil || err.Code != ErrorCodeInternal {
 		t.Fatalf("expected internal artifact error, got %#v", err)
 	}
@@ -734,7 +743,7 @@ func TestInvokeToolExecutionBranches(t *testing.T) {
 		&fakeToolEngine{result: ToolRunResult{Output: map[string]any{"ok": true}, ExitCode: 0}},
 		&fakeArtifactStore{saved: []domain.Artifact{{ID: "a1"}}},
 	)
-	invocation, err := svc.InvokeTool(context.Background(), "session-1", capability.Name, InvokeToolRequest{})
+	invocation, err := svc.InvokeTool(context.Background(), testSessionID, capability.Name, InvokeToolRequest{})
 	if err != nil {
 		t.Fatalf("unexpected invoke success error: %v", err)
 	}
@@ -746,7 +755,7 @@ func TestInvokeToolExecutionBranches(t *testing.T) {
 func TestInvokeToolDeniesClusterScopeWhenRuntimeIsNotKubernetes(t *testing.T) {
 	session := defaultSession()
 	capability := domain.Capability{
-		Name:          "k8s.get_pods",
+		Name:          testToolK8sGetPods,
 		Scope:         domain.ScopeCluster,
 		Observability: domain.Observability{TraceName: "trace", SpanName: "span"},
 	}
@@ -833,7 +842,7 @@ func TestGetInvocationAndArtifactsBranches(t *testing.T) {
 func TestPolicyDeniedDefaultCodeAndAuditEventHelper(t *testing.T) {
 	session := defaultSession()
 	capability := defaultCapability()
-	invocation := domain.Invocation{ID: "inv-1", ToolName: capability.Name}
+	invocation := domain.Invocation{ID: testInvocationID, ToolName: capability.Name}
 	_ = auditEventFromInvocation(session, invocation)
 
 	svc := newServiceForTest(
@@ -882,7 +891,7 @@ func TestGetInvocationFailsWhenInvocationStoreGetFails(t *testing.T) {
 		store,
 	)
 
-	_, err := svc.GetInvocation(context.Background(), "inv-1")
+	_, err := svc.GetInvocation(context.Background(), testInvocationID)
 	if err == nil || err.Code != ErrorCodeInternal {
 		t.Fatalf("expected internal error on invocation store get failure, got %#v", err)
 	}
@@ -926,8 +935,8 @@ func TestInvokeTool_DeduplicatesByCorrelationID(t *testing.T) {
 
 func TestGetInvocation_HydratesOutputAndLogsFromArtifactRefs(t *testing.T) {
 	invocation := domain.Invocation{
-		ID:        "inv-1",
-		SessionID: "session-1",
+		ID:        testInvocationID,
+		SessionID: testSessionID,
 		ToolName:  "fs.read",
 		Status:    domain.InvocationStatusSucceeded,
 		StartedAt: time.Now().UTC(),

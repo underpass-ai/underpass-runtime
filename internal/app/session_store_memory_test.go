@@ -11,7 +11,7 @@ import (
 func TestInMemorySessionStore_SaveGetDelete(t *testing.T) {
 	store := NewInMemorySessionStore()
 	session := domain.Session{
-		ID:        "session-1",
+		ID:        testSessionID,
 		CreatedAt: time.Now().UTC(),
 		ExpiresAt: time.Now().UTC().Add(time.Minute),
 	}
@@ -20,7 +20,7 @@ func TestInMemorySessionStore_SaveGetDelete(t *testing.T) {
 		t.Fatalf("save failed: %v", err)
 	}
 
-	loaded, found, err := store.Get(context.Background(), "session-1")
+	loaded, found, err := store.Get(context.Background(), testSessionID)
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
@@ -31,10 +31,10 @@ func TestInMemorySessionStore_SaveGetDelete(t *testing.T) {
 		t.Fatalf("unexpected session id: %s", loaded.ID)
 	}
 
-	if err := store.Delete(context.Background(), "session-1"); err != nil {
+	if err := store.Delete(context.Background(), testSessionID); err != nil {
 		t.Fatalf("delete failed: %v", err)
 	}
-	_, found, err = store.Get(context.Background(), "session-1")
+	_, found, err = store.Get(context.Background(), testSessionID)
 	if err != nil {
 		t.Fatalf("get after delete failed: %v", err)
 	}

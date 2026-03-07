@@ -12,6 +12,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testLangGo                       = "go"
+	testExpectedInvalidArgCodeGoFmt  = "expected invalid argument code, got %#v"
+)
+
 func TestRepoDetectToolchainInvoke_GoModule(t *testing.T) {
 	root := t.TempDir()
 	writeGoModuleFixture(t, root)
@@ -25,7 +30,7 @@ func TestRepoDetectToolchainInvoke_GoModule(t *testing.T) {
 	}
 
 	output := result.Output.(map[string]any)
-	if output["language"] != "go" {
+	if output["language"] != testLangGo {
 		t.Fatalf("expected go language, got %#v", output)
 	}
 	if output["build_system"] != "go-mod" {
@@ -109,7 +114,7 @@ func TestGoBuildRejectsUnsupportedLdflags(t *testing.T) {
 		t.Fatal("expected invalid argument error for unsupported ldflags")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid argument code, got %#v", err)
+		t.Fatalf(testExpectedInvalidArgCodeGoFmt, err)
 	}
 }
 
@@ -175,7 +180,7 @@ func TestPythonInstallDepsRejectsUseVenvFalse(t *testing.T) {
 		t.Fatal("expected invalid argument for use_venv=false")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid argument code, got %#v", err)
+		t.Fatalf(testExpectedInvalidArgCodeGoFmt, err)
 	}
 }
 
@@ -193,7 +198,7 @@ func TestCBuildRejectsInvalidStandard(t *testing.T) {
 		t.Fatal("expected invalid argument for unsupported standard")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid argument code, got %#v", err)
+		t.Fatalf(testExpectedInvalidArgCodeGoFmt, err)
 	}
 }
 
@@ -250,7 +255,7 @@ func TestValidateCommandForProject_AllToolchains(t *testing.T) {
 		target   string
 		command  string
 	}{
-		{name: "go", detected: projectType{Name: "go"}, target: "./...", command: "go"},
+		{name: testLangGo, detected: projectType{Name: testLangGo}, target: "./...", command: testLangGo},
 		{name: "rust", detected: projectType{Name: "rust"}, target: "", command: "cargo"},
 		{name: "node", detected: projectType{Name: "node"}, target: "", command: "npm"},
 		{name: "python", detected: projectType{Name: "python"}, target: "", command: "python"},

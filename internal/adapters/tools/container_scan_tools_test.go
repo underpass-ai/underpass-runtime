@@ -13,10 +13,21 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testSeverityThreshold  = "severity_threshold"
+	testCommandTrivy       = "trivy"
+	testDockerfileName     = "Dockerfile"
+	testOutputKeyScanner   = "scanner"
+	testScannerHeuristic   = "heuristic-dockerfile"
+	testFindDockerfileOut  = "./Dockerfile\n"
+	testOutputKeyFindings  = "findings_count"
+	testMissingUserFinding = "dockerfile.missing_user"
+)
+
 func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testing.T) {
 	root := t.TempDir()
 	dockerfile := "FROM alpine:latest\nRUN curl -sSL https://example.com/install.sh | sh\n"
-	if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte(dockerfile), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testDockerfileName), []byte(dockerfile), 0o644); err != nil {
 		t.Fatalf("write Dockerfile failed: %v", err)
 	}
 
@@ -24,7 +35,7 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testi
 		run: func(callIndex int, spec app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0:
-				if spec.Command != "trivy" {
+				if spec.Command != testCommandTrivy {
 					t.Fatalf("expected first command trivy, got %q", spec.Command)
 				}
 				return app.CommandResult{
@@ -35,7 +46,7 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testi
 				if spec.Command != "find" {
 					t.Fatalf("expected second command find, got %q", spec.Command)
 				}
-				return app.CommandResult{ExitCode: 0, Output: "./Dockerfile\n"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testFindDockerfileOut}, nil
 			case 2:
 				if spec.Command != "cat" {
 					t.Fatalf("expected third command cat, got %q", spec.Command)
@@ -53,7 +64,7 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testi
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
 		"path":               ".",
 		"max_findings":       10,
-		"severity_threshold": "medium",
+		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected security.scan_container error: %#v", err)
@@ -63,18 +74,18 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testi
 	}
 
 	output := result.Output.(map[string]any)
-	if output["scanner"] != "heuristic-dockerfile" {
-		t.Fatalf("expected heuristic scanner, got %#v", output["scanner"])
+	if output[testOutputKeyScanner] != testScannerHeuristic {
+		t.Fatalf("expected heuristic scanner, got %#v", output[testOutputKeyScanner])
 	}
-	if output["findings_count"] == 0 {
-		t.Fatalf("expected findings_count > 0, got %#v", output["findings_count"])
+	if output[testOutputKeyFindings] == 0 {
+		t.Fatalf("expected findings_count > 0, got %#v", output[testOutputKeyFindings])
 	}
 }
 
 func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t *testing.T) {
 	root := t.TempDir()
 	dockerfile := "FROM alpine:latest\nRUN chmod 777 /tmp\n"
-	if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte(dockerfile), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testDockerfileName), []byte(dockerfile), 0o644); err != nil {
 		t.Fatalf("write Dockerfile failed: %v", err)
 	}
 
@@ -83,7 +94,7 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t 
 		run: func(callIndex int, spec app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0:
-				if spec.Command != "trivy" {
+				if spec.Command != testCommandTrivy {
 					t.Fatalf("expected first command trivy, got %q", spec.Command)
 				}
 				return app.CommandResult{
@@ -94,7 +105,7 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t 
 				if spec.Command != "find" {
 					t.Fatalf("expected second command find, got %q", spec.Command)
 				}
-				return app.CommandResult{ExitCode: 0, Output: "./Dockerfile\n"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testFindDockerfileOut}, nil
 			case 2:
 				if spec.Command != "cat" {
 					t.Fatalf("expected third command cat, got %q", spec.Command)
@@ -112,7 +123,7 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t 
 	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
 		"path":               ".",
 		"max_findings":       10,
-		"severity_threshold": "medium",
+		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected security.scan_container error: %#v", err)
@@ -122,17 +133,17 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t 
 	}
 
 	output := result.Output.(map[string]any)
-	if output["scanner"] != "heuristic-dockerfile" {
-		t.Fatalf("expected heuristic scanner, got %#v", output["scanner"])
+	if output[testOutputKeyScanner] != testScannerHeuristic {
+		t.Fatalf("expected heuristic scanner, got %#v", output[testOutputKeyScanner])
 	}
-	if output["findings_count"] == 0 {
-		t.Fatalf("expected findings_count > 0, got %#v", output["findings_count"])
+	if output[testOutputKeyFindings] == 0 {
+		t.Fatalf("expected findings_count > 0, got %#v", output[testOutputKeyFindings])
 	}
 }
 
 func TestSecurityScanContainerHandler_InvalidSeverity(t *testing.T) {
 	handler := NewSecurityScanContainerHandler(&fakeSWERuntimeCommandRunner{})
-	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, mustSWERuntimeJSON(t, map[string]any{"severity_threshold": "severe"}))
+	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, mustSWERuntimeJSON(t, map[string]any{testSeverityThreshold: "severe"}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected severity validation error, got %#v", err)
 	}
@@ -142,7 +153,7 @@ func TestSecurityScanContainerHandler_TrivyPath(t *testing.T) {
 	raw := `{"Results":[{"Target":"demo","Vulnerabilities":[{"VulnerabilityID":"CVE-1","Severity":"HIGH","PkgName":"openssl","InstalledVersion":"1.0","FixedVersion":"1.1","Title":"issue"}]}]}`
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command != "trivy" {
+			if spec.Command != testCommandTrivy {
 				t.Fatalf("expected trivy command, got %q", spec.Command)
 			}
 			return app.CommandResult{ExitCode: 0, Output: raw}, nil
@@ -150,14 +161,14 @@ func TestSecurityScanContainerHandler_TrivyPath(t *testing.T) {
 	}
 	result, err := NewSecurityScanContainerHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, mustSWERuntimeJSON(t, map[string]any{
 		"path":               ".",
-		"severity_threshold": "medium",
+		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected trivy path error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["scanner"] != "trivy" {
-		t.Fatalf("expected trivy scanner, got %#v", output["scanner"])
+	if output[testOutputKeyScanner] != testCommandTrivy {
+		t.Fatalf("expected trivy scanner, got %#v", output[testOutputKeyScanner])
 	}
 }
 
@@ -207,7 +218,7 @@ func TestParseTrivyFindings_WithMisconfigAndSecrets(t *testing.T) {
   ]
 }`
 
-	findings, truncated, err := parseTrivyFindings(report, "medium", 10)
+	findings, truncated, err := parseTrivyFindings(report, testSeverityMedium, 10)
 	if err != nil {
 		t.Fatalf("parseTrivyFindings failed: %v", err)
 	}
@@ -247,7 +258,7 @@ func TestSecurityScanContainerHandler_TrivyWithImageRef(t *testing.T) {
 	raw := `{"Results":[{"Target":"myimage:latest","Vulnerabilities":[{"VulnerabilityID":"CVE-99","Severity":"HIGH","PkgName":"pkg","InstalledVersion":"1.0","FixedVersion":"2.0","Title":"issue"}]}]}`
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command != "trivy" {
+			if spec.Command != testCommandTrivy {
 				t.Fatalf("expected trivy, got %q", spec.Command)
 			}
 			if spec.Args[0] != "image" {
@@ -258,14 +269,14 @@ func TestSecurityScanContainerHandler_TrivyWithImageRef(t *testing.T) {
 	}
 	result, err := NewSecurityScanContainerHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, mustSWERuntimeJSON(t, map[string]any{
 		"image_ref":          "myimage:latest",
-		"severity_threshold": "medium",
+		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["scanner"] != "trivy" {
-		t.Fatalf("expected trivy scanner, got %#v", output["scanner"])
+	if output[testOutputKeyScanner] != testCommandTrivy {
+		t.Fatalf("expected trivy scanner, got %#v", output[testOutputKeyScanner])
 	}
 	if output["target"] != "myimage:latest" {
 		t.Fatalf("expected target=myimage:latest, got %#v", output["target"])
@@ -275,7 +286,7 @@ func TestSecurityScanContainerHandler_TrivyWithImageRef(t *testing.T) {
 func TestSecurityScanContainerHandler_TrivyParseFailFallsBackToHeuristic(t *testing.T) {
 	root := t.TempDir()
 	dockerfile := "FROM alpine:latest\nRUN curl http://x | sh\n"
-	if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte(dockerfile), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testDockerfileName), []byte(dockerfile), 0o644); err != nil {
 		t.Fatalf("write Dockerfile failed: %v", err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
@@ -284,7 +295,7 @@ func TestSecurityScanContainerHandler_TrivyParseFailFallsBackToHeuristic(t *test
 			case 0: // trivy returns invalid JSON
 				return app.CommandResult{ExitCode: 0, Output: "not-json"}, nil
 			case 1: // find
-				return app.CommandResult{ExitCode: 0, Output: "./Dockerfile\n"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testFindDockerfileOut}, nil
 			case 2: // cat
 				return app.CommandResult{ExitCode: 0, Output: dockerfile}, nil
 			default:
@@ -294,26 +305,26 @@ func TestSecurityScanContainerHandler_TrivyParseFailFallsBackToHeuristic(t *test
 	}
 	result, err := NewSecurityScanContainerHandler(runner).Invoke(context.Background(), domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}, mustSWERuntimeJSON(t, map[string]any{
 		"path":               ".",
-		"severity_threshold": "medium",
+		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["scanner"] != "heuristic-dockerfile" {
-		t.Fatalf("expected heuristic fallback, got %#v", output["scanner"])
+	if output[testOutputKeyScanner] != testScannerHeuristic {
+		t.Fatalf("expected heuristic fallback, got %#v", output[testOutputKeyScanner])
 	}
 }
 
 func TestParseTrivyFindings_EmptyOutput(t *testing.T) {
-	_, _, err := parseTrivyFindings("", "medium", 10)
+	_, _, err := parseTrivyFindings("", testSeverityMedium, 10)
 	if err == nil {
 		t.Fatal("expected error for empty output")
 	}
 }
 
 func TestParseTrivyFindings_InvalidJSON(t *testing.T) {
-	_, _, err := parseTrivyFindings("not-json", "medium", 10)
+	_, _, err := parseTrivyFindings("not-json", testSeverityMedium, 10)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
@@ -350,7 +361,7 @@ func TestDockerfileHeuristicRule_AllBranches(t *testing.T) {
 
 	// unpinned without tag
 	id, sev, _ := dockerfileHeuristicRule("from alpine")
-	if id != "dockerfile.unpinned_base_image" || sev != "medium" {
+	if id != "dockerfile.unpinned_base_image" || sev != testSeverityMedium {
 		t.Fatalf("expected unpinned finding, got id=%q sev=%q", id, sev)
 	}
 
@@ -362,7 +373,7 @@ func TestDockerfileHeuristicRule_AllBranches(t *testing.T) {
 
 	// chmod 777
 	id, sev, _ = dockerfileHeuristicRule("run chmod 777 /tmp")
-	if id != "dockerfile.chmod_777" || sev != "medium" {
+	if id != "dockerfile.chmod_777" || sev != testSeverityMedium {
 		t.Fatalf("expected chmod 777 finding, got id=%q sev=%q", id, sev)
 	}
 
@@ -395,7 +406,7 @@ func TestIsDockerfileCandidate_AllBranches(t *testing.T) {
 	if isDockerfileCandidate("") {
 		t.Fatal("empty should not be candidate")
 	}
-	if !isDockerfileCandidate("Dockerfile") {
+	if !isDockerfileCandidate(testDockerfileName) {
 		t.Fatal("Dockerfile should be candidate")
 	}
 	if !isDockerfileCandidate("Dockerfile.prod") {
@@ -421,8 +432,8 @@ func TestApplyHeuristicFallback_ScanHeuristicsError(t *testing.T) {
 	}
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
 	_, domErr := applyHeuristicFallback(
-		context.Background(), runner, session, ".", "medium", 10,
-		heuristicFallbackInput{existingOutput: "some existing output", existingCommand: []string{"trivy", "fs", "."}},
+		context.Background(), runner, session, ".", testSeverityMedium, 10,
+		heuristicFallbackInput{existingOutput: "some existing output", existingCommand: []string{testCommandTrivy, "fs", "."}},
 	)
 	if domErr == nil {
 		t.Fatal("expected domain error when scanContainerHeuristics fails")
@@ -436,14 +447,14 @@ func TestApplyHeuristicFallback_EmptyExistingCommand(t *testing.T) {
 	// When existingCommand is nil/empty, applyHeuristicFallback should use
 	// the default heuristic command ["heuristic", "dockerfile-scan", scanPath].
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "Dockerfile"), []byte("FROM alpine:latest\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testDockerfileName), []byte("FROM alpine:latest\n"), 0o644); err != nil {
 		t.Fatalf("write Dockerfile: %v", err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, spec app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0: // find
-				return app.CommandResult{ExitCode: 0, Output: "./Dockerfile\n"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testFindDockerfileOut}, nil
 			case 1: // cat
 				return app.CommandResult{ExitCode: 0, Output: "FROM alpine:latest\n"}, nil
 			default:
@@ -453,7 +464,7 @@ func TestApplyHeuristicFallback_EmptyExistingCommand(t *testing.T) {
 	}
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	result, domErr := applyHeuristicFallback(
-		context.Background(), runner, session, ".", "medium", 10,
+		context.Background(), runner, session, ".", testSeverityMedium, 10,
 		heuristicFallbackInput{}, // empty existingOutput and nil existingCommand
 	)
 	if domErr != nil {
@@ -462,7 +473,7 @@ func TestApplyHeuristicFallback_EmptyExistingCommand(t *testing.T) {
 	if len(result.command) != 3 || result.command[0] != "heuristic" {
 		t.Fatalf("expected default heuristic command, got %v", result.command)
 	}
-	if result.scanner != "heuristic-dockerfile" {
+	if result.scanner != testScannerHeuristic {
 		t.Fatalf("expected heuristic-dockerfile scanner, got %q", result.scanner)
 	}
 }
@@ -478,7 +489,7 @@ func TestScanContainerHeuristics_FindCommandError(t *testing.T) {
 		},
 	}
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
-	_, _, _, err := scanContainerHeuristics(context.Background(), runner, session, ".", "medium", 10)
+	_, _, _, err := scanContainerHeuristics(context.Background(), runner, session, ".", testSeverityMedium, 10)
 	if err == nil {
 		t.Fatal("expected error from scanContainerHeuristics when find fails")
 	}
@@ -494,7 +505,7 @@ func TestScanContainerHeuristics_NoDockerfilesFound(t *testing.T) {
 		},
 	}
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
-	findings, truncated, output, err := scanContainerHeuristics(context.Background(), runner, session, ".", "medium", 10)
+	findings, truncated, output, err := scanContainerHeuristics(context.Background(), runner, session, ".", testSeverityMedium, 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -529,7 +540,7 @@ func TestScanContainerHeuristics_CatCommandError(t *testing.T) {
 		},
 	}
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
-	findings, _, _, err := scanContainerHeuristics(context.Background(), runner, session, ".", "medium", 10)
+	findings, _, _, err := scanContainerHeuristics(context.Background(), runner, session, ".", testSeverityMedium, 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -547,7 +558,7 @@ func TestScanContainerHeuristics_Truncation(t *testing.T) {
 		run: func(callIndex int, spec app.CommandSpec) (app.CommandResult, error) {
 			switch callIndex {
 			case 0: // find
-				return app.CommandResult{ExitCode: 0, Output: "./Dockerfile\n"}, nil
+				return app.CommandResult{ExitCode: 0, Output: testFindDockerfileOut}, nil
 			case 1: // cat
 				// Several lines that will produce findings — each RUN chmod 777 produces one.
 				content := "FROM alpine:latest\nRUN chmod 777 /a\nRUN chmod 777 /b\nRUN chmod 777 /c\n"
@@ -559,7 +570,7 @@ func TestScanContainerHeuristics_Truncation(t *testing.T) {
 	}
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	// maxFindings=2, so we should get truncated after 2 findings
-	findings, truncated, _, err := scanContainerHeuristics(context.Background(), runner, session, ".", "medium", 2)
+	findings, truncated, _, err := scanContainerHeuristics(context.Background(), runner, session, ".", testSeverityMedium, 2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -576,13 +587,13 @@ func TestScanContainerHeuristics_Truncation(t *testing.T) {
 func TestScanDockerfileContent_MissingUser(t *testing.T) {
 	// Content with no USER instruction should produce a missing_user finding.
 	content := "FROM alpine:3.18\nRUN echo hello\n"
-	findings, truncated := scanDockerfileContent(nil, content, "Dockerfile", "medium", 10)
+	findings, truncated := scanDockerfileContent(nil, content, testDockerfileName, testSeverityMedium, 10)
 	if truncated {
 		t.Fatal("did not expect truncation")
 	}
 	var foundMissingUser bool
 	for _, f := range findings {
-		if f["id"] == "dockerfile.missing_user" {
+		if f["id"] == testMissingUserFinding {
 			foundMissingUser = true
 		}
 	}
@@ -594,13 +605,13 @@ func TestScanDockerfileContent_MissingUser(t *testing.T) {
 func TestScanDockerfileContent_CommentAndBlankLinesSkipped(t *testing.T) {
 	// Comment lines and blank lines should not produce findings.
 	content := "# This is a comment\n\nFROM alpine:3.18\nUSER app\n"
-	findings, truncated := scanDockerfileContent(nil, content, "Dockerfile", "medium", 10)
+	findings, truncated := scanDockerfileContent(nil, content, testDockerfileName, testSeverityMedium, 10)
 	if truncated {
 		t.Fatal("did not expect truncation")
 	}
 	// With a pinned tag and USER present, no rule should fire
 	for _, f := range findings {
-		if f["id"] == "dockerfile.missing_user" {
+		if f["id"] == testMissingUserFinding {
 			t.Fatal("USER is present, should not get missing_user finding")
 		}
 	}
@@ -616,7 +627,7 @@ func TestScanDockerfileContent_TruncationFromMissingUser(t *testing.T) {
 	// Content: one rule match (chmod 777) + missing USER → 2 new findings.
 	// existing(1) + chmod 777(1) = 2 = maxFindings → truncated on the first rule match.
 	content := "FROM alpine:3.18\nRUN chmod 777 /tmp\n"
-	findings, truncated := scanDockerfileContent(existing, content, "Dockerfile", "medium", 2)
+	findings, truncated := scanDockerfileContent(existing, content, testDockerfileName, testSeverityMedium, 2)
 	if !truncated {
 		t.Fatal("expected truncation when findings reach maxFindings")
 	}
@@ -634,13 +645,13 @@ func TestScanDockerfileContent_MissingUserTruncation(t *testing.T) {
 		{"id": "existing1", "kind": "misconfiguration", "severity": "high"},
 	}
 	content := "FROM alpine:3.18\nRUN echo hello\n"
-	findings, truncated := scanDockerfileContent(existing, content, "Dockerfile", "medium", 2)
+	findings, truncated := scanDockerfileContent(existing, content, testDockerfileName, testSeverityMedium, 2)
 	if !truncated {
 		t.Fatal("expected truncation when missing_user finding reaches maxFindings")
 	}
 	hasMissingUser := false
 	for _, f := range findings {
-		if f["id"] == "dockerfile.missing_user" {
+		if f["id"] == testMissingUserFinding {
 			hasMissingUser = true
 		}
 	}

@@ -12,6 +12,13 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testKafkaTopic          = "sandbox.events"
+	testKafkaDeadBroker      = "127.0.0.1:1"
+	testErrMsgMapOutput      = "expected map output, got %#v"
+	testErrMsgUnexpectedCode = "unexpected error code: %s"
+)
+
 type fakeKafkaClient struct {
 	consume       func(req kafkaConsumeRequest) ([]kafkaConsumedMessage, error)
 	produce       func(req kafkaProduceRequest) error
@@ -42,7 +49,7 @@ func (f *fakeKafkaClient) TopicMetadata(_ context.Context, req kafkaTopicMetadat
 func TestKafkaConsumeHandler_Success(t *testing.T) {
 	handler := NewKafkaConsumeHandler(&fakeKafkaClient{
 		consume: func(req kafkaConsumeRequest) ([]kafkaConsumedMessage, error) {
-			if len(req.Brokers) == 0 || req.Topic != "sandbox.events" || req.Timeout <= 0 || req.OffsetMode != "latest" || req.OffsetStart != kafkago.LastOffset {
+			if len(req.Brokers) == 0 || req.Topic != testKafkaTopic || req.Timeout <= 0 || req.OffsetMode != "latest" || req.OffsetStart != kafkago.LastOffset {
 				t.Fatalf("unexpected consume request: %#v", req)
 			}
 			return []kafkaConsumedMessage{
@@ -61,12 +68,12 @@ func TestKafkaConsumeHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["profile_id"] != "dev.kafka" {
 		t.Fatalf("unexpected profile_id: %#v", output["profile_id"])
 	}
-	if output["topic"] != "sandbox.events" {
+	if output["topic"] != testKafkaTopic {
 		t.Fatalf("unexpected topic: %#v", output["topic"])
 	}
 	if output["offset_mode"] != "latest" {
@@ -85,14 +92,14 @@ func TestKafkaConsumeHandler_DeniesTopicOutsideProfileScopes(t *testing.T) {
 		t.Fatal("expected topic policy denial")
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
 func TestKafkaProduceHandler_Success(t *testing.T) {
 	handler := NewKafkaProduceHandler(&fakeKafkaClient{
 		produce: func(req kafkaProduceRequest) error {
-			if len(req.Brokers) == 0 || req.Topic != "sandbox.events" || req.Partition != 0 || req.Timeout <= 0 {
+			if len(req.Brokers) == 0 || req.Topic != testKafkaTopic || req.Partition != 0 || req.Timeout <= 0 {
 				t.Fatalf("unexpected produce request: %#v", req)
 			}
 			if string(req.Key) != "k1" || string(req.Value) != "hello" {
@@ -112,7 +119,7 @@ func TestKafkaProduceHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["produced"] != true {
 		t.Fatalf("expected produced=true, got %#v", output["produced"])
@@ -130,7 +137,7 @@ func TestKafkaProduceHandler_DeniesReadOnlyProfile(t *testing.T) {
 		t.Fatal("expected read_only policy denial")
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 	if err.Message != "profile is read_only" {
 		t.Fatalf("unexpected error message: %q", err.Message)
@@ -149,14 +156,14 @@ func TestKafkaProduceHandler_ExecutionError(t *testing.T) {
 		t.Fatal("expected execution error")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
 func TestKafkaTopicMetadataHandler_Success(t *testing.T) {
 	handler := NewKafkaTopicMetadataHandler(&fakeKafkaClient{
 		topicMetadata: func(req kafkaTopicMetadataRequest) ([]kafkaTopicPartitionMetadata, error) {
-			if req.Topic != "sandbox.events" {
+			if req.Topic != testKafkaTopic {
 				t.Fatalf("unexpected topic: %s", req.Topic)
 			}
 			return []kafkaTopicPartitionMetadata{
@@ -175,7 +182,7 @@ func TestKafkaTopicMetadataHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["partition_count"] != 1 {
 		t.Fatalf("unexpected partition_count: %#v", output["partition_count"])
@@ -197,7 +204,7 @@ func TestKafkaConsumeHandler_MapsExecutionErrors(t *testing.T) {
 		t.Fatal("expected execution error")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
@@ -269,8 +276,8 @@ func TestKafkaHandlers_NamesAndLiveClientErrors(t *testing.T) {
 	client := &liveKafkaClient{}
 	ctx := context.Background()
 	messages, err := client.Consume(ctx, kafkaConsumeRequest{
-		Brokers:     []string{"127.0.0.1:1"},
-		Topic:       "sandbox.events",
+		Brokers:     []string{testKafkaDeadBroker},
+		Topic:       testKafkaTopic,
 		Partition:   0,
 		OffsetStart: 0,
 		MaxMessages: 1,
@@ -284,16 +291,16 @@ func TestKafkaHandlers_NamesAndLiveClientErrors(t *testing.T) {
 	}
 
 	_, err = client.TopicMetadata(ctx, kafkaTopicMetadataRequest{
-		Brokers: []string{"127.0.0.1:1"},
-		Topic:   "sandbox.events",
+		Brokers: []string{testKafkaDeadBroker},
+		Topic:   testKafkaTopic,
 	})
 	if err == nil {
 		t.Fatal("expected live kafka metadata connection error")
 	}
 
 	err = client.Produce(ctx, kafkaProduceRequest{
-		Brokers:   []string{"127.0.0.1:1"},
-		Topic:     "sandbox.events",
+		Brokers:   []string{testKafkaDeadBroker},
+		Topic:     testKafkaTopic,
 		Partition: 0,
 		Key:       []byte("k1"),
 		Value:     []byte("v1"),

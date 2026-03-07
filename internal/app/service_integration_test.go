@@ -16,15 +16,22 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testTenantID                      = "tenant-a"
+	testActorID                       = "alice"
+	testRoleDeveloper                 = "developer"
+	testUnexpectedCreateSessionErrFmt = "unexpected error creating session: %v"
+)
+
 func TestService_CreateAndListTools(t *testing.T) {
 	svc := setupService(t)
 	ctx := context.Background()
 
 	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice", Roles: []string{"developer"}},
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
 	})
 	if err != nil {
-		t.Fatalf("unexpected error creating session: %v", err)
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
 	tools, listErr := svc.ListTools(ctx, session.ID)
@@ -52,10 +59,10 @@ func TestService_FsWriteRequiresApproval(t *testing.T) {
 	ctx := context.Background()
 
 	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice", Roles: []string{"developer"}},
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
 	})
 	if err != nil {
-		t.Fatalf("unexpected error creating session: %v", err)
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
 	invocation, invokeErr := svc.InvokeTool(ctx, session.ID, "fs.write_file", app.InvokeToolRequest{
@@ -77,10 +84,10 @@ func TestService_FsWriteAndRead(t *testing.T) {
 	ctx := context.Background()
 
 	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice", Roles: []string{"developer"}},
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
 	})
 	if err != nil {
-		t.Fatalf("unexpected error creating session: %v", err)
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
 	_, writeErr := svc.InvokeTool(ctx, session.ID, "fs.write_file", app.InvokeToolRequest{
@@ -116,10 +123,10 @@ func TestService_PathTraversalDenied(t *testing.T) {
 	ctx := context.Background()
 
 	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice", Roles: []string{"developer"}},
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
 	})
 	if err != nil {
-		t.Fatalf("unexpected error creating session: %v", err)
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
 	_, invokeErr := svc.InvokeTool(ctx, session.ID, "fs.read_file", app.InvokeToolRequest{

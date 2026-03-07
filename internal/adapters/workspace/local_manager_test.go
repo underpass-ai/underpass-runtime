@@ -11,6 +11,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testTenantID = "tenant-a"
+	testActorID  = "alice"
+)
+
 func TestLocalManager_CreateSessionFromSourcePath(t *testing.T) {
 	ctx := context.Background()
 	manager := NewLocalManager(t.TempDir())
@@ -23,7 +28,7 @@ func TestLocalManager_CreateSessionFromSourcePath(t *testing.T) {
 	session, err := manager.CreateSession(ctx, app.CreateSessionRequest{
 		SessionID:       "session-1",
 		SourceRepoPath:  source,
-		Principal:       domain.Principal{TenantID: "tenant-a", ActorID: "alice"},
+		Principal:       domain.Principal{TenantID: testTenantID, ActorID: testActorID},
 		ExpiresInSecond: 60,
 	})
 	if err != nil {
@@ -44,7 +49,7 @@ func TestLocalManager_CreateSessionFromSourcePath(t *testing.T) {
 	if !found {
 		t.Fatal("expected session to exist")
 	}
-	if loaded.Principal.ActorID != "alice" {
+	if loaded.Principal.ActorID != testActorID {
 		t.Fatalf("unexpected principal: %+v", loaded.Principal)
 	}
 }
@@ -61,7 +66,7 @@ func TestLocalManager_CloseSessionRemovesWorkspace(t *testing.T) {
 	session, err := manager.CreateSession(ctx, app.CreateSessionRequest{
 		SessionID:       "session-close",
 		SourceRepoPath:  source,
-		Principal:       domain.Principal{TenantID: "tenant-a", ActorID: "alice"},
+		Principal:       domain.Principal{TenantID: testTenantID, ActorID: testActorID},
 		ExpiresInSecond: 60,
 	})
 	if err != nil {
@@ -87,7 +92,7 @@ func TestLocalManager_ExpiredSessionGetsEvicted(t *testing.T) {
 
 	session, err := manager.CreateSession(ctx, app.CreateSessionRequest{
 		SessionID:       "session-expired",
-		Principal:       domain.Principal{TenantID: "tenant-a", ActorID: "alice"},
+		Principal:       domain.Principal{TenantID: testTenantID, ActorID: testActorID},
 		ExpiresInSecond: 1,
 	})
 	if err != nil {

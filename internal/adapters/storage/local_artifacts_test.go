@@ -9,6 +9,10 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/app"
 )
 
+const (
+	testUnexpectedListErrorFmt = "unexpected list error: %v"
+)
+
 func TestLocalArtifactStore_SaveAndList(t *testing.T) {
 	store := NewLocalArtifactStore(t.TempDir())
 	ctx := context.Background()
@@ -31,7 +35,7 @@ func TestLocalArtifactStore_SaveAndList(t *testing.T) {
 
 	listed, err := store.List(ctx, "inv-1")
 	if err != nil {
-		t.Fatalf("unexpected list error: %v", err)
+		t.Fatalf(testUnexpectedListErrorFmt, err)
 	}
 	if len(listed) != 2 {
 		t.Fatalf("expected 2 listed artifacts, got %d", len(listed))
@@ -52,7 +56,7 @@ func TestLocalArtifactStore_EmptyAndMissing(t *testing.T) {
 
 	listed, err := store.List(ctx, "inv-missing")
 	if err != nil {
-		t.Fatalf("unexpected list error: %v", err)
+		t.Fatalf(testUnexpectedListErrorFmt, err)
 	}
 	if len(listed) != 0 {
 		t.Fatalf("expected empty list for missing invocation, got %d", len(listed))
@@ -115,7 +119,7 @@ func TestLocalArtifactStore_ListInvalidFileInfo(t *testing.T) {
 
 	listed, err := store.List(ctx, "inv-bad")
 	if err != nil {
-		t.Fatalf("unexpected list error: %v", err)
+		t.Fatalf(testUnexpectedListErrorFmt, err)
 	}
 	if len(listed) != 0 {
 		t.Fatalf("expected no regular files, got %d", len(listed))

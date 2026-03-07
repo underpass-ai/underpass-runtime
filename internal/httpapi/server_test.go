@@ -19,27 +19,44 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/app"
 )
 
+const (
+	testHTTPTenantA         = "tenant-a"
+	testHTTPTenantAuth      = "tenant-auth"
+	testHTTPRoleDeveloper   = "developer"
+	testHTTPSharedToken     = "workspace-shared-token"
+	testHTTPActorAuth       = "actor-auth"
+	testHTTPKeyTenantID     = "tenant_id"
+	testHTTPKeyActorID      = "actor_id"
+	testHTTPKeyRoles        = "roles"
+	testHTTPKeyPrincipal    = "principal"
+	testHTTPKeySession      = "session"
+	testHTTPKeyID           = "id"
+	testHTTPKeyInvocation   = "invocation"
+	testHTTPPathSessions    = "/v1/sessions"
+	testHTTPSourceRepoPath  = "source_repo_path"
+)
+
 func TestHTTPAPI_EndToEndToolExecutionInWorkspace(t *testing.T) {
 	handler, sourcePath := setupHTTPHandler(t)
 
 	createPayload := map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-1",
-			"roles":     []string{"developer"},
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testHTTPTenantA,
+			testHTTPKeyActorID:  "agent-1",
+			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
 		},
-		"source_repo_path":   sourcePath,
+		testHTTPSourceRepoPath:   sourcePath,
 		"expires_in_seconds": 3600,
 	}
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", createPayload)
+	createResp := doJSONRequest(t, handler, http.MethodPost, testHTTPPathSessions, createPayload)
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201, got %d body=%s", createResp.StatusCode, createResp.Body.String())
 	}
 
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	session := createBody["session"].(map[string]any)
-	sessionID := session["id"].(string)
+	session := createBody[testHTTPKeySession].(map[string]any)
+	sessionID := session[testHTTPKeyID].(string)
 	workspacePath := session["workspace_path"].(string)
 
 	invokePayload := map[string]any{
@@ -67,7 +84,7 @@ func TestHTTPAPI_EndToEndToolExecutionInWorkspace(t *testing.T) {
 
 	var readBody map[string]any
 	mustDecode(t, readResp.Body.Bytes(), &readBody)
-	invocation := readBody["invocation"].(map[string]any)
+	invocation := readBody[testHTTPKeyInvocation].(map[string]any)
 	output := invocation["output"].(map[string]any)
 	if output["content"].(string) != "workspace ok" {
 		t.Fatalf("unexpected read content: %#v", output)
@@ -78,19 +95,19 @@ func TestHTTPAPI_ApprovalRequiredAndRouteErrors(t *testing.T) {
 	handler, _ := setupHTTPHandler(t)
 
 	createPayload := map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-2",
-			"roles":     []string{"developer"},
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testHTTPTenantA,
+			testHTTPKeyActorID:  "agent-2",
+			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
 		},
 	}
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", createPayload)
+	createResp := doJSONRequest(t, handler, http.MethodPost, testHTTPPathSessions, createPayload)
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", createResp.StatusCode)
 	}
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
 	denyPayload := map[string]any{
 		"approved": false,
@@ -109,7 +126,7 @@ func TestHTTPAPI_ApprovalRequiredAndRouteErrors(t *testing.T) {
 		t.Fatalf("expected 404, got %d", notFoundResp.StatusCode)
 	}
 
-	methodResp := doJSONRequest(t, handler, http.MethodGet, "/v1/sessions", nil)
+	methodResp := doJSONRequest(t, handler, http.MethodGet, testHTTPPathSessions, nil)
 	if methodResp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d", methodResp.StatusCode)
 	}
@@ -130,13 +147,13 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 		t.Fatalf("expected metrics payload, got: %s", metricsResp.Body.String())
 	}
 
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-3",
-			"roles":     []string{"developer"},
+	createResp := doJSONRequest(t, handler, http.MethodPost, testHTTPPathSessions, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testHTTPTenantA,
+			testHTTPKeyActorID:  "agent-3",
+			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
 		},
-		"source_repo_path": sourcePath,
+		testHTTPSourceRepoPath: sourcePath,
 	})
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201 create, got %d body=%s", createResp.StatusCode, createResp.Body.String())
@@ -144,7 +161,7 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
 	invokeResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions/"+sessionID+"/tools/fs.read_file/invoke", map[string]any{
 		"args": map[string]any{"path": "seed.txt"},
@@ -155,7 +172,7 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 
 	var invokeBody map[string]any
 	mustDecode(t, invokeResp.Body.Bytes(), &invokeBody)
-	invocationID := invokeBody["invocation"].(map[string]any)["id"].(string)
+	invocationID := invokeBody[testHTTPKeyInvocation].(map[string]any)[testHTTPKeyID].(string)
 
 	getResp := doJSONRequest(t, handler, http.MethodGet, "/v1/invocations/"+invocationID, nil)
 	if getResp.StatusCode != http.StatusOK {
@@ -199,21 +216,21 @@ func TestHTTPAPI_InvocationRoutesAndHealth(t *testing.T) {
 func TestHTTPAPI_TrustedHeadersUsesAuthenticatedPrincipal(t *testing.T) {
 	authCfg := DefaultAuthConfig()
 	authCfg.Mode = authModeTrustedHeaders
-	authCfg.SharedToken = "workspace-shared-token"
+	authCfg.SharedToken = testHTTPSharedToken
 
 	handler, _ := setupHTTPHandler(t, authCfg)
 	headers := map[string]string{
-		authCfg.TokenHeader:  "workspace-shared-token",
-		authCfg.TenantHeader: "tenant-auth",
-		authCfg.ActorHeader:  "actor-auth",
+		authCfg.TokenHeader:  testHTTPSharedToken,
+		authCfg.TenantHeader: testHTTPTenantAuth,
+		authCfg.ActorHeader:  testHTTPActorAuth,
 		authCfg.RolesHeader:  "devops,developer",
 	}
 
-	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "payload-tenant",
-			"actor_id":  "payload-actor",
-			"roles":     []string{"admin"},
+	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, testHTTPPathSessions, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: "payload-tenant",
+			testHTTPKeyActorID:  "payload-actor",
+			testHTTPKeyRoles:     []string{"admin"},
 		},
 	}, headers)
 	if createResp.StatusCode != http.StatusCreated {
@@ -222,9 +239,9 @@ func TestHTTPAPI_TrustedHeadersUsesAuthenticatedPrincipal(t *testing.T) {
 
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	session := createBody["session"].(map[string]any)
-	principal := session["principal"].(map[string]any)
-	if principal["tenant_id"] != "tenant-auth" || principal["actor_id"] != "actor-auth" {
+	session := createBody[testHTTPKeySession].(map[string]any)
+	principal := session[testHTTPKeyPrincipal].(map[string]any)
+	if principal[testHTTPKeyTenantID] != testHTTPTenantAuth || principal[testHTTPKeyActorID] != testHTTPActorAuth {
 		t.Fatalf("expected principal from trusted headers, got %#v", principal)
 	}
 }
@@ -232,18 +249,18 @@ func TestHTTPAPI_TrustedHeadersUsesAuthenticatedPrincipal(t *testing.T) {
 func TestHTTPAPI_TrustedHeadersRejectsMissingToken(t *testing.T) {
 	authCfg := DefaultAuthConfig()
 	authCfg.Mode = authModeTrustedHeaders
-	authCfg.SharedToken = "workspace-shared-token"
+	authCfg.SharedToken = testHTTPSharedToken
 
 	handler, _ := setupHTTPHandler(t, authCfg)
 	headers := map[string]string{
-		authCfg.TenantHeader: "tenant-auth",
-		authCfg.ActorHeader:  "actor-auth",
+		authCfg.TenantHeader: testHTTPTenantAuth,
+		authCfg.ActorHeader:  testHTTPActorAuth,
 	}
 
-	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-auth",
-			"actor_id":  "actor-auth",
+	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, testHTTPPathSessions, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testHTTPTenantAuth,
+			testHTTPKeyActorID:  testHTTPActorAuth,
 		},
 	}, headers)
 	if createResp.StatusCode != http.StatusUnauthorized {
@@ -254,23 +271,23 @@ func TestHTTPAPI_TrustedHeadersRejectsMissingToken(t *testing.T) {
 func TestHTTPAPI_TrustedHeadersEnforcesSessionOwnership(t *testing.T) {
 	authCfg := DefaultAuthConfig()
 	authCfg.Mode = authModeTrustedHeaders
-	authCfg.SharedToken = "workspace-shared-token"
+	authCfg.SharedToken = testHTTPSharedToken
 
 	handler, _ := setupHTTPHandler(t, authCfg)
 	ownerHeaders := map[string]string{
-		authCfg.TokenHeader:  "workspace-shared-token",
-		authCfg.TenantHeader: "tenant-auth",
+		authCfg.TokenHeader:  testHTTPSharedToken,
+		authCfg.TenantHeader: testHTTPTenantAuth,
 		authCfg.ActorHeader:  "actor-owner",
-		authCfg.RolesHeader:  "developer",
+		authCfg.RolesHeader:  testHTTPRoleDeveloper,
 	}
 
-	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, "/v1/sessions", map[string]any{}, ownerHeaders)
+	createResp := doJSONRequestWithHeaders(t, handler, http.MethodPost, testHTTPPathSessions, map[string]any{}, ownerHeaders)
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201 create, got %d body=%s", createResp.StatusCode, createResp.Body.String())
 	}
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
 	ownerListResp := doJSONRequestWithHeaders(t, handler, http.MethodGet, "/v1/sessions/"+sessionID+"/tools", nil, ownerHeaders)
 	if ownerListResp.StatusCode != http.StatusOK {
@@ -278,10 +295,10 @@ func TestHTTPAPI_TrustedHeadersEnforcesSessionOwnership(t *testing.T) {
 	}
 
 	otherHeaders := map[string]string{
-		authCfg.TokenHeader:  "workspace-shared-token",
-		authCfg.TenantHeader: "tenant-auth",
+		authCfg.TokenHeader:  testHTTPSharedToken,
+		authCfg.TenantHeader: testHTTPTenantAuth,
 		authCfg.ActorHeader:  "actor-other",
-		authCfg.RolesHeader:  "developer",
+		authCfg.RolesHeader:  testHTTPRoleDeveloper,
 	}
 	otherListResp := doJSONRequestWithHeaders(t, handler, http.MethodGet, "/v1/sessions/"+sessionID+"/tools", nil, otherHeaders)
 	if otherListResp.StatusCode != http.StatusForbidden {
@@ -457,20 +474,20 @@ func TestHTTPAPI_MethodNotAllowedEdgeCases(t *testing.T) {
 	}
 
 	// Create a session to get a valid sessionID for route tests.
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-edge",
-			"roles":     []string{"developer"},
+	createResp := doJSONRequest(t, handler, http.MethodPost, testHTTPPathSessions, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testHTTPTenantA,
+			testHTTPKeyActorID:  "agent-edge",
+			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
 		},
-		"source_repo_path": sourcePath,
+		testHTTPSourceRepoPath: sourcePath,
 	})
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201 create session, got %d body=%s", createResp.StatusCode, createResp.Body.String())
 	}
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
 	// GET /v1/sessions/{id} (len==1, non-DELETE) → 405
 	sessionGetResp := doJSONRequest(t, handler, http.MethodGet, "/v1/sessions/"+sessionID, nil)
@@ -495,20 +512,20 @@ func TestHTTPAPI_InvocationRouteEdgeCases(t *testing.T) {
 	handler, sourcePath := setupHTTPHandler(t)
 
 	// Create a session and invoke a tool to get a valid invocation ID.
-	createResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions", map[string]any{
-		"principal": map[string]any{
-			"tenant_id": "tenant-a",
-			"actor_id":  "agent-inv-edge",
-			"roles":     []string{"developer"},
+	createResp := doJSONRequest(t, handler, http.MethodPost, testHTTPPathSessions, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testHTTPTenantA,
+			testHTTPKeyActorID:  "agent-inv-edge",
+			testHTTPKeyRoles:     []string{testHTTPRoleDeveloper},
 		},
-		"source_repo_path": sourcePath,
+		testHTTPSourceRepoPath: sourcePath,
 	})
 	if createResp.StatusCode != http.StatusCreated {
 		t.Fatalf("expected 201, got %d body=%s", createResp.StatusCode, createResp.Body.String())
 	}
 	var createBody map[string]any
 	mustDecode(t, createResp.Body.Bytes(), &createBody)
-	sessionID := createBody["session"].(map[string]any)["id"].(string)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
 
 	invokeResp := doJSONRequest(t, handler, http.MethodPost, "/v1/sessions/"+sessionID+"/tools/fs.read_file/invoke", map[string]any{
 		"args": map[string]any{"path": "seed.txt"},
@@ -518,7 +535,7 @@ func TestHTTPAPI_InvocationRouteEdgeCases(t *testing.T) {
 	}
 	var invokeBody map[string]any
 	mustDecode(t, invokeResp.Body.Bytes(), &invokeBody)
-	invocationID := invokeBody["invocation"].(map[string]any)["id"].(string)
+	invocationID := invokeBody[testHTTPKeyInvocation].(map[string]any)[testHTTPKeyID].(string)
 
 	// POST /v1/invocations/{id} (len==1, non-GET) → 405
 	invPostResp := doJSONRequest(t, handler, http.MethodPost, "/v1/invocations/"+invocationID, map[string]any{})
@@ -543,7 +560,7 @@ func TestHTTPAPI_DecodeBodyNilBody(t *testing.T) {
 	handler, _ := setupHTTPHandler(t)
 
 	// Construct a POST /v1/sessions request with a nil body to exercise the decodeBody nil guard.
-	req := httptest.NewRequest(http.MethodPost, "/v1/sessions", nil)
+	req := httptest.NewRequest(http.MethodPost, testHTTPPathSessions, nil)
 	req.Body = nil
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()

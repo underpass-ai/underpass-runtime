@@ -10,8 +10,13 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testShellCmd  = "sh"
+	testShellFlag = "-c"
+)
+
 func TestRunCommand_SuccessAndFailure(t *testing.T) {
-	output, exitCode, err := runCommand(context.Background(), t.TempDir(), 1024, nil, "sh", "-c", "echo ok")
+	output, exitCode, err := runCommand(context.Background(), t.TempDir(), 1024, nil, testShellCmd, testShellFlag, "echo ok")
 	if err != nil {
 		t.Fatalf("unexpected success error: %v", err)
 	}
@@ -22,7 +27,7 @@ func TestRunCommand_SuccessAndFailure(t *testing.T) {
 		t.Fatalf("unexpected output: %q", output)
 	}
 
-	output, exitCode, err = runCommand(context.Background(), t.TempDir(), 1024, nil, "sh", "-c", "echo fail; exit 7")
+	output, exitCode, err = runCommand(context.Background(), t.TempDir(), 1024, nil, testShellCmd, testShellFlag, "echo fail; exit 7")
 	if err == nil {
 		t.Fatal("expected command failure")
 	}
@@ -38,7 +43,7 @@ func TestRunCommand_Timeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	_, exitCode, err := runCommand(ctx, t.TempDir(), 1024, nil, "sh", "-c", "sleep 1")
+	_, exitCode, err := runCommand(ctx, t.TempDir(), 1024, nil, testShellCmd, testShellFlag, "sleep 1")
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -60,8 +65,8 @@ func TestLocalCommandRunner_Run(t *testing.T) {
 	session := domain.Session{WorkspacePath: t.TempDir()}
 	result, err := runner.Run(context.Background(), session, app.CommandSpec{
 		Cwd:      session.WorkspacePath,
-		Command:  "sh",
-		Args:     []string{"-c", "echo runner-ok"},
+		Command:  testShellCmd,
+		Args:     []string{testShellFlag, "echo runner-ok"},
 		MaxBytes: 1024,
 	})
 	if err != nil {

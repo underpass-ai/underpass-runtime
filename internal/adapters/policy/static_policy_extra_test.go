@@ -9,6 +9,10 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testUnexpectedErrorFmt = "unexpected error: %v"
+)
+
 func TestStaticPolicy_AllowsClusterScopeForDevops(t *testing.T) {
 	engine := NewStaticPolicy()
 	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
@@ -21,7 +25,7 @@ func TestStaticPolicy_AllowsClusterScopeForDevops(t *testing.T) {
 		Args:     json.RawMessage(`{"path":"valid.txt"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected allow for devops role: %#v", decision)
@@ -40,7 +44,7 @@ func TestStaticPolicy_DeniesHighRiskWithoutPlatformAdmin(t *testing.T) {
 		Args:     json.RawMessage(`{"path":"valid.txt"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected high-risk denial without platform_admin")
@@ -62,7 +66,7 @@ func TestStaticPolicy_PathParsingPayloadErrors(t *testing.T) {
 		Args:     json.RawMessage(`{"path":`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected invalid args payload to be denied")
@@ -93,7 +97,7 @@ func TestStaticPolicy_DeniesDisallowedArgPrefix(t *testing.T) {
 		Args:     json.RawMessage(`{"extra_args":["-exec=cat"]}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected policy denial for disallowed arg prefix")
@@ -123,7 +127,7 @@ func TestStaticPolicy_AllowsApprovedArgPrefixes(t *testing.T) {
 		Args:     json.RawMessage(`{"extra_args":["-v","-run=TestTodo"]}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected allow decision, got %#v", decision)
@@ -153,7 +157,7 @@ func TestStaticPolicy_DeniesProfileOutsideAllowlist(t *testing.T) {
 		Args:     json.RawMessage(`{"profile_id":"prod.redis"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected policy denial for disallowed profile")
@@ -180,7 +184,7 @@ func TestStaticPolicy_AllowsProfileWhenAllowlistNotConfigured(t *testing.T) {
 		Args:     json.RawMessage(`{"profile_id":"any.profile"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected allow without configured profile allowlist, got %#v", decision)
@@ -210,7 +214,7 @@ func TestStaticPolicy_DeniesSubjectOutsideAllowlist(t *testing.T) {
 		Args:     json.RawMessage(`{"subject":"prod.orders"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected subject deny")
@@ -240,7 +244,7 @@ func TestStaticPolicy_AllowsWildcardSubject(t *testing.T) {
 		Args:     json.RawMessage(`{"subject":"sandbox.worker.jobs"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected allow, got %#v", decision)
@@ -270,7 +274,7 @@ func TestStaticPolicy_DeniesTopicOutsideAllowlist(t *testing.T) {
 		Args:     json.RawMessage(`{"topic":"prod.payments"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected topic deny")
@@ -300,7 +304,7 @@ func TestStaticPolicy_AllowsKeyWithinAllowedPrefix(t *testing.T) {
 		Args:     json.RawMessage(`{"key":"sandbox:todo:123"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected key allow, got %#v", decision)
@@ -330,7 +334,7 @@ func TestStaticPolicy_DeniesQueueOutsideAllowlist(t *testing.T) {
 		Args:     json.RawMessage(`{"queue":"prod.tasks"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected queue deny")
@@ -360,7 +364,7 @@ func TestStaticPolicy_DeniesKeyOutsideAllowedPrefix(t *testing.T) {
 		Args:     json.RawMessage(`{"key":"prod:secret"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected key-prefix deny")
@@ -388,7 +392,7 @@ func TestStaticPolicy_DeniesNamespaceOutsideAllowlist(t *testing.T) {
 		Args:     json.RawMessage(`{"namespace":"kube-system"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected namespace deny")
@@ -419,7 +423,7 @@ func TestStaticPolicy_AllowsNamespaceWithinAllowlist(t *testing.T) {
 		Args:     json.RawMessage(`{"namespace":"underpass-runtime"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected namespace allow, got %#v", decision)
@@ -447,7 +451,7 @@ func TestStaticPolicy_DeniesRegistryOutsideAllowlist(t *testing.T) {
 		Args:     json.RawMessage(`{"image_ref":"quay.io/acme/demo:latest"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected registry deny")
@@ -478,7 +482,7 @@ func TestStaticPolicy_AllowsRegistryFromImageRef(t *testing.T) {
 		Args:     json.RawMessage(`{"image_ref":"ghcr.io/acme/demo:latest"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected registry allow, got %#v", decision)
@@ -502,7 +506,7 @@ func TestStaticPolicy_ArgValueAllowedEdgeCases(t *testing.T) {
 		Args:     json.RawMessage(`{"flag":"   "}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected denial for empty/whitespace arg value")
@@ -522,7 +526,7 @@ func TestStaticPolicy_ArgValueAllowedEdgeCases(t *testing.T) {
 		Args:     json.RawMessage(`{"flag":"toolongvalue"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected denial for arg exceeding MaxLength")
@@ -542,7 +546,7 @@ func TestStaticPolicy_ArgValueAllowedEdgeCases(t *testing.T) {
 		Args:     json.RawMessage(`{"cmd":"cmd;injection"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected denial for arg containing denied character")
@@ -562,7 +566,7 @@ func TestStaticPolicy_ArgValueAllowedEdgeCases(t *testing.T) {
 		Args:     json.RawMessage(`{"mode":"debug"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected allow for arg matching AllowedValues, got %#v", decision)
@@ -582,7 +586,7 @@ func TestStaticPolicy_ArgValueAllowedEdgeCases(t *testing.T) {
 		Args:     json.RawMessage(`{"mode":"production"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected denial for arg not in AllowedValues")
@@ -610,7 +614,7 @@ func TestStaticPolicy_MultiProfileField(t *testing.T) {
 		Args:     json.RawMessage(`{"profiles":["dev.redis","dev.nats"]}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected allow for valid multi-profile field, got %#v", decision)
@@ -634,7 +638,7 @@ func TestStaticPolicy_MultiProfileField(t *testing.T) {
 		Args:     json.RawMessage(`{"profiles":"dev.redis"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected denial when multi profile field is not an array")
@@ -662,7 +666,7 @@ func TestStaticPolicy_ExtractStringFieldValuesErrors(t *testing.T) {
 		Args:     json.RawMessage(`{"namespaces":["sandbox","dev"]}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !decision.Allow {
 		t.Fatalf("expected allow for namespace array, got %#v", decision)
@@ -686,7 +690,7 @@ func TestStaticPolicy_ExtractStringFieldValuesErrors(t *testing.T) {
 		Args:     json.RawMessage(`{"namespace":123}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected denial for non-string namespace field value")

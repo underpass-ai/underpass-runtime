@@ -12,6 +12,15 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testExpectedExitCode0       = "expected exit code 0, got %d"
+	testExpectedOneRunnerCall   = "expected one runner call, got %d"
+	testCommandCargo            = "cargo"
+	testJSONKeyTarget           = "target"
+	testTargetAppsWeb           = "apps/web"
+	testVenvDir                 = ".workspace-venv"
+)
+
 type fakeLanguageCommandRunner struct {
 	calls []app.CommandSpec
 	run   func(callIndex int, spec app.CommandSpec) (app.CommandResult, error)
@@ -31,22 +40,22 @@ func TestRustBuildHandler_BuildsExpectedCommand(t *testing.T) {
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{
-		"target":  "workspace-crate",
+		testJSONKeyTarget: "workspace-crate",
 		"release": true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected rust.build error: %v", err)
 	}
 	if result.ExitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", result.ExitCode)
+		t.Fatalf(testExpectedExitCode0, result.ExitCode)
 	}
 	if len(runner.calls) != 1 {
-		t.Fatalf("expected one runner call, got %d", len(runner.calls))
+		t.Fatalf(testExpectedOneRunnerCall, len(runner.calls))
 	}
 
 	got := runner.calls[0]
 	wantArgs := []string{"build", "--package", "workspace-crate", "--release"}
-	if got.Command != "cargo" {
+	if got.Command != testCommandCargo {
 		t.Fatalf("expected cargo command, got %q", got.Command)
 	}
 	if !reflect.DeepEqual(got.Args, wantArgs) {
@@ -67,10 +76,10 @@ func TestNodeInstallHandler_UsesInstallWhenUseCIFalse(t *testing.T) {
 		t.Fatalf("unexpected node.install error: %v", err)
 	}
 	if result.ExitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", result.ExitCode)
+		t.Fatalf(testExpectedExitCode0, result.ExitCode)
 	}
 	if len(runner.calls) != 1 {
-		t.Fatalf("expected one runner call, got %d", len(runner.calls))
+		t.Fatalf(testExpectedOneRunnerCall, len(runner.calls))
 	}
 
 	got := runner.calls[0]
@@ -89,16 +98,16 @@ func TestNodeTypecheckHandler_AppendsTargetAfterDoubleDash(t *testing.T) {
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{
-		"target": "packages/web",
+		testJSONKeyTarget: "packages/web",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected node.typecheck error: %v", err)
 	}
 	if result.ExitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", result.ExitCode)
+		t.Fatalf(testExpectedExitCode0, result.ExitCode)
 	}
 	if len(runner.calls) != 1 {
-		t.Fatalf("expected one runner call, got %d", len(runner.calls))
+		t.Fatalf(testExpectedOneRunnerCall, len(runner.calls))
 	}
 
 	got := runner.calls[0]
@@ -131,10 +140,10 @@ func TestCBuildHandler_CompilesRequestedSource(t *testing.T) {
 		t.Fatalf("unexpected c.build error: %v", err)
 	}
 	if result.ExitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", result.ExitCode)
+		t.Fatalf(testExpectedExitCode0, result.ExitCode)
 	}
 	if len(runner.calls) != 1 {
-		t.Fatalf("expected one runner call, got %d", len(runner.calls))
+		t.Fatalf(testExpectedOneRunnerCall, len(runner.calls))
 	}
 
 	got := runner.calls[0]
@@ -178,7 +187,7 @@ func TestCTestHandler_CompilesAndExecutesBinary(t *testing.T) {
 		t.Fatalf("unexpected c.test error: %v", err)
 	}
 	if result.ExitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", result.ExitCode)
+		t.Fatalf(testExpectedExitCode0, result.ExitCode)
 	}
 	if len(runner.calls) != 2 {
 		t.Fatalf("expected two runner calls, got %d", len(runner.calls))
@@ -230,7 +239,7 @@ func TestRustHandlers_Commands(t *testing.T) {
 	runner := &fakeLanguageCommandRunner{}
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
 
-	_, err := NewRustTestHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{"target": "crate-a"}))
+	_, err := NewRustTestHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{testJSONKeyTarget: "crate-a"}))
 	if err != nil {
 		t.Fatalf("rust.test failed: %v", err)
 	}
@@ -246,13 +255,13 @@ func TestRustHandlers_Commands(t *testing.T) {
 	if len(runner.calls) != 3 {
 		t.Fatalf("expected 3 calls, got %d", len(runner.calls))
 	}
-	if runner.calls[0].Command != "cargo" || runner.calls[0].Args[0] != "test" {
+	if runner.calls[0].Command != testCommandCargo || runner.calls[0].Args[0] != "test" {
 		t.Fatalf("unexpected rust.test command: %#v", runner.calls[0])
 	}
-	if runner.calls[1].Command != "cargo" || runner.calls[1].Args[0] != "clippy" {
+	if runner.calls[1].Command != testCommandCargo || runner.calls[1].Args[0] != "clippy" {
 		t.Fatalf("unexpected rust.clippy command: %#v", runner.calls[1])
 	}
-	if runner.calls[2].Command != "cargo" || runner.calls[2].Args[0] != "fmt" {
+	if runner.calls[2].Command != testCommandCargo || runner.calls[2].Args[0] != "fmt" {
 		t.Fatalf("unexpected rust.format command: %#v", runner.calls[2])
 	}
 }
@@ -261,15 +270,15 @@ func TestNodeHandlers_Commands(t *testing.T) {
 	runner := &fakeLanguageCommandRunner{}
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
 
-	_, err := NewNodeBuildHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{"target": "apps/web"}))
+	_, err := NewNodeBuildHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{testJSONKeyTarget: testTargetAppsWeb}))
 	if err != nil {
 		t.Fatalf("node.build failed: %v", err)
 	}
-	_, err = NewNodeTestHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{"target": "apps/web"}))
+	_, err = NewNodeTestHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{testJSONKeyTarget: testTargetAppsWeb}))
 	if err != nil {
 		t.Fatalf("node.test failed: %v", err)
 	}
-	_, err = NewNodeLintHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{"target": "apps/web"}))
+	_, err = NewNodeLintHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{testJSONKeyTarget: testTargetAppsWeb}))
 	if err != nil {
 		t.Fatalf("node.lint failed: %v", err)
 	}
@@ -293,12 +302,12 @@ func TestPythonValidateAndTestHandlers(t *testing.T) {
 	runner := &fakeLanguageCommandRunner{}
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
-	_, err := NewPythonValidateHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{"target": "src"}))
+	_, err := NewPythonValidateHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{testJSONKeyTarget: "src"}))
 	if err != nil {
 		t.Fatalf("python.validate failed: %v", err)
 	}
 	_, err = NewPythonTestHandler(runner).Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{
-		"target":      "tests",
+		testJSONKeyTarget: "tests",
 		"run_pattern": "todo",
 		"max_fail":    3,
 	}))
@@ -374,13 +383,13 @@ func TestPythonTestHandler_InvalidPattern(t *testing.T) {
 
 func TestResolvePythonExecutablesFromVenv(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".workspace-venv", "bin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, testVenvDir, "bin"), 0o755); err != nil {
 		t.Fatalf("mkdir venv bin failed: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".workspace-venv", "bin", "python"), []byte(""), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testVenvDir, "bin", "python"), []byte(""), 0o755); err != nil {
 		t.Fatalf("write python failed: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, ".workspace-venv", "bin", "pytest"), []byte(""), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testVenvDir, "bin", "pytest"), []byte(""), 0o755); err != nil {
 		t.Fatalf("write pytest failed: %v", err)
 	}
 

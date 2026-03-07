@@ -13,10 +13,19 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testBuildWriteGoModFailed = "write go.mod failed: %v"
+	testBuildVenvDir          = ".workspace-venv"
+	testBuildArtifactPath     = "artifact_path"
+	testBuildGoModContent     = "module example.com/demo\n\ngo 1.23\n"
+	testBuildPython           = "python"
+	testBuildGoMod            = "go.mod"
+)
+
 func TestRepoStaticAnalysisHandler_Go(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testBuildGoMod), []byte(testBuildGoModContent), 0o644); err != nil {
+		t.Fatalf(testBuildWriteGoModFailed, err)
 	}
 
 	runner := &fakeSWERuntimeCommandRunner{}
@@ -63,15 +72,15 @@ func TestRepoPackageHandler_C(t *testing.T) {
 	}
 
 	output := result.Output.(map[string]any)
-	if output["artifact_path"] != ".workspace-dist/c-app" {
-		t.Fatalf("unexpected artifact_path: %#v", output["artifact_path"])
+	if output[testBuildArtifactPath] != ".workspace-dist/c-app" {
+		t.Fatalf("unexpected artifact_path: %#v", output[testBuildArtifactPath])
 	}
 }
 
 func TestRepoStaticAnalysisHandler_RunErrorMapping(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testBuildGoMod), []byte(testBuildGoModContent), 0o644); err != nil {
+		t.Fatalf(testBuildWriteGoModFailed, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(_ int, _ app.CommandSpec) (app.CommandResult, error) {
@@ -103,15 +112,15 @@ func TestRepoPackageHandler_NodeArtifactDetection(t *testing.T) {
 		t.Fatalf("unexpected repo.package node error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["artifact_path"] != "demo-1.0.0.tgz" {
-		t.Fatalf("unexpected artifact_path: %#v", output["artifact_path"])
+	if output[testBuildArtifactPath] != "demo-1.0.0.tgz" {
+		t.Fatalf("unexpected artifact_path: %#v", output[testBuildArtifactPath])
 	}
 }
 
 func TestRepoPackageHandler_MkdirFailure(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testBuildGoMod), []byte(testBuildGoModContent), 0o644); err != nil {
+		t.Fatalf(testBuildWriteGoModFailed, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, spec app.CommandSpec) (app.CommandResult, error) {
@@ -133,10 +142,10 @@ func TestStaticAnalysisCommandForProject_AllToolchains(t *testing.T) {
 		t.Fatalf("write main.c failed: %v", err)
 	}
 	workspacePy := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(workspacePy, ".workspace-venv", "bin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(workspacePy, testBuildVenvDir, "bin"), 0o755); err != nil {
 		t.Fatalf("mkdir .workspace-venv failed: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workspacePy, ".workspace-venv", "bin", "python"), []byte(""), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(workspacePy, testBuildVenvDir, "bin", testBuildPython), []byte(""), 0o755); err != nil {
 		t.Fatalf("write python binary failed: %v", err)
 	}
 
@@ -151,7 +160,7 @@ func TestStaticAnalysisCommandForProject_AllToolchains(t *testing.T) {
 		{name: "go", workspace: t.TempDir(), detected: projectType{Name: "go"}, target: "", command: "go", minArgs: 2},
 		{name: "rust", workspace: t.TempDir(), detected: projectType{Name: "rust"}, target: "", command: "cargo", minArgs: 2},
 		{name: "node", workspace: t.TempDir(), detected: projectType{Name: "node"}, target: "pkg/web", command: "npm", minArgs: 4},
-		{name: "python", workspace: workspacePy, detected: projectType{Name: "python"}, target: ".", command: ".workspace-venv/bin/python", minArgs: 3},
+		{name: testBuildPython, workspace: workspacePy, detected: projectType{Name: testBuildPython}, target: ".", command: ".workspace-venv/bin/python", minArgs: 3},
 		{name: "java-gradle", workspace: t.TempDir(), detected: projectType{Name: "java", Flavor: "gradle"}, target: "", command: "gradle", minArgs: 2},
 		{name: "java-maven", workspace: t.TempDir(), detected: projectType{Name: "java"}, target: "", command: "mvn", minArgs: 3},
 		{name: "c", workspace: workspaceC, detected: projectType{Name: "c"}, target: "", command: "cc", minArgs: 3},
@@ -182,10 +191,10 @@ func TestPackageCommandForProject_AllToolchains(t *testing.T) {
 		t.Fatalf("write app.c failed: %v", err)
 	}
 	workspacePy := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(workspacePy, ".workspace-venv", "bin"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(workspacePy, testBuildVenvDir, "bin"), 0o755); err != nil {
 		t.Fatalf("mkdir .workspace-venv failed: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(workspacePy, ".workspace-venv", "bin", "python"), []byte(""), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(workspacePy, testBuildVenvDir, "bin", testBuildPython), []byte(""), 0o755); err != nil {
 		t.Fatalf("write python binary failed: %v", err)
 	}
 
@@ -201,7 +210,7 @@ func TestPackageCommandForProject_AllToolchains(t *testing.T) {
 		{name: "go", workspace: t.TempDir(), detected: projectType{Name: "go"}, target: "", command: "go", wantEnsure: true, wantPath: ".workspace-dist/app"},
 		{name: "rust", workspace: t.TempDir(), detected: projectType{Name: "rust"}, target: "core", command: "cargo", wantEnsure: false, wantPath: "target/release"},
 		{name: "node", workspace: t.TempDir(), detected: projectType{Name: "node"}, target: "", command: "npm", wantEnsure: false, wantPath: ""},
-		{name: "python", workspace: workspacePy, detected: projectType{Name: "python"}, target: "", command: ".workspace-venv/bin/python", wantEnsure: true, wantPath: ".workspace-dist"},
+		{name: testBuildPython, workspace: workspacePy, detected: projectType{Name: testBuildPython}, target: "", command: ".workspace-venv/bin/python", wantEnsure: true, wantPath: ".workspace-dist"},
 		{name: "java-gradle", workspace: t.TempDir(), detected: projectType{Name: "java", Flavor: "gradle"}, target: "", command: "gradle", wantEnsure: false, wantPath: "build/libs"},
 		{name: "java-maven", workspace: t.TempDir(), detected: projectType{Name: "java"}, target: "", command: "mvn", wantEnsure: false, wantPath: "target"},
 		{name: "c", workspace: workspaceC, detected: projectType{Name: "c"}, target: "app.c", command: "cc", wantEnsure: true, wantPath: ".workspace-dist/c-app"},

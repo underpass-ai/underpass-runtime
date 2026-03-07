@@ -11,6 +11,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testSessionID    = "session-1"
+	testKeyPrefix    = "workspace:test:session"
+)
+
 type fakeValkeyClient struct {
 	data    map[string]string
 	pingErr error
@@ -64,10 +69,10 @@ func (f *fakeValkeyClient) Del(_ context.Context, keys ...string) *redis.IntCmd 
 }
 
 func TestValkeyStore_SaveGetDelete(t *testing.T) {
-	store := NewValkeyStore(&fakeValkeyClient{data: map[string]string{}}, "workspace:test:session", time.Hour)
+	store := NewValkeyStore(&fakeValkeyClient{data: map[string]string{}}, testKeyPrefix, time.Hour)
 
 	session := domain.Session{
-		ID:            "session-1",
+		ID:            testSessionID,
 		WorkspacePath: "/workspace/repo",
 		CreatedAt:     time.Now().UTC(),
 		ExpiresAt:     time.Now().UTC().Add(5 * time.Minute),
@@ -112,7 +117,7 @@ func TestValkeyStore_GetMissing(t *testing.T) {
 
 func TestValkeyStore_SaveError(t *testing.T) {
 	store := NewValkeyStore(&fakeValkeyClient{setErr: errors.New("set failed")}, "", time.Hour)
-	err := store.Save(context.Background(), domain.Session{ID: "session-1"})
+	err := store.Save(context.Background(), domain.Session{ID: testSessionID})
 	if err == nil {
 		t.Fatal("expected save error")
 	}
@@ -120,7 +125,7 @@ func TestValkeyStore_SaveError(t *testing.T) {
 
 func TestValkeyStore_DeleteError(t *testing.T) {
 	store := NewValkeyStore(&fakeValkeyClient{delErr: errors.New("del failed")}, "", time.Hour)
-	err := store.Delete(context.Background(), "session-1")
+	err := store.Delete(context.Background(), testSessionID)
 	if err == nil {
 		t.Fatal("expected delete error")
 	}
@@ -129,8 +134,8 @@ func TestValkeyStore_DeleteError(t *testing.T) {
 func TestValkeyStore_GetInvalidJSON(t *testing.T) {
 	store := NewValkeyStore(&fakeValkeyClient{data: map[string]string{
 		"workspace:test:session:session-1": "{not-json",
-	}}, "workspace:test:session", time.Hour)
-	_, _, err := store.Get(context.Background(), "session-1")
+	}}, testKeyPrefix, time.Hour)
+	_, _, err := store.Get(context.Background(), testSessionID)
 	if err == nil {
 		t.Fatal("expected unmarshal error")
 	}
@@ -145,7 +150,7 @@ func TestValkeyStore_DefaultPrefix(t *testing.T) {
 
 func TestValkeyStore_ExpiredSessionEvicted(t *testing.T) {
 	client := &fakeValkeyClient{data: map[string]string{}}
-	store := NewValkeyStore(client, "workspace:test:session", time.Hour)
+	store := NewValkeyStore(client, testKeyPrefix, time.Hour)
 	expired := domain.Session{
 		ID:        "session-expired",
 		CreatedAt: time.Now().UTC().Add(-2 * time.Minute),

@@ -18,11 +18,19 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testK8sNamespace    = "tenant-runtime"
+	testK8sTenantID     = "tenant-a"
+	testK8sActorID      = "alice"
+	testK8sSessionID    = "session-1"
+	testK8sPodSessionID = "ws-session-1"
+)
+
 func TestKubernetesManager_CreateAndCloseSession(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
 	client.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		getAction := action.(k8stesting.GetAction)
-		tracked, err := client.Tracker().Get(corev1.SchemeGroupVersion.WithResource("pods"), "tenant-runtime", getAction.GetName())
+		tracked, err := client.Tracker().Get(corev1.SchemeGroupVersion.WithResource("pods"), testK8sNamespace, getAction.GetName())
 		if err != nil {
 			return true, nil, err
 		}
@@ -34,16 +42,16 @@ func TestKubernetesManager_CreateAndCloseSession(t *testing.T) {
 	})
 
 	manager := NewKubernetesManager(KubernetesManagerConfig{
-		Namespace:       "tenant-runtime",
+		Namespace:       testK8sNamespace,
 		PodReadyTimeout: 2 * time.Second,
 	}, client)
 
 	session, err := manager.CreateSession(context.Background(), app.CreateSessionRequest{
-		SessionID:       "session-1",
+		SessionID:       testK8sSessionID,
 		RepoURL:         "https://example.org/repo.git",
 		RepoRef:         "main",
 		ExpiresInSecond: 60,
-		Principal:       domain.Principal{TenantID: "tenant-a", ActorID: "alice"},
+		Principal:       domain.Principal{TenantID: testK8sTenantID, ActorID: testK8sActorID},
 	})
 	if err != nil {
 		t.Fatalf("unexpected create error: %v", err)
@@ -60,7 +68,7 @@ func TestKubernetesManager_CreateAndCloseSession(t *testing.T) {
 		t.Fatalf("unexpected close error: %v", err)
 	}
 
-	_, err = client.CoreV1().Pods("tenant-runtime").Get(context.Background(), session.Runtime.PodName, metav1.GetOptions{})
+	_, err = client.CoreV1().Pods(testK8sNamespace).Get(context.Background(), session.Runtime.PodName, metav1.GetOptions{})
 	if err == nil {
 		t.Fatalf("expected pod to be deleted")
 	}
@@ -71,7 +79,7 @@ func TestKubernetesManager_CreateSessionRejectsSourceRepoPath(t *testing.T) {
 	_, err := manager.CreateSession(context.Background(), app.CreateSessionRequest{
 		SourceRepoPath:  "/tmp/repo",
 		ExpiresInSecond: 30,
-		Principal:       domain.Principal{TenantID: "tenant-a", ActorID: "alice"},
+		Principal:       domain.Principal{TenantID: testK8sTenantID, ActorID: testK8sActorID},
 	})
 	if err == nil {
 		t.Fatal("expected source_repo_path rejection")
@@ -90,15 +98,15 @@ func TestPodNameFromSessionID(t *testing.T) {
 
 func TestKubernetesManager_SessionPodSecurityDefaultsAndGitSecret(t *testing.T) {
 	manager := NewKubernetesManager(KubernetesManagerConfig{
-		Namespace: "tenant-runtime",
+		Namespace: testK8sNamespace,
 	}, k8sfake.NewSimpleClientset())
 
 	pod, err := manager.sessionPod(app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice"},
+		Principal: domain.Principal{TenantID: testK8sTenantID, ActorID: testK8sActorID},
 		Metadata: map[string]string{
 			"git_auth_secret": "tenant-git-auth",
 		},
-	}, "session-1", "ws-session-1")
+	}, testK8sSessionID, testK8sPodSessionID)
 	if err != nil {
 		t.Fatalf("unexpected sessionPod error: %v", err)
 	}
@@ -139,7 +147,7 @@ func TestKubernetesManager_SessionPodSecurityDefaultsAndGitSecret(t *testing.T) 
 
 func TestKubernetesManager_SessionPodUsesRunnerBundle(t *testing.T) {
 	manager := NewKubernetesManager(KubernetesManagerConfig{
-		Namespace: "tenant-runtime",
+		Namespace: testK8sNamespace,
 		PodImage:  "registry.example.com/runner/default:v1",
 		RunnerImageBundles: map[string]string{
 			"toolchains": "registry.example.com/runner/toolchains:v1",
@@ -148,11 +156,11 @@ func TestKubernetesManager_SessionPodUsesRunnerBundle(t *testing.T) {
 	}, k8sfake.NewSimpleClientset())
 
 	pod, err := manager.sessionPod(app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice"},
+		Principal: domain.Principal{TenantID: testK8sTenantID, ActorID: testK8sActorID},
 		Metadata: map[string]string{
 			"runner_profile": "toolchains",
 		},
-	}, "session-1", "ws-session-1")
+	}, testK8sSessionID, testK8sPodSessionID)
 	if err != nil {
 		t.Fatalf("unexpected sessionPod error: %v", err)
 	}
@@ -163,7 +171,7 @@ func TestKubernetesManager_SessionPodUsesRunnerBundle(t *testing.T) {
 
 func TestKubernetesManager_SessionPodRejectsUnknownRunnerBundle(t *testing.T) {
 	manager := NewKubernetesManager(KubernetesManagerConfig{
-		Namespace: "tenant-runtime",
+		Namespace: testK8sNamespace,
 		PodImage:  "registry.example.com/runner/default:v1",
 		RunnerImageBundles: map[string]string{
 			"toolchains": "registry.example.com/runner/toolchains:v1",
@@ -172,11 +180,11 @@ func TestKubernetesManager_SessionPodRejectsUnknownRunnerBundle(t *testing.T) {
 	}, k8sfake.NewSimpleClientset())
 
 	_, err := manager.sessionPod(app.CreateSessionRequest{
-		Principal: domain.Principal{TenantID: "tenant-a", ActorID: "alice"},
+		Principal: domain.Principal{TenantID: testK8sTenantID, ActorID: testK8sActorID},
 		Metadata: map[string]string{
 			"runner_profile": "does-not-exist",
 		},
-	}, "session-1", "ws-session-1")
+	}, testK8sSessionID, testK8sPodSessionID)
 	if err == nil {
 		t.Fatal("expected unknown runner profile rejection")
 	}
@@ -190,7 +198,7 @@ func TestKubernetesManager_CloseSessionFindsPodByLabel(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "ws-session-label-lookup",
-			Namespace: "tenant-runtime",
+			Namespace: testK8sNamespace,
 			Labels: map[string]string{
 				"workspace_id": sanitizeLabelValue(sessionID),
 			},
@@ -198,14 +206,14 @@ func TestKubernetesManager_CloseSessionFindsPodByLabel(t *testing.T) {
 	}
 	client := k8sfake.NewSimpleClientset(pod)
 	manager := NewKubernetesManager(KubernetesManagerConfig{
-		Namespace: "tenant-runtime",
+		Namespace: testK8sNamespace,
 	}, client)
 
 	if err := manager.CloseSession(context.Background(), sessionID); err != nil {
 		t.Fatalf("unexpected close error: %v", err)
 	}
 
-	_, err := client.CoreV1().Pods("tenant-runtime").Get(context.Background(), pod.Name, metav1.GetOptions{})
+	_, err := client.CoreV1().Pods(testK8sNamespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
 	if err == nil {
 		t.Fatal("expected pod to be deleted")
 	}

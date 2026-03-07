@@ -12,10 +12,16 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testGoModFile           = "go.mod"
+	testGoModContent        = "module example.com/demo\n\ngo 1.23\n"
+	testWriteGoModFailedFmt = "write go.mod failed: %v"
+)
+
 func TestRepoCoverageReportHandler_Go(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testGoModFile), []byte(testGoModContent), 0o644); err != nil {
+		t.Fatalf(testWriteGoModFailedFmt, err)
 	}
 
 	runner := &fakeSWERuntimeCommandRunner{
@@ -60,8 +66,8 @@ func TestRepoCoverageReportHandler_Go(t *testing.T) {
 
 func TestRepoCoverageReportHandler_GoCoverCommandFailure(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testGoModFile), []byte(testGoModContent), 0o644); err != nil {
+		t.Fatalf(testWriteGoModFailedFmt, err)
 	}
 
 	runner := &fakeSWERuntimeCommandRunner{
@@ -137,8 +143,8 @@ func TestRepoCoverageReportHandler_NoToolchain(t *testing.T) {
 
 func TestRepoCoverageReportHandler_GoTestFailure(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/demo\n\ngo 1.23\n"), 0o644); err != nil {
-		t.Fatalf("write go.mod failed: %v", err)
+	if err := os.WriteFile(filepath.Join(root, testGoModFile), []byte(testGoModContent), 0o644); err != nil {
+		t.Fatalf(testWriteGoModFailedFmt, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {

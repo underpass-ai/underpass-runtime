@@ -11,6 +11,14 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testKeyPrefix     = "workspace:test"
+	testInvocationID  = "inv-1"
+	testSessionID     = "session-1"
+	testToolName      = "fs.read"
+	testCorrelationID = "corr-1"
+)
+
 type fakeValkeyClient struct {
 	data     map[string]string
 	pingErr  error
@@ -77,12 +85,12 @@ func (f *fakeValkeyClient) Get(_ context.Context, key string) *redis.StringCmd {
 
 func TestValkeyStore_SaveAndGet(t *testing.T) {
 	client := &fakeValkeyClient{data: map[string]string{}}
-	store := NewValkeyStore(client, "workspace:test", time.Hour)
+	store := NewValkeyStore(client, testKeyPrefix, time.Hour)
 
 	invocation := domain.Invocation{
-		ID:        "inv-1",
-		SessionID: "session-1",
-		ToolName:  "fs.read",
+		ID:        testInvocationID,
+		SessionID: testSessionID,
+		ToolName:  testToolName,
 		Status:    domain.InvocationStatusSucceeded,
 		StartedAt: time.Now().UTC(),
 		Output:    map[string]any{"content": "ok"},
@@ -120,20 +128,20 @@ func TestValkeyStore_GetMissing(t *testing.T) {
 }
 
 func TestValkeyStore_SaveErrors(t *testing.T) {
-	store := NewValkeyStore(&fakeValkeyClient{setErr: errors.New("set failed")}, "workspace:test", 0)
-	err := store.Save(context.Background(), domain.Invocation{ID: "inv-1"})
+	store := NewValkeyStore(&fakeValkeyClient{setErr: errors.New("set failed")}, testKeyPrefix, 0)
+	err := store.Save(context.Background(), domain.Invocation{ID: testInvocationID})
 	if err == nil {
 		t.Fatalf("expected save error")
 	}
 }
 
 func TestValkeyStore_SaveSetNXError(t *testing.T) {
-	store := NewValkeyStore(&fakeValkeyClient{setNXErr: errors.New("setnx failed")}, "workspace:test", 0)
+	store := NewValkeyStore(&fakeValkeyClient{setNXErr: errors.New("setnx failed")}, testKeyPrefix, 0)
 	err := store.Save(context.Background(), domain.Invocation{
-		ID:            "inv-1",
-		SessionID:     "session-1",
-		ToolName:      "fs.read",
-		CorrelationID: "corr-1",
+		ID:            testInvocationID,
+		SessionID:     testSessionID,
+		ToolName:      testToolName,
+		CorrelationID: testCorrelationID,
 	})
 	if err == nil {
 		t.Fatalf("expected save error when correlation index fails")
@@ -141,8 +149,8 @@ func TestValkeyStore_SaveSetNXError(t *testing.T) {
 }
 
 func TestValkeyStore_GetErrors(t *testing.T) {
-	store := NewValkeyStore(&fakeValkeyClient{getErr: errors.New("get failed")}, "workspace:test", 0)
-	_, _, err := store.Get(context.Background(), "inv-1")
+	store := NewValkeyStore(&fakeValkeyClient{getErr: errors.New("get failed")}, testKeyPrefix, 0)
+	_, _, err := store.Get(context.Background(), testInvocationID)
 	if err == nil {
 		t.Fatalf("expected get error")
 	}
@@ -151,7 +159,7 @@ func TestValkeyStore_GetErrors(t *testing.T) {
 func TestValkeyStore_GetInvalidJSON(t *testing.T) {
 	store := NewValkeyStore(&fakeValkeyClient{
 		data: map[string]string{"workspace:test:inv-bad": "{not-json"},
-	}, "workspace:test", 0)
+	}, testKeyPrefix, 0)
 
 	_, _, err := store.Get(context.Background(), "inv-bad")
 	if err == nil {
@@ -181,20 +189,20 @@ func TestNewValkeyStoreFromAddress_InvalidAddress(t *testing.T) {
 }
 
 func TestValkeyStore_Key(t *testing.T) {
-	store := NewValkeyStore(&fakeValkeyClient{}, "workspace:test", 0)
-	if key := store.key("inv-1"); key != "workspace:test:inv-1" {
+	store := NewValkeyStore(&fakeValkeyClient{}, testKeyPrefix, 0)
+	if key := store.key(testInvocationID); key != "workspace:test:inv-1" {
 		t.Fatalf("unexpected key: %s", key)
 	}
 }
 
 func TestValkeyStore_FindByCorrelation(t *testing.T) {
 	client := &fakeValkeyClient{data: map[string]string{}}
-	store := NewValkeyStore(client, "workspace:test", 0)
+	store := NewValkeyStore(client, testKeyPrefix, 0)
 	invocation := domain.Invocation{
-		ID:            "inv-1",
-		SessionID:     "session-1",
-		ToolName:      "fs.read",
-		CorrelationID: "corr-1",
+		ID:            testInvocationID,
+		SessionID:     testSessionID,
+		ToolName:      testToolName,
+		CorrelationID: testCorrelationID,
 		Status:        domain.InvocationStatusSucceeded,
 		StartedAt:     time.Now().UTC(),
 	}
@@ -202,7 +210,7 @@ func TestValkeyStore_FindByCorrelation(t *testing.T) {
 		t.Fatalf("save failed: %v", err)
 	}
 
-	foundInvocation, found, err := store.FindByCorrelation(context.Background(), "session-1", "fs.read", "corr-1")
+	foundInvocation, found, err := store.FindByCorrelation(context.Background(), testSessionID, testToolName, testCorrelationID)
 	if err != nil {
 		t.Fatalf("find by correlation failed: %v", err)
 	}

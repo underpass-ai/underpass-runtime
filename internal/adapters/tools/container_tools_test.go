@@ -12,6 +12,22 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testContainerRuntimePodman     = "podman"
+	testContainerRuntimeDocker     = "docker"
+	testContainerSessionID1        = "sess1"
+	testContainerImageNginxLatest  = "nginx:latest"
+	testContainerImageBusyboxLatest = "busybox:latest"
+	testContainerNameMycontainer   = "mycontainer"
+	testContainerCmdNginx          = "nginx"
+	testContainerArgInfo           = "info"
+	testContainerErrExitStatus1    = "exit status 1"
+	testContainerErrUnexpectedCmd  = "unexpected command"
+	testContainerErrCannotConnect  = "cannot connect to runtime"
+	testContainerFmtExecFailed     = "expected execution_failed, got %s"
+	testContainerFmtPodmanRuntime  = "expected podman runtime output, got %#v"
+)
+
 type fakeContainerRunner struct {
 	calls []app.CommandSpec
 	run   func(callIndex int, spec app.CommandSpec) (app.CommandResult, error)
@@ -28,10 +44,10 @@ func (f *fakeContainerRunner) Run(_ context.Context, _ domain.Session, spec app.
 func TestContainerPSHandler_SimulatedWhenRuntimeUnavailable(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "cannot connect to runtime"}, errors.New("exit status 1")
+			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
+				return app.CommandResult{ExitCode: 1, Output: testContainerErrCannotConnect}, errors.New(testContainerErrExitStatus1)
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -52,13 +68,13 @@ func TestContainerPSHandler_SimulatedWhenRuntimeUnavailable(t *testing.T) {
 func TestContainerPSHandler_RuntimeAndTruncation(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "info" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
 				return app.CommandResult{ExitCode: 0, Output: "{}"}, nil
 			}
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "ps" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == "ps" {
 				return app.CommandResult{ExitCode: 0, Output: "b123\timg-b\tb\trunning\na123\timg-a\ta\texited"}, nil
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -68,8 +84,8 @@ func TestContainerPSHandler_RuntimeAndTruncation(t *testing.T) {
 		t.Fatalf("unexpected container.ps error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["runtime"] != "podman" || output["simulated"] != false {
-		t.Fatalf("expected podman runtime output, got %#v", output)
+	if output["runtime"] != testContainerRuntimePodman || output["simulated"] != false {
+		t.Fatalf(testContainerFmtPodmanRuntime, output)
 	}
 	if output["count"] != 1 || output["truncated"] != true {
 		t.Fatalf("expected count=1 truncated=true, got %#v", output)
@@ -83,10 +99,10 @@ func TestContainerPSHandler_RuntimeAndTruncation(t *testing.T) {
 func TestContainerRunHandler_StrictNoRuntimeFails(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "no runtime"}, errors.New("exit status 1")
+			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
+				return app.CommandResult{ExitCode: 1, Output: "no runtime"}, errors.New(testContainerErrExitStatus1)
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -96,23 +112,23 @@ func TestContainerRunHandler_StrictNoRuntimeFails(t *testing.T) {
 		t.Fatal("expected strict runtime failure")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("expected execution_failed, got %s", err.Code)
+		t.Fatalf(testContainerFmtExecFailed, err.Code)
 	}
 }
 
 func TestContainerRunHandler_UsesRuntime(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "info" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
 				return app.CommandResult{ExitCode: 0, Output: "{}"}, nil
 			}
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "run" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == "run" {
 				if !containsArg(spec.Args, "-d") {
 					t.Fatalf("expected detach flag in run args: %#v", spec.Args)
 				}
 				return app.CommandResult{ExitCode: 0, Output: "abc123def456\n"}, nil
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -122,8 +138,8 @@ func TestContainerRunHandler_UsesRuntime(t *testing.T) {
 		t.Fatalf("unexpected container.run error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["runtime"] != "podman" || output["simulated"] != false {
-		t.Fatalf("expected podman runtime output, got %#v", output)
+	if output["runtime"] != testContainerRuntimePodman || output["simulated"] != false {
+		t.Fatalf(testContainerFmtPodmanRuntime, output)
 	}
 	if output["container_id"] != "abc123def456" {
 		t.Fatalf("unexpected container_id: %#v", output["container_id"])
@@ -159,13 +175,13 @@ func TestContainerExecHandler_DeniesDisallowedCommand(t *testing.T) {
 func TestContainerExecHandler_UsesRuntime(t *testing.T) {
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "info" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
 				return app.CommandResult{ExitCode: 0, Output: "{}"}, nil
 			}
-			if spec.Command == "podman" && len(spec.Args) > 0 && spec.Args[0] == "exec" {
+			if spec.Command == testContainerRuntimePodman && len(spec.Args) > 0 && spec.Args[0] == "exec" {
 				return app.CommandResult{ExitCode: 0, Output: "hello from container"}, nil
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -175,8 +191,8 @@ func TestContainerExecHandler_UsesRuntime(t *testing.T) {
 		t.Fatalf("unexpected container.exec error: %#v", err)
 	}
 	output := result.Output.(map[string]any)
-	if output["runtime"] != "podman" || output["simulated"] != false {
-		t.Fatalf("expected podman runtime output, got %#v", output)
+	if output["runtime"] != testContainerRuntimePodman || output["simulated"] != false {
+		t.Fatalf(testContainerFmtPodmanRuntime, output)
 	}
 	if !strings.Contains(output["output"].(string), "hello") {
 		t.Fatalf("unexpected exec output: %#v", output["output"])
@@ -187,10 +203,10 @@ func TestContainerPSHandler_StrictByDefaultEnvFailsWithoutRuntime(t *testing.T) 
 	t.Setenv("WORKSPACE_CONTAINER_STRICT_BY_DEFAULT", "true")
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "cannot connect to runtime"}, errors.New("exit status 1")
+			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
+				return app.CommandResult{ExitCode: 1, Output: testContainerErrCannotConnect}, errors.New(testContainerErrExitStatus1)
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -200,7 +216,7 @@ func TestContainerPSHandler_StrictByDefaultEnvFailsWithoutRuntime(t *testing.T) 
 		t.Fatal("expected strict-by-default runtime failure")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("expected execution_failed, got %s", err.Code)
+		t.Fatalf(testContainerFmtExecFailed, err.Code)
 	}
 }
 
@@ -208,10 +224,10 @@ func TestContainerPSHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testing.
 	t.Setenv("WORKSPACE_CONTAINER_ALLOW_SYNTHETIC_FALLBACK", "false")
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "cannot connect to runtime"}, errors.New("exit status 1")
+			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
+				return app.CommandResult{ExitCode: 1, Output: testContainerErrCannotConnect}, errors.New(testContainerErrExitStatus1)
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -221,7 +237,7 @@ func TestContainerPSHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testing.
 		t.Fatal("expected runtime failure when synthetic fallback disabled")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("expected execution_failed, got %s", err.Code)
+		t.Fatalf(testContainerFmtExecFailed, err.Code)
 	}
 }
 
@@ -229,10 +245,10 @@ func TestContainerLogsHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testin
 	t.Setenv("WORKSPACE_CONTAINER_ALLOW_SYNTHETIC_FALLBACK", "false")
 	runner := &fakeContainerRunner{
 		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
-			if len(spec.Args) > 0 && spec.Args[0] == "info" {
-				return app.CommandResult{ExitCode: 1, Output: "cannot connect to runtime"}, errors.New("exit status 1")
+			if len(spec.Args) > 0 && spec.Args[0] == testContainerArgInfo {
+				return app.CommandResult{ExitCode: 1, Output: testContainerErrCannotConnect}, errors.New(testContainerErrExitStatus1)
 			}
-			return app.CommandResult{ExitCode: 1}, errors.New("unexpected command")
+			return app.CommandResult{ExitCode: 1}, errors.New(testContainerErrUnexpectedCmd)
 		},
 	}
 
@@ -242,7 +258,7 @@ func TestContainerLogsHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testin
 		t.Fatal("expected runtime failure when synthetic fallback disabled")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("expected execution_failed, got %s", err.Code)
+		t.Fatalf(testContainerFmtExecFailed, err.Code)
 	}
 }
 
@@ -273,9 +289,9 @@ func TestContainerHandlerNames(t *testing.T) {
 }
 
 func TestBuildSimulatedContainerID(t *testing.T) {
-	id1 := buildSimulatedContainerID("sess1", "busybox:latest", []string{"echo", "hi"}, "mycontainer")
-	id2 := buildSimulatedContainerID("sess1", "busybox:latest", []string{"echo", "hi"}, "mycontainer")
-	id3 := buildSimulatedContainerID("sess2", "busybox:latest", []string{"echo", "hi"}, "mycontainer")
+	id1 := buildSimulatedContainerID(testContainerSessionID1, testContainerImageBusyboxLatest, []string{"echo", "hi"}, testContainerNameMycontainer)
+	id2 := buildSimulatedContainerID(testContainerSessionID1, testContainerImageBusyboxLatest, []string{"echo", "hi"}, testContainerNameMycontainer)
+	id3 := buildSimulatedContainerID("sess2", testContainerImageBusyboxLatest, []string{"echo", "hi"}, testContainerNameMycontainer)
 
 	if id1 != id2 {
 		t.Fatalf("expected same inputs to produce same ID: %q != %q", id1, id2)
@@ -294,8 +310,8 @@ func TestBuildSimulatedContainerID(t *testing.T) {
 
 func TestBuildContainerLogsCommand(t *testing.T) {
 	// Without sinceSec and without timestamps
-	cmd := buildContainerLogsCommand("docker", "ctr-1", 50, 0, false)
-	expected := []string{"docker", "logs", "--tail", "50", "ctr-1"}
+	cmd := buildContainerLogsCommand(testContainerRuntimeDocker, "ctr-1", 50, 0, false)
+	expected := []string{testContainerRuntimeDocker, "logs", "--tail", "50", "ctr-1"}
 	if len(cmd) != len(expected) {
 		t.Fatalf("expected %v, got %v", expected, cmd)
 	}
@@ -306,7 +322,7 @@ func TestBuildContainerLogsCommand(t *testing.T) {
 	}
 
 	// With sinceSec=30 and timestamps=true
-	cmd2 := buildContainerLogsCommand("docker", "ctr-1", 50, 30, true)
+	cmd2 := buildContainerLogsCommand(testContainerRuntimeDocker, "ctr-1", 50, 30, true)
 	if !containsArg(cmd2, "--since") {
 		t.Fatalf("expected --since in cmd: %v", cmd2)
 	}
@@ -408,10 +424,10 @@ func TestSanitizeContainerEnv(t *testing.T) {
 
 func TestBuildSimulatedContainerRunResult_Detach(t *testing.T) {
 	opts := simulatedContainerRunOptions{
-		sessionID:     "sess1",
-		imageRef:      "nginx:latest",
-		containerName: "mycontainer",
-		command:       []string{"nginx"},
+		sessionID:     testContainerSessionID1,
+		imageRef:      testContainerImageNginxLatest,
+		containerName: testContainerNameMycontainer,
+		command:       []string{testContainerCmdNginx},
 		envPairs:      []string{"FOO=bar"},
 		detach:        true,
 		remove:        false,
@@ -425,7 +441,7 @@ func TestBuildSimulatedContainerRunResult_Detach(t *testing.T) {
 	if output[containerSourceSimulated] != true {
 		t.Fatal("expected simulated=true")
 	}
-	if output["image_ref"] != "nginx:latest" {
+	if output["image_ref"] != testContainerImageNginxLatest {
 		t.Fatalf("expected image_ref='nginx:latest', got %q", output["image_ref"])
 	}
 }
@@ -450,11 +466,11 @@ func TestHandleContainerRunError_NonStrict(t *testing.T) {
 	cmdResult := app.CommandResult{ExitCode: 1, Output: "pull failed"}
 	result, domErr := handleContainerRunError(
 		containerRunContext{
-			sessionID: "sess1", imageRef: "nginx:latest", containerName: "mybox",
-			command: []string{"nginx"}, envPairs: []string{},
+			sessionID: testContainerSessionID1, imageRef: testContainerImageNginxLatest, containerName: "mybox",
+			command: []string{testContainerCmdNginx}, envPairs: []string{},
 			detach: false, remove: true, strict: false,
 		},
-		"docker", cmdResult, errors.New("exit 1"),
+		testContainerRuntimeDocker, cmdResult, errors.New("exit 1"),
 	)
 	if domErr != nil {
 		t.Fatalf("expected nil error for non-strict mode, got %v", domErr)
@@ -469,11 +485,11 @@ func TestHandleContainerRunError_Strict(t *testing.T) {
 	cmdResult := app.CommandResult{ExitCode: 1, Output: "docker error"}
 	result, domErr := handleContainerRunError(
 		containerRunContext{
-			sessionID: "sess1", imageRef: "nginx:latest", containerName: "mybox",
-			command: []string{"nginx"}, envPairs: []string{},
+			sessionID: testContainerSessionID1, imageRef: testContainerImageNginxLatest, containerName: "mybox",
+			command: []string{testContainerCmdNginx}, envPairs: []string{},
 			detach: false, remove: true, strict: true,
 		},
-		"docker", cmdResult, errors.New("exit 1"),
+		testContainerRuntimeDocker, cmdResult, errors.New("exit 1"),
 	)
 	if domErr == nil {
 		t.Fatal("expected domain error for strict mode")

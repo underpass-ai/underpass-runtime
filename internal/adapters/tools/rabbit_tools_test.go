@@ -11,6 +11,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
+const (
+	testRabbitQueue    = "sandbox.jobs"
+	testRabbitBadURL   = "amqp://invalid:5672"
+)
+
 type fakeRabbitClient struct {
 	consume   func(req rabbitConsumeRequest) ([]rabbitConsumedMessage, error)
 	publish   func(req rabbitPublishRequest) error
@@ -41,14 +46,14 @@ func (f *fakeRabbitClient) Publish(_ context.Context, req rabbitPublishRequest) 
 func TestRabbitConsumeHandler_Success(t *testing.T) {
 	handler := NewRabbitConsumeHandler(&fakeRabbitClient{
 		consume: func(req rabbitConsumeRequest) ([]rabbitConsumedMessage, error) {
-			if req.URL == "" || req.Queue != "sandbox.jobs" || req.Timeout <= 0 {
+			if req.URL == "" || req.Queue != testRabbitQueue || req.Timeout <= 0 {
 				t.Fatalf("unexpected consume request: %#v", req)
 			}
 			return []rabbitConsumedMessage{
 				{
 					Body:        []byte("hello"),
 					Exchange:    "events",
-					RoutingKey:  "sandbox.jobs",
+					RoutingKey:  testRabbitQueue,
 					Redelivered: false,
 					Timestamp:   time.Unix(1700000000, 0),
 				},
@@ -66,12 +71,12 @@ func TestRabbitConsumeHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["profile_id"] != "dev.rabbit" {
 		t.Fatalf("unexpected profile_id: %#v", output["profile_id"])
 	}
-	if output["queue"] != "sandbox.jobs" {
+	if output["queue"] != testRabbitQueue {
 		t.Fatalf("unexpected queue: %#v", output["queue"])
 	}
 }
@@ -87,14 +92,14 @@ func TestRabbitConsumeHandler_DeniesQueueOutsideProfileScopes(t *testing.T) {
 		t.Fatal("expected queue policy denial")
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
 func TestRabbitPublishHandler_Success(t *testing.T) {
 	handler := NewRabbitPublishHandler(&fakeRabbitClient{
 		publish: func(req rabbitPublishRequest) error {
-			if req.URL == "" || req.Exchange != "events" || req.RoutingKey != "sandbox.jobs" || req.Timeout <= 0 {
+			if req.URL == "" || req.Exchange != "events" || req.RoutingKey != testRabbitQueue || req.Timeout <= 0 {
 				t.Fatalf("unexpected publish request: %#v", req)
 			}
 			if string(req.Payload) != "hello" {
@@ -114,7 +119,7 @@ func TestRabbitPublishHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["published"] != true {
 		t.Fatalf("expected published=true, got %#v", output["published"])
@@ -132,7 +137,7 @@ func TestRabbitPublishHandler_DeniesReadOnlyProfile(t *testing.T) {
 		t.Fatal("expected read_only policy denial")
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 	if err.Message != "profile is read_only" {
 		t.Fatalf("unexpected error message: %q", err.Message)
@@ -151,14 +156,14 @@ func TestRabbitPublishHandler_ExecutionError(t *testing.T) {
 		t.Fatal("expected execution error")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
 func TestRabbitQueueInfoHandler_Success(t *testing.T) {
 	handler := NewRabbitQueueInfoHandler(&fakeRabbitClient{
 		queueInfo: func(req rabbitQueueInfoRequest) (rabbitQueueInfo, error) {
-			if req.Queue != "sandbox.jobs" {
+			if req.Queue != testRabbitQueue {
 				t.Fatalf("unexpected queue: %s", req.Queue)
 			}
 			return rabbitQueueInfo{Name: req.Queue, Messages: 5, Consumers: 2}, nil
@@ -175,7 +180,7 @@ func TestRabbitQueueInfoHandler_Success(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %#v", result.Output)
+		t.Fatalf(testErrMsgMapOutput, result.Output)
 	}
 	if output["messages"] != 5 {
 		t.Fatalf("unexpected messages count: %#v", output["messages"])
@@ -197,7 +202,7 @@ func TestRabbitQueueInfoHandler_MapsExecutionErrors(t *testing.T) {
 		t.Fatal("expected execution error")
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
-		t.Fatalf("unexpected error code: %s", err.Code)
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
 	}
 }
 
@@ -215,8 +220,8 @@ func TestRabbitHandlers_NamesAndLiveClientErrors(t *testing.T) {
 	client := &liveRabbitClient{}
 	ctx := context.Background()
 	_, err := client.QueueInfo(ctx, rabbitQueueInfoRequest{
-		URL:     "amqp://invalid:5672",
-		Queue:   "sandbox.jobs",
+		URL:     testRabbitBadURL,
+		Queue:   testRabbitQueue,
 		Timeout: 5 * time.Millisecond,
 	})
 	if err == nil {
@@ -224,8 +229,8 @@ func TestRabbitHandlers_NamesAndLiveClientErrors(t *testing.T) {
 	}
 
 	_, err = client.Consume(ctx, rabbitConsumeRequest{
-		URL:         "amqp://invalid:5672",
-		Queue:       "sandbox.jobs",
+		URL:         testRabbitBadURL,
+		Queue:       testRabbitQueue,
 		MaxMessages: 1,
 		Timeout:     5 * time.Millisecond,
 	})
@@ -234,9 +239,9 @@ func TestRabbitHandlers_NamesAndLiveClientErrors(t *testing.T) {
 	}
 
 	err = client.Publish(ctx, rabbitPublishRequest{
-		URL:        "amqp://invalid:5672",
+		URL:        testRabbitBadURL,
 		Exchange:   "events",
-		RoutingKey: "sandbox.jobs",
+		RoutingKey: testRabbitQueue,
 		Payload:    []byte("hello"),
 		Timeout:    5 * time.Millisecond,
 	})
@@ -244,7 +249,7 @@ func TestRabbitHandlers_NamesAndLiveClientErrors(t *testing.T) {
 		t.Fatal("expected live rabbit Publish connection error")
 	}
 
-	if _, _, _, err = openRabbitChannel("amqp://invalid:5672", 5*time.Millisecond); err == nil {
+	if _, _, _, err = openRabbitChannel(testRabbitBadURL, 5*time.Millisecond); err == nil {
 		t.Fatal("expected openRabbitChannel connection error")
 	}
 }
@@ -266,7 +271,7 @@ func TestRabbitProfileAndQueueHelpers(t *testing.T) {
 	}
 
 	profile := connectionProfile{Scopes: map[string]any{"queues": []any{"sandbox.", "dev.*"}}}
-	if !queueAllowedByProfile("sandbox.jobs", profile) {
+	if !queueAllowedByProfile(testRabbitQueue, profile) {
 		t.Fatal("expected queueAllowedByProfile allow")
 	}
 	if queueAllowedByProfile("prod.jobs", profile) {
