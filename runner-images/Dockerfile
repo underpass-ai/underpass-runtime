@@ -66,7 +66,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ripgrep \
     sed \
     && rm -rf /var/lib/apt/lists/* \
-    && curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain ${RUST_TOOLCHAIN} \
+    && curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain "${RUST_TOOLCHAIN}" \
     && rustup component add rustfmt clippy rust-src \
     && groupadd -g 1000 runner \
     && useradd -m -u 1000 -g 1000 -s /bin/bash runner \
@@ -82,14 +82,14 @@ RUN GOBIN=/tmp/bin go install go.k6.io/k6@v0.54.0
 FROM base AS k6
 USER root
 COPY --from=k6builder /tmp/bin/k6 /usr/local/bin/k6
-RUN chmod 0755 /usr/local/bin/k6
+RUN chmod 0555 /usr/local/bin/k6
 USER runner
 
 FROM base AS secops
 USER root
 COPY --from=trivybin /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=syftbin /syft /usr/local/bin/syft
-RUN chmod 0755 /usr/local/bin/trivy /usr/local/bin/syft
+RUN chmod 0555 /usr/local/bin/trivy /usr/local/bin/syft
 USER runner
 
 FROM base AS container
@@ -110,7 +110,7 @@ USER root
 COPY --from=trivybin /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=syftbin /syft /usr/local/bin/syft
 COPY --from=k6builder /tmp/bin/k6 /usr/local/bin/k6
-RUN chmod 0755 /usr/local/bin/trivy /usr/local/bin/syft /usr/local/bin/k6 && \
+RUN chmod 0555 /usr/local/bin/trivy /usr/local/bin/syft /usr/local/bin/k6 && \
     apt-get update && apt-get install -y --no-install-recommends \
     buildah \
     fuse-overlayfs \

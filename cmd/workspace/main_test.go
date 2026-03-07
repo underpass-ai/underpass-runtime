@@ -192,6 +192,31 @@ func TestBuildWorkspaceManagerLocalAndErrors(t *testing.T) {
 	}
 }
 
+func TestInitKubernetesRuntime_LocalBackend(t *testing.T) {
+	rt, err := initKubernetesRuntime("local")
+	if err != nil {
+		t.Fatalf("unexpected error for local backend: %v", err)
+	}
+	if rt != nil {
+		t.Fatal("expected nil runtime for local backend")
+	}
+}
+
+func TestStartPodJanitorIfEnabled_Local(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	cancel := startPodJanitorIfEnabled("local", "default", nil, nil, logger)
+	if cancel != nil {
+		t.Fatal("expected nil cancel for local backend")
+	}
+}
+
+func TestK8sToolHandlers_Local(t *testing.T) {
+	handlers := k8sToolHandlers(nil, nil, "default")
+	if handlers != nil {
+		t.Fatal("expected nil handlers for local backend")
+	}
+}
+
 func TestBuildCommandRunnerLocal(t *testing.T) {
 	runner, err := buildCommandRunner("local", nil)
 	if err != nil {

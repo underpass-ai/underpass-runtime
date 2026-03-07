@@ -385,6 +385,241 @@ func TestInvokeK8sLogs_PodExists_ReturnsOutput(t *testing.T) {
 	}
 }
 
+func TestBuildK8sRunContainer_WithEnvPairs(t *testing.T) {
+	envPairs := []string{"FOO=bar", "BAZ=qux", "INVALID_NO_EQUALS"}
+	c := buildK8sRunContainer("alpine:3.18", []string{"echo", "hello"}, envPairs)
+	if c.Name != "task" {
+		t.Fatalf("expected container name 'task', got %q", c.Name)
+	}
+	if c.Image != "alpine:3.18" {
+		t.Fatalf("expected image 'alpine:3.18', got %q", c.Image)
+	}
+	if len(c.Env) != 2 {
+		t.Fatalf("expected 2 env vars (INVALID skipped), got %d", len(c.Env))
+	}
+	if c.Env[0].Name != "FOO" || c.Env[0].Value != "bar" {
+		t.Fatalf("unexpected env[0]: %#v", c.Env[0])
+	}
+	if len(c.Command) != 2 || c.Command[0] != "echo" {
+		t.Fatalf("unexpected command: %#v", c.Command)
+	}
+	if c.SecurityContext == nil || c.SecurityContext.AllowPrivilegeEscalation == nil || *c.SecurityContext.AllowPrivilegeEscalation {
+		t.Fatal("expected AllowPrivilegeEscalation=false")
+	}
+}
+
+func TestBuildK8sRunContainer_NoCommand(t *testing.T) {
+	c := buildK8sRunContainer("alpine:3.18", nil, nil)
+	if len(c.Command) != 0 {
+		t.Fatalf("expected no command override, got %#v", c.Command)
+	}
+	if len(c.Env) != 0 {
+		t.Fatalf("expected no env vars, got %d", len(c.Env))
+	}
+}
+
+func TestResolveK8sPodImage_EmptyContainers(t *testing.T) {
+	pod := &corev1.Pod{Spec: corev1.PodSpec{}}
+	if img := resolveK8sPodImage(pod); img != "" {
+		t.Fatalf("expected empty image for pod with no containers, got %q", img)
+	}
+}
+
+func TestResolveK8sPodImage_FallbackToFirst(t *testing.T) {
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "sidecar", Image: "nginx:1.25"},
+			},
+		},
+	}
+	if img := resolveK8sPodImage(pod); img != "nginx:1.25" {
+		t.Fatalf("expected fallback to first container image, got %q", img)
+	}
+}
+
+func TestBuildK8sPodLabels_WithTenant(t *testing.T) {
+	session := domain.Session{
+		ID:        "sess-labels",
+		Principal: domain.Principal{TenantID: "  acme  "},
+	}
+	labels := buildK8sPodLabels(session)
+	if labels["workspace_tenant"] != "acme" {
+		t.Fatalf("expected trimmed tenant label, got %q", labels["workspace_tenant"])
+	}
+	if labels["app"] != "workspace-container-run" {
+		t.Fatalf("expected app label, got %q", labels["app"])
+	}
+}
+
+func TestBuildK8sPodLabels_NoTenant(t *testing.T) {
+	session := domain.Session{ID: "sess-no-tenant"}
+	labels := buildK8sPodLabels(session)
+	if _, ok := labels["workspace_tenant"]; ok {
+		t.Fatal("expected no tenant label for empty tenant")
+	}
+}
+
+func TestBuildK8sRunPodName_LongName(t *testing.T) {
+	longName := strings.Repeat("a", 100)
+	name := buildK8sRunPodName("session-1", longName, "alpine", []string{"sh"})
+	if len(name) > 63 {
+		t.Fatalf("pod name exceeds 63 chars: %d", len(name))
+	}
+	if !strings.HasPrefix(name, "ws-ctr-") {
+		t.Fatalf("expected ws-ctr- prefix, got %q", name)
+	}
+}
+
+func TestBuildK8sRunPodName_EmptySession(t *testing.T) {
+	name := buildK8sRunPodName("", "", "alpine", nil)
+	if !strings.HasPrefix(name, "ws-ctr") {
+		t.Fatalf("expected ws-ctr prefix, got %q", name)
+	}
+}
+
+func TestWaitForK8sPodCompletion_Detach(t *testing.T) {
+	status, exitCode, err := waitForK8sPodCompletion(context.Background(), nil, podCompletionConfig{
+		detach:   true,
+		status:   "running",
+		exitCode: 0,
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if status != "running" || exitCode != 0 {
+		t.Fatalf("expected running/0, got %s/%d", status, exitCode)
+	}
+}
+
+func TestWaitForK8sPodCompletion_WithRemove(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "rm-pod", Namespace: "default"},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodSucceeded,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{ExitCode: 7}}},
+			},
+		},
+	}
+	client := k8sfake.NewSimpleClientset(pod)
+	status, exitCode, err := waitForK8sPodCompletion(context.Background(), client, podCompletionConfig{
+		namespace: "default",
+		podName:   "rm-pod",
+		remove:    true,
+		status:    "running",
+		exitCode:  0,
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if status != "succeeded" {
+		t.Fatalf("expected succeeded, got %s", status)
+	}
+	if exitCode != 7 {
+		t.Fatalf("expected exit code 7, got %d", exitCode)
+	}
+}
+
+func TestContainerPSHandler_AllWithNameFilterAndTruncation(t *testing.T) {
+	pods := make([]k8sruntime.Object, 0, 5)
+	for i := 0; i < 5; i++ {
+		pods = append(pods, &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("ws-ctr-item-%d", i),
+				Namespace: "sandbox",
+				Labels:    map[string]string{"app": testK8sContainerAppLabel, "workspace_session_id": "sess-trunc"},
+			},
+			Spec:   corev1.PodSpec{Containers: []corev1.Container{{Name: "task", Image: testK8sContainerImageBusybox136}}},
+			Status: corev1.PodStatus{Phase: corev1.PodSucceeded},
+		})
+	}
+	client := k8sfake.NewSimpleClientset(pods...)
+	handler := NewContainerPSHandlerWithKubernetes(nil, client, "sandbox")
+	session := domain.Session{
+		ID:      "sess-trunc",
+		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes, Namespace: "sandbox"},
+	}
+
+	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"all":true,"limit":3,"name_filter":"item","strict":true}`))
+	if err != nil {
+		t.Fatalf("unexpected ps k8s error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["count"] != 3 {
+		t.Fatalf("expected truncated to 3, got %#v", output["count"])
+	}
+	if output["truncated"] != true {
+		t.Fatalf("expected truncated=true")
+	}
+	if output["all"] != true {
+		t.Fatalf("expected all=true")
+	}
+}
+
+func TestContainerExecHandler_PodNotFound(t *testing.T) {
+	client := k8sfake.NewSimpleClientset()
+	handler := NewContainerExecHandlerWithKubernetes(nil, client, "default")
+	session := domain.Session{
+		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	_, domErr := handler.Invoke(context.Background(), session, json.RawMessage(`{"container_id":"missing-pod","command":["echo"],"strict":true}`))
+	if domErr == nil {
+		t.Fatal("expected not_found error")
+	}
+	if domErr.Code != app.ErrorCodeNotFound {
+		t.Fatalf("expected not_found, got %q", domErr.Code)
+	}
+}
+
+func TestContainerExecHandler_PodNotRunning(t *testing.T) {
+	client := k8sfake.NewSimpleClientset(&corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "stopped-pod", Namespace: "default"},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "task", Image: "alpine"}}},
+		Status:     corev1.PodStatus{Phase: corev1.PodSucceeded},
+	})
+	handler := NewContainerExecHandlerWithKubernetes(nil, client, "default")
+	session := domain.Session{
+		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	_, domErr := handler.Invoke(context.Background(), session, json.RawMessage(`{"container_id":"stopped-pod","command":["echo"],"strict":true}`))
+	if domErr == nil {
+		t.Fatal("expected error for non-running pod")
+	}
+	if domErr.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected execution_failed, got %q", domErr.Code)
+	}
+}
+
+func TestContainerExecHandler_GenericGetError(t *testing.T) {
+	client := k8sfake.NewSimpleClientset()
+	client.PrependReactor("get", "pods", func(_ k8stesting.Action) (bool, k8sruntime.Object, error) {
+		return true, nil, fmt.Errorf("server error")
+	})
+	handler := NewContainerExecHandlerWithKubernetes(nil, client, "default")
+	session := domain.Session{
+		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	_, domErr := handler.Invoke(context.Background(), session, json.RawMessage(`{"container_id":"any","command":["echo"],"strict":true}`))
+	if domErr == nil {
+		t.Fatal("expected error")
+	}
+	if domErr.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected execution_failed, got %q", domErr.Code)
+	}
+}
+
+func TestContainerPSHandler_NilClientReturnsError(t *testing.T) {
+	handler := &ContainerPSHandler{k8sOps: &containerK8sAdapter{client: nil}}
+	session := domain.Session{
+		Runtime: domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	_, domErr := handler.Invoke(context.Background(), session, json.RawMessage(`{"strict":true}`))
+	if domErr == nil {
+		t.Fatal("expected error for nil k8s client")
+	}
+}
+
 func TestInvokeK8sLogs_GenericFetchError(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
 	client.PrependReactor("get", "pods", func(_ k8stesting.Action) (bool, k8sruntime.Object, error) {
