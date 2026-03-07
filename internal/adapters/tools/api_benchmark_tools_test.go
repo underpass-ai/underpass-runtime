@@ -354,10 +354,10 @@ func TestNormalizeArrivalRateLoad_ExplicitVUs(t *testing.T) {
 
 func TestAsFloat_AllBranches(t *testing.T) {
 	cases := []struct {
-		name    string
-		input   any
-		want    float64
-		wantOK  bool
+		name   string
+		input  any
+		want   float64
+		wantOK bool
 	}{
 		{name: "float64", input: float64(3.14), want: 3.14, wantOK: true},
 		{name: "float32", input: float32(2.5), want: float64(float32(2.5)), wantOK: true},
