@@ -23,6 +23,7 @@ linters:
     rules:
       - linters:
           - gocritic
+          - errcheck
         path: _test\.go
   settings:
     gocritic:
