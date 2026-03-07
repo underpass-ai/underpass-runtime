@@ -13,6 +13,7 @@ import (
 	tooladapter "github.com/underpass-ai/underpass-runtime/internal/adapters/tools"
 	workspaceadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/workspace"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
+	"github.com/underpass-ai/underpass-runtime/internal/bootstrap"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -148,6 +149,22 @@ func startPodJanitorIfEnabled(
 		"missing_session_grace_seconds", int(missingSessionGrace/time.Second),
 	)
 	return cancel
+}
+
+func buildToolRegistry(k8s *k8sRuntime, _ string) *bootstrap.Registry {
+	registry := bootstrap.NewRegistry(parseDisabledBundles()...)
+	registry.RegisterDefaults()
+	if k8s != nil && k8s.client != nil {
+		registry.Register(bootstrap.K8sBundle())
+	}
+	return registry
+}
+
+func k8sClientOrNil(k8s *k8sRuntime) any {
+	if k8s == nil || k8s.client == nil {
+		return nil
+	}
+	return k8s.client
 }
 
 func k8sToolHandlers(runner app.CommandRunner, k8s *k8sRuntime, namespace string) []tooladapter.Handler {

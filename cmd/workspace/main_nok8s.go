@@ -11,6 +11,7 @@ import (
 	tooladapter "github.com/underpass-ai/underpass-runtime/internal/adapters/tools"
 	workspaceadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/workspace"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
+	"github.com/underpass-ai/underpass-runtime/internal/bootstrap"
 )
 
 type k8sRuntime struct{}
@@ -44,6 +45,16 @@ func buildCommandRunner(_ string, _ *k8sRuntime) (app.CommandRunner, error) {
 }
 
 func startPodJanitorIfEnabled(_, _ string, _ *k8sRuntime, _ app.SessionStore, _ *slog.Logger) context.CancelFunc {
+	return nil
+}
+
+func buildToolRegistry(_ *k8sRuntime, _ string) *bootstrap.Registry {
+	registry := bootstrap.NewRegistry(parseDisabledBundles()...)
+	registry.RegisterDefaults()
+	return registry
+}
+
+func k8sClientOrNil(_ *k8sRuntime) any {
 	return nil
 }
 

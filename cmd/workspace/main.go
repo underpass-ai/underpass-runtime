@@ -20,6 +20,7 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/storage"
 	tooladapter "github.com/underpass-ai/underpass-runtime/internal/adapters/tools"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
+	"github.com/underpass-ai/underpass-runtime/internal/bootstrap"
 	"github.com/underpass-ai/underpass-runtime/internal/httpapi"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -86,101 +87,12 @@ func main() {
 		logger.Error("failed to initialize command runner", "error", err)
 		os.Exit(1)
 	}
-	handlers := []tooladapter.Handler{ //nolint:prealloc // k8s handlers appended conditionally via build tags
-		tooladapter.NewFSListHandler(commandRunner),
-		tooladapter.NewFSReadHandler(commandRunner),
-		tooladapter.NewFSWriteHandler(commandRunner),
-		tooladapter.NewFSMkdirHandler(commandRunner),
-		tooladapter.NewFSMoveHandler(commandRunner),
-		tooladapter.NewFSCopyHandler(commandRunner),
-		tooladapter.NewFSDeleteHandler(commandRunner),
-		tooladapter.NewFSStatHandler(commandRunner),
-		tooladapter.NewFSPatchHandler(commandRunner),
-		tooladapter.NewFSSearchHandler(commandRunner),
-		tooladapter.NewConnListProfilesHandler(),
-		tooladapter.NewConnDescribeProfileHandler(),
-		tooladapter.NewAPIBenchmarkHandler(commandRunner),
-		tooladapter.NewNATSRequestHandler(nil),
-		tooladapter.NewNATSPublishHandler(nil),
-		tooladapter.NewNATSSubscribePullHandler(nil),
-		tooladapter.NewKafkaConsumeHandler(nil),
-		tooladapter.NewKafkaProduceHandler(nil),
-		tooladapter.NewKafkaTopicMetadataHandler(nil),
-		tooladapter.NewRabbitConsumeHandler(nil),
-		tooladapter.NewRabbitPublishHandler(nil),
-		tooladapter.NewRabbitQueueInfoHandler(nil),
-		tooladapter.NewRedisGetHandler(nil),
-		tooladapter.NewRedisMGetHandler(nil),
-		tooladapter.NewRedisScanHandler(nil),
-		tooladapter.NewRedisTTLHandler(nil),
-		tooladapter.NewRedisExistsHandler(nil),
-		tooladapter.NewRedisSetHandler(nil),
-		tooladapter.NewRedisDelHandler(nil),
-		tooladapter.NewMongoFindHandler(nil),
-		tooladapter.NewMongoAggregateHandler(nil),
-		tooladapter.NewGitStatusHandler(commandRunner),
-		tooladapter.NewGitDiffHandler(commandRunner),
-		tooladapter.NewGitApplyPatchHandler(commandRunner),
-		tooladapter.NewGitCheckoutHandler(commandRunner),
-		tooladapter.NewGitLogHandler(commandRunner),
-		tooladapter.NewGitShowHandler(commandRunner),
-		tooladapter.NewGitBranchListHandler(commandRunner),
-		tooladapter.NewGitCommitHandler(commandRunner),
-		tooladapter.NewGitPushHandler(commandRunner),
-		tooladapter.NewGitFetchHandler(commandRunner),
-		tooladapter.NewGitPullHandler(commandRunner),
-		tooladapter.NewRepoDetectProjectTypeHandler(commandRunner),
-		tooladapter.NewRepoDetectToolchainHandler(commandRunner),
-		tooladapter.NewRepoValidateHandler(commandRunner),
-		tooladapter.NewRepoBuildHandler(commandRunner),
-		tooladapter.NewRepoTestHandler(commandRunner),
-		tooladapter.NewRepoRunTestsHandler(commandRunner),
-		tooladapter.NewRepoTestFailuresSummaryHandler(commandRunner),
-		tooladapter.NewRepoStacktraceSummaryHandler(commandRunner),
-		tooladapter.NewRepoChangedFilesHandler(commandRunner),
-		tooladapter.NewRepoSymbolSearchHandler(commandRunner),
-		tooladapter.NewRepoFindReferencesHandler(commandRunner),
-		tooladapter.NewRepoCoverageReportHandler(commandRunner),
-		tooladapter.NewRepoStaticAnalysisHandler(commandRunner),
-		tooladapter.NewRepoPackageHandler(commandRunner),
-		tooladapter.NewArtifactUploadHandler(commandRunner),
-		tooladapter.NewArtifactDownloadHandler(commandRunner),
-		tooladapter.NewArtifactListHandler(commandRunner),
-		tooladapter.NewImageBuildHandler(commandRunner),
-		tooladapter.NewImagePushHandler(commandRunner),
-		tooladapter.NewImageInspectHandler(commandRunner),
-		tooladapter.NewContainerPSHandler(commandRunner),
-		tooladapter.NewContainerLogsHandler(commandRunner),
-		tooladapter.NewContainerRunHandler(commandRunner),
-		tooladapter.NewContainerExecHandler(commandRunner),
-		tooladapter.NewSecurityScanDependenciesHandler(commandRunner),
-		tooladapter.NewSBOMGenerateHandler(commandRunner),
-		tooladapter.NewSecurityScanSecretsHandler(commandRunner),
-		tooladapter.NewSecurityScanContainerHandler(commandRunner),
-		tooladapter.NewSecurityLicenseCheckHandler(commandRunner),
-		tooladapter.NewQualityGateHandler(commandRunner),
-		tooladapter.NewCIRunPipelineHandler(commandRunner),
-		tooladapter.NewGoModTidyHandler(commandRunner),
-		tooladapter.NewGoGenerateHandler(commandRunner),
-		tooladapter.NewGoBuildHandler(commandRunner),
-		tooladapter.NewGoTestHandler(commandRunner),
-		tooladapter.NewRustBuildHandler(commandRunner),
-		tooladapter.NewRustTestHandler(commandRunner),
-		tooladapter.NewRustClippyHandler(commandRunner),
-		tooladapter.NewRustFormatHandler(commandRunner),
-		tooladapter.NewNodeInstallHandler(commandRunner),
-		tooladapter.NewNodeBuildHandler(commandRunner),
-		tooladapter.NewNodeTestHandler(commandRunner),
-		tooladapter.NewNodeLintHandler(commandRunner),
-		tooladapter.NewNodeTypecheckHandler(commandRunner),
-		tooladapter.NewPythonInstallDepsHandler(commandRunner),
-		tooladapter.NewPythonValidateHandler(commandRunner),
-		tooladapter.NewPythonTestHandler(commandRunner),
-		tooladapter.NewCBuildHandler(commandRunner),
-		tooladapter.NewCTestHandler(commandRunner),
-	}
-	handlers = append(handlers, k8sToolHandlers(commandRunner, k8s, workspaceNamespace)...)
-	engine := tooladapter.NewEngine(handlers...)
+	registry := buildToolRegistry(k8s, workspaceNamespace)
+	engine := registry.BuildEngine(bootstrap.Config{
+		CommandRunner: commandRunner,
+		K8sClient:     k8sClientOrNil(k8s),
+		K8sNamespace:  workspaceNamespace,
+	})
 	artifactStore := storage.NewLocalArtifactStore(artifactRoot)
 	policyEngine := policy.NewStaticPolicy()
 	auditLogger := audit.NewLoggerAudit(logger)
@@ -220,6 +132,21 @@ func main() {
 	defer cancel()
 	_ = httpServer.Shutdown(ctx)
 	logger.Info("workspace service stopped")
+}
+
+func parseDisabledBundles() []string {
+	raw := strings.TrimSpace(os.Getenv("WORKSPACE_DISABLED_BUNDLES"))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	var result []string
+	for _, p := range parts {
+		if v := strings.TrimSpace(p); v != "" {
+			result = append(result, v)
+		}
+	}
+	return result
 }
 
 func envOrDefault(key, fallback string) string {
