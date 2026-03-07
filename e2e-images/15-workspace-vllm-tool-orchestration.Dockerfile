@@ -5,9 +5,8 @@ ENV PYTHONPATH=/app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir pyyaml
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir pyyaml
 
 COPY e2e/tests/workspace_common /app/workspace_common
 COPY e2e/tests/15-workspace-vllm-tool-orchestration/tool_catalog.yaml /app/tool_catalog.yaml

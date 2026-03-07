@@ -136,7 +136,9 @@ func (f *fakeArtifactStore) Read(_ context.Context, path string) ([]byte, error)
 
 type fakeAudit struct{}
 
-func (f *fakeAudit) Record(_ context.Context, _ AuditEvent) {}
+func (f *fakeAudit) Record(_ context.Context, _ AuditEvent) {
+	// no-op: audit recording is not needed in unit tests
+}
 
 type fakeInvocationStore struct {
 	data    map[string]domain.Invocation

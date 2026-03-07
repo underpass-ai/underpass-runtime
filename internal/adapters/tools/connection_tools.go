@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -247,14 +248,7 @@ func resolveTypedProfile(session domain.Session, requestedID string,
 			continue
 		}
 		kindLower := strings.ToLower(strings.TrimSpace(p.Kind))
-		matched := false
-		for _, k := range allowedKinds {
-			if kindLower == k {
-				matched = true
-				break
-			}
-		}
-		if !matched {
+		if !slices.Contains(allowedKinds, kindLower) {
 			return connectionProfile{}, "", &domain.Error{
 				Code:      app.ErrorCodeInvalidArgument,
 				Message:   "profile kind does not match expected type",
