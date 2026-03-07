@@ -21,7 +21,7 @@ import (
 
 func TestContainerRunHandler_UsesKubernetesPodRuntime(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
-	client.Fake.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, k8sruntime.Object, error) {
+	client.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, k8sruntime.Object, error) {
 		getAction, ok := action.(k8stesting.GetAction)
 		if !ok {
 			return false, nil, nil

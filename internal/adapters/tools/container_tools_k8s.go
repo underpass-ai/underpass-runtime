@@ -47,7 +47,8 @@ func (a *containerK8sAdapter) invokePS(ctx context.Context, session domain.Sessi
 
 	filter := strings.ToLower(strings.TrimSpace(nameFilter))
 	containers := make([]map[string]any, 0, len(podList.Items))
-	for _, pod := range podList.Items {
+	for i := range podList.Items {
+		pod := &podList.Items[i]
 		if !all && pod.Status.Phase != corev1.PodRunning {
 			continue
 		}
@@ -60,7 +61,7 @@ func (a *containerK8sAdapter) invokePS(ctx context.Context, session domain.Sessi
 			continue
 		}
 
-		image := resolveK8sPodImage(&pod)
+		image := resolveK8sPodImage(pod)
 
 		status := strings.ToLower(strings.TrimSpace(string(pod.Status.Phase)))
 		if status == "" {
@@ -136,7 +137,7 @@ func (a *containerK8sAdapter) invokeLogs(ctx context.Context, session domain.Ses
 	if streamErr != nil {
 		return app.ToolRunResult{}, k8sExecutionFailed(fmt.Sprintf(containerFmtK8sLogsFailed, streamErr), true)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	rawLogs, readErr := io.ReadAll(stream)
 	if readErr != nil {
@@ -197,7 +198,7 @@ func (a *containerK8sAdapter) invokeRun(ctx context.Context, session domain.Sess
 		if len(retryName) > 63 {
 			retryName = strings.TrimSuffix(retryName[:63], "-")
 		}
-		podTemplate.ObjectMeta.Name = retryName
+		podTemplate.Name = retryName
 		pod, err = a.client.CoreV1().Pods(namespace).Create(ctx, podTemplate, metav1.CreateOptions{})
 	}
 	if err != nil {
@@ -330,9 +331,9 @@ func (a *containerK8sAdapter) invokeExec(ctx context.Context, session domain.Ses
 
 func resolveK8sPodImage(pod *corev1.Pod) string {
 	containerName := resolveK8sRunContainerName(pod)
-	for _, container := range pod.Spec.Containers {
-		if strings.TrimSpace(container.Name) == containerName {
-			return strings.TrimSpace(container.Image)
+	for i := range pod.Spec.Containers {
+		if strings.TrimSpace(pod.Spec.Containers[i].Name) == containerName {
+			return strings.TrimSpace(pod.Spec.Containers[i].Image)
 		}
 	}
 	if len(pod.Spec.Containers) > 0 {
@@ -515,8 +516,8 @@ func resolveK8sRunContainerName(pod *corev1.Pod) string {
 	if pod == nil {
 		return "task"
 	}
-	for _, container := range pod.Spec.Containers {
-		if strings.TrimSpace(container.Name) == "task" {
+	for i := range pod.Spec.Containers {
+		if strings.TrimSpace(pod.Spec.Containers[i].Name) == "task" {
 			return "task"
 		}
 	}
@@ -530,9 +531,9 @@ func resolveK8sRunContainerName(pod *corev1.Pod) string {
 }
 
 func firstTerminatedContainerStatus(status corev1.PodStatus) (corev1.ContainerStateTerminated, bool) {
-	for _, containerStatus := range status.ContainerStatuses {
-		if containerStatus.State.Terminated != nil {
-			return *containerStatus.State.Terminated, true
+	for i := range status.ContainerStatuses {
+		if status.ContainerStatuses[i].State.Terminated != nil {
+			return *status.ContainerStatuses[i].State.Terminated, true
 		}
 	}
 	return corev1.ContainerStateTerminated{}, false
