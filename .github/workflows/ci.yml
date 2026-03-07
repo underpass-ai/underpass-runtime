@@ -37,12 +37,14 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
+          only-new-issues: true
 
       - name: golangci-lint (k8s)
         uses: golangci/golangci-lint-action@v7
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m --build-tags=k8s
+          only-new-issues: true
 
       - name: go vet (no k8s)
         run: go vet ./...

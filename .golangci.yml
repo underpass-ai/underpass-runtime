@@ -11,38 +11,37 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-    - gosimple
     - gocritic
     - misspell
-    - gofmt
     - bodyclose
-    - exportloopref
     - nilerr
     - prealloc
-
-linters-settings:
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-    disabled-checks:
-      - commentFormatting
-      - hugeParam
-
-  misspell:
-    locale: US
-
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
+  exclusions:
+    paths:
+      - vendor
+      - testdata
+    rules:
+      - linters:
+          - gocritic
+        path: _test\.go
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        - commentFormatting
+        - hugeParam
+    misspell:
+      locale: US
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
 
 issues:
   max-issues-per-linter: 50
   max-same-issues: 5
-  exclude-dirs:
-    - vendor
-    - testdata
 
 formatters:
   enable:
