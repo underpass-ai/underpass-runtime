@@ -12,7 +12,7 @@ func TestInMemoryInvocationStore_SaveAndGet(t *testing.T) {
 	store := NewInMemoryInvocationStore()
 	invocation := domain.Invocation{
 		ID:        "inv-1",
-		SessionID: "session-1",
+		SessionID: testSessionID,
 		ToolName:  "fs.read",
 		Status:    domain.InvocationStatusSucceeded,
 		StartedAt: time.Now().UTC(),

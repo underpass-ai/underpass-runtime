@@ -20,6 +20,7 @@ const (
 	testK8sNamespaceSandbox = "sandbox"
 	testK8sNamespaceDefault = "default"
 	testK8sRoleDevops       = "devops"
+	testK8sClusterIP        = "10.0.0.1"
 )
 
 func TestK8sApplyManifestHandler_ConfigMapCreateAndUpdate(t *testing.T) {
@@ -375,8 +376,8 @@ func TestPreserveServiceImmutableFields_CopiesFields(t *testing.T) {
 	ipFamilyPolicy := corev1.IPFamilyPolicySingleStack
 	existing := &corev1.Service{
 		Spec: corev1.ServiceSpec{
-			ClusterIP:           "10.0.0.1",
-			ClusterIPs:          []string{"10.0.0.1"},
+			ClusterIP:           testK8sClusterIP,
+			ClusterIPs:          []string{testK8sClusterIP},
 			IPFamilies:          []corev1.IPFamily{corev1.IPv4Protocol},
 			IPFamilyPolicy:      &ipFamilyPolicy,
 			HealthCheckNodePort: 31500,
@@ -395,10 +396,10 @@ func TestPreserveServiceImmutableFields_CopiesFields(t *testing.T) {
 
 	preserveServiceImmutableFields(service, existing)
 
-	if service.Spec.ClusterIP != "10.0.0.1" {
+	if service.Spec.ClusterIP != testK8sClusterIP {
 		t.Fatalf("expected ClusterIP preserved, got %q", service.Spec.ClusterIP)
 	}
-	if len(service.Spec.ClusterIPs) == 0 || service.Spec.ClusterIPs[0] != "10.0.0.1" {
+	if len(service.Spec.ClusterIPs) == 0 || service.Spec.ClusterIPs[0] != testK8sClusterIP {
 		t.Fatalf("expected ClusterIPs preserved, got %#v", service.Spec.ClusterIPs)
 	}
 	if len(service.Spec.IPFamilies) == 0 || service.Spec.IPFamilies[0] != corev1.IPv4Protocol {

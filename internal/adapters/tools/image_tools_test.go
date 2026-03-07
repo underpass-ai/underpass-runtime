@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	testImageWorkspacePath        = "/workspace/repo"
 	testImageDockerfile           = "Dockerfile"
 	testImageRefDemo100           = "ghcr.io/acme/demo:1.0.0"
 	testImageBuilderBuildah       = "buildah"
@@ -28,13 +27,14 @@ const (
 	testImageKeyPushSkippedReason = "push_skipped_reason"
 	testImageKeySourceType        = "source_type"
 	testImageKeyIssuesCount       = "issues_count"
-	testImageFmtExpectedMap       = "expected map output, got %T"
 	testImageFmtUnexpectedCmd     = "unexpected command: %s %#v"
 	testImageFmtExitCode0         = "expected exit_code=0, got %#v"
 	testImageFmtSimulatedTrue     = "expected simulated=true, got %#v"
 	testImageFmtSyntheticBuilder  = "expected synthetic builder, got %#v"
 	testImageFmtPushSkipped       = "unexpected push_skipped_reason: %#v"
 	testImageFmtPushedFalse       = "expected pushed=false, got %#v"
+	testImageFallbackDockerfile   = "FROM alpine:3.20\nRUN echo fallback\n"
+	testImageFmtBuildahArgs       = "unexpected buildah args: %#v"
 )
 
 type fakeImageCommandRunner struct {
@@ -67,7 +67,7 @@ func TestImageInspectHandler_Dockerfile(t *testing.T) {
 		},
 	}
 	handler := NewImageInspectHandler(runner)
-	session := domain.Session{WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"context_path":".","dockerfile_path":"Dockerfile","max_issues":20}`))
 	if err != nil {
@@ -79,7 +79,7 @@ func TestImageInspectHandler_Dockerfile(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeySourceType] != "dockerfile" {
 		t.Fatalf("expected dockerfile source type, got %#v", output[testImageKeySourceType])
@@ -95,7 +95,7 @@ func TestImageInspectHandler_Dockerfile(t *testing.T) {
 func TestImageInspectHandler_ImageRef(t *testing.T) {
 	runner := &fakeImageCommandRunner{}
 	handler := NewImageInspectHandler(runner)
-	session := domain.Session{WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"image_ref":"ghcr.io/acme/api:latest"}`))
 	if err != nil {
@@ -107,7 +107,7 @@ func TestImageInspectHandler_ImageRef(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeySourceType] != "image_ref" {
 		t.Fatalf("expected image_ref source type, got %#v", output[testImageKeySourceType])
@@ -145,7 +145,7 @@ func TestImageBuildHandler_UsesBuilderWhenAvailable(t *testing.T) {
 		},
 	}
 	handler := NewImageBuildHandler(runner)
-	session := domain.Session{ID: "session-build", WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{ID: "session-build", WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"context_path":".","dockerfile_path":"Dockerfile","tag":"ghcr.io/acme/demo:1.0.0","push":false}`))
 	if err != nil {
@@ -154,7 +154,7 @@ func TestImageBuildHandler_UsesBuilderWhenAvailable(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeyBuilder] != testImageBuilderBuildah {
 		t.Fatalf("expected builder buildah, got %#v", output["builder"])
@@ -178,7 +178,7 @@ func TestImageBuildHandler_SyntheticFallbackWithoutBuilder(t *testing.T) {
 			case "cat":
 				return app.CommandResult{
 					ExitCode: 0,
-					Output:   "FROM alpine:3.20\nRUN echo fallback\n",
+					Output:   testImageFallbackDockerfile,
 				}, nil
 			case testImageBuilderBuildah, "podman", "docker":
 				return app.CommandResult{ExitCode: 127, Output: testImageNotFound}, context.DeadlineExceeded
@@ -189,7 +189,7 @@ func TestImageBuildHandler_SyntheticFallbackWithoutBuilder(t *testing.T) {
 		},
 	}
 	handler := NewImageBuildHandler(runner)
-	session := domain.Session{ID: "session-fallback", WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{ID: "session-fallback", WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"context_path":".","dockerfile_path":"Dockerfile","tag":"ghcr.io/acme/demo:latest","push":true}`))
 	if err != nil {
@@ -198,7 +198,7 @@ func TestImageBuildHandler_SyntheticFallbackWithoutBuilder(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
 		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
@@ -225,13 +225,13 @@ func TestImageBuildHandler_FallbacksToSyntheticWhenPodmanUserNamespaceUnsupporte
 			case "cat":
 				return app.CommandResult{
 					ExitCode: 0,
-					Output:   "FROM alpine:3.20\nRUN echo fallback\n",
+					Output:   testImageFallbackDockerfile,
 				}, nil
 			case testImageBuilderBuildah:
 				if len(spec.Args) > 0 && spec.Args[0] == testImageArgVersion {
 					return app.CommandResult{ExitCode: 127, Output: testImageNotFound}, errors.New(testImageNotFound)
 				}
-				t.Fatalf("unexpected buildah args: %#v", spec.Args)
+				t.Fatalf(testImageFmtBuildahArgs, spec.Args)
 				return app.CommandResult{}, nil
 			case "podman":
 				if len(spec.Args) > 0 && spec.Args[0] == testImageArgVersion {
@@ -249,7 +249,7 @@ func TestImageBuildHandler_FallbacksToSyntheticWhenPodmanUserNamespaceUnsupporte
 		},
 	}
 	handler := NewImageBuildHandler(runner)
-	session := domain.Session{ID: "session-podman-userns", WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{ID: "session-podman-userns", WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"context_path":".","dockerfile_path":"Dockerfile","tag":"ghcr.io/acme/demo:latest","push":true}`))
 	if err != nil {
@@ -258,7 +258,7 @@ func TestImageBuildHandler_FallbacksToSyntheticWhenPodmanUserNamespaceUnsupporte
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
 		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
@@ -281,7 +281,7 @@ func TestImageBuildHandler_FallbacksToSyntheticWhenBuildahUserNamespaceUnsupport
 			case "cat":
 				return app.CommandResult{
 					ExitCode: 0,
-					Output:   "FROM alpine:3.20\nRUN echo fallback\n",
+					Output:   testImageFallbackDockerfile,
 				}, nil
 			case testImageBuilderBuildah:
 				if len(spec.Args) > 0 && spec.Args[0] == testImageArgVersion {
@@ -299,7 +299,7 @@ func TestImageBuildHandler_FallbacksToSyntheticWhenBuildahUserNamespaceUnsupport
 		},
 	}
 	handler := NewImageBuildHandler(runner)
-	session := domain.Session{ID: "session-buildah-userns", WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{ID: "session-buildah-userns", WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"context_path":".","dockerfile_path":"Dockerfile","tag":"ghcr.io/acme/demo:latest"}`))
 	if err != nil {
@@ -308,7 +308,7 @@ func TestImageBuildHandler_FallbacksToSyntheticWhenBuildahUserNamespaceUnsupport
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
 		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
@@ -333,7 +333,7 @@ func TestImagePushHandler_UsesBuilderWhenAvailable(t *testing.T) {
 				if len(spec.Args) > 0 && spec.Args[0] == "push" {
 					return app.CommandResult{ExitCode: 0, Output: "pushed\n" + digest + "\n"}, nil
 				}
-				t.Fatalf("unexpected buildah args: %#v", spec.Args)
+				t.Fatalf(testImageFmtBuildahArgs, spec.Args)
 				return app.CommandResult{}, nil
 			default:
 				t.Fatalf(testImageFmtUnexpectedCmd, spec.Command, spec.Args)
@@ -342,7 +342,7 @@ func TestImagePushHandler_UsesBuilderWhenAvailable(t *testing.T) {
 		},
 	}
 	handler := NewImagePushHandler(runner)
-	session := domain.Session{ID: "session-push", WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{ID: "session-push", WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"image_ref":"ghcr.io/acme/demo:1.0.0","max_retries":1}`))
 	if err != nil {
@@ -351,7 +351,7 @@ func TestImagePushHandler_UsesBuilderWhenAvailable(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeyBuilder] != testImageBuilderBuildah {
 		t.Fatalf("expected builder buildah, got %#v", output["builder"])
@@ -384,7 +384,7 @@ func TestImagePushHandler_SyntheticFallbackWithoutBuilder(t *testing.T) {
 		},
 	}
 	handler := NewImagePushHandler(runner)
-	session := domain.Session{ID: "session-push-fallback", WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{ID: "session-push-fallback", WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"image_ref":"ghcr.io/acme/demo:latest"}`))
 	if err != nil {
@@ -392,7 +392,7 @@ func TestImagePushHandler_SyntheticFallbackWithoutBuilder(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
 		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
@@ -416,7 +416,7 @@ func TestImagePushHandler_FallbacksToSyntheticWhenPodmanUserNamespaceUnsupported
 				if len(spec.Args) > 0 && spec.Args[0] == testImageArgVersion {
 					return app.CommandResult{ExitCode: 127, Output: testImageNotFound}, errors.New(testImageNotFound)
 				}
-				t.Fatalf("unexpected buildah args: %#v", spec.Args)
+				t.Fatalf(testImageFmtBuildahArgs, spec.Args)
 				return app.CommandResult{}, nil
 			case "podman":
 				if len(spec.Args) > 0 && spec.Args[0] == testImageArgVersion {
@@ -433,7 +433,7 @@ func TestImagePushHandler_FallbacksToSyntheticWhenPodmanUserNamespaceUnsupported
 		},
 	}
 	handler := NewImagePushHandler(runner)
-	session := domain.Session{ID: "session-push-podman-userns", WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{ID: "session-push-podman-userns", WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"image_ref":"ghcr.io/acme/demo:latest","max_retries":1}`))
 	if err != nil {
@@ -441,7 +441,7 @@ func TestImagePushHandler_FallbacksToSyntheticWhenPodmanUserNamespaceUnsupported
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
 		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
@@ -479,7 +479,7 @@ func TestImagePushHandler_FallbacksToSyntheticWhenBuildahUserNamespaceUnsupporte
 		},
 	}
 	handler := NewImagePushHandler(runner)
-	session := domain.Session{ID: "session-push-buildah-userns", WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{ID: "session-push-buildah-userns", WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"image_ref":"ghcr.io/acme/demo:latest","max_retries":1}`))
 	if err != nil {
@@ -487,7 +487,7 @@ func TestImagePushHandler_FallbacksToSyntheticWhenBuildahUserNamespaceUnsupporte
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeyBuilder] != testImageBuilderSynthetic {
 		t.Fatalf(testImageFmtSyntheticBuilder, output[testImageKeyBuilder])
@@ -519,7 +519,7 @@ func TestImagePushHandler_StrictFailsWithoutBuilder(t *testing.T) {
 		},
 	}
 	handler := NewImagePushHandler(runner)
-	session := domain.Session{ID: "session-push-strict", WorkspacePath: testImageWorkspacePath, AllowedPaths: []string{"."}}
+	session := domain.Session{ID: "session-push-strict", WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"image_ref":"ghcr.io/acme/demo:latest","strict":true}`))
 	if err == nil {
@@ -530,7 +530,7 @@ func TestImagePushHandler_StrictFailsWithoutBuilder(t *testing.T) {
 	}
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testImageFmtExpectedMap, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output[testImageKeyExitCode] != 1 {
 		t.Fatalf("expected exit_code=1, got %#v", output["exit_code"])

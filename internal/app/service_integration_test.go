@@ -21,6 +21,7 @@ const (
 	testActorID                       = "alice"
 	testRoleDeveloper                 = "developer"
 	testUnexpectedCreateSessionErrFmt = "unexpected error creating session: %v"
+	testNotesTodoPath                 = "notes/todo.txt"
 )
 
 func TestService_CreateAndListTools(t *testing.T) {
@@ -66,7 +67,7 @@ func TestService_FsWriteRequiresApproval(t *testing.T) {
 	}
 
 	invocation, invokeErr := svc.InvokeTool(ctx, session.ID, "fs.write_file", app.InvokeToolRequest{
-		Args: mustJSON(t, map[string]any{"path": "notes/todo.txt", "content": "hello"}),
+		Args: mustJSON(t, map[string]any{"path": testNotesTodoPath, "content": "hello"}),
 	})
 	if invokeErr == nil {
 		t.Fatal("expected approval error")
@@ -92,14 +93,14 @@ func TestService_FsWriteAndRead(t *testing.T) {
 
 	_, writeErr := svc.InvokeTool(ctx, session.ID, "fs.write_file", app.InvokeToolRequest{
 		Approved: true,
-		Args:     mustJSON(t, map[string]any{"path": "notes/todo.txt", "content": "hello world", "create_parents": true}),
+		Args:     mustJSON(t, map[string]any{"path": testNotesTodoPath, "content": "hello world", "create_parents": true}),
 	})
 	if writeErr != nil {
 		t.Fatalf("unexpected fs.write_file error: %v", writeErr)
 	}
 
 	invocation, readErr := svc.InvokeTool(ctx, session.ID, "fs.read_file", app.InvokeToolRequest{
-		Args: mustJSON(t, map[string]any{"path": "notes/todo.txt"}),
+		Args: mustJSON(t, map[string]any{"path": testNotesTodoPath}),
 	})
 	if readErr != nil {
 		t.Fatalf("unexpected fs.read_file error: %v", readErr)

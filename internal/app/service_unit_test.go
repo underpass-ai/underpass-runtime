@@ -12,12 +12,13 @@ import (
 )
 
 const (
-	testSessionID            = "session-1"
-	testInvocationID         = "inv-1"
-	testToolK8sGetPods       = "k8s.get_pods"
-	testExpectedDeniedStatus = "expected denied invocation status, got %#v"
-	testContentTypePlain     = "text/plain"
-	testToolFSList           = "fs.list"
+	testSessionID              = "session-1"
+	testInvocationID           = "inv-1"
+	testToolK8sGetPods         = "k8s.get_pods"
+	testExpectedDeniedStatus   = "expected denied invocation status, got %#v"
+	testContentTypePlain       = "text/plain"
+	testToolFSList             = "fs.list"
+	testUnexpectedListErrorFmt = "unexpected list error: %v"
 )
 
 type fakeWorkspaceManager struct {
@@ -333,7 +334,7 @@ func TestListToolsFiltersAndErrors(t *testing.T) {
 	)
 	tools, err := svc.ListTools(context.Background(), testSessionID)
 	if err != nil {
-		t.Fatalf("unexpected list error: %v", err)
+		t.Fatalf(testUnexpectedListErrorFmt, err)
 	}
 	if len(tools) != 2 {
 		t.Fatalf("expected two tools, got %d", len(tools))
@@ -362,7 +363,7 @@ func TestListToolsHidesClusterScopeWhenRuntimeIsNotKubernetes(t *testing.T) {
 	)
 	tools, err := svc.ListTools(context.Background(), session.ID)
 	if err != nil {
-		t.Fatalf("unexpected list error: %v", err)
+		t.Fatalf(testUnexpectedListErrorFmt, err)
 	}
 	if len(tools) != 1 || tools[0].Name != testToolFSList {
 		t.Fatalf("expected only workspace tool for local runtime, got %#v", tools)
@@ -409,7 +410,7 @@ func TestListToolsHidesK8sDeliveryToolsWhenDisabled(t *testing.T) {
 	)
 	tools, err := svc.ListTools(context.Background(), session.ID)
 	if err != nil {
-		t.Fatalf("unexpected list error: %v", err)
+		t.Fatalf(testUnexpectedListErrorFmt, err)
 	}
 	if len(tools) != 1 || tools[0].Name != testToolK8sGetPods {
 		t.Fatalf("expected delivery tools hidden by default, got %#v", tools)

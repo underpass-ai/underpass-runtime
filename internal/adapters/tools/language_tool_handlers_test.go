@@ -19,6 +19,7 @@ const (
 	testJSONKeyTarget         = "target"
 	testTargetAppsWeb         = "apps/web"
 	testVenvDir               = ".workspace-venv"
+	testCTestFile             = "todo_test.c"
 )
 
 type fakeLanguageCommandRunner struct {
@@ -158,7 +159,7 @@ func TestCBuildHandler_CompilesRequestedSource(t *testing.T) {
 
 func TestCTestHandler_CompilesAndExecutesBinary(t *testing.T) {
 	root := t.TempDir()
-	testC := filepath.Join(root, "todo_test.c")
+	testC := filepath.Join(root, testCTestFile)
 	if err := os.WriteFile(testC, []byte("int main(void){return 0;}"), 0o644); err != nil {
 		t.Fatalf("write todo_test.c failed: %v", err)
 	}
@@ -178,7 +179,7 @@ func TestCTestHandler_CompilesAndExecutesBinary(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 
 	result, err := handler.Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{
-		"source":      "todo_test.c",
+		"source":      testCTestFile,
 		"output_name": "todo-c-test",
 		"standard":    "c11",
 		"run":         true,
@@ -195,7 +196,7 @@ func TestCTestHandler_CompilesAndExecutesBinary(t *testing.T) {
 
 	compileCall := runner.calls[0]
 	execCall := runner.calls[1]
-	wantCompileArgs := []string{"-std=c11", "-O0", "-g", "-Wall", "-Wextra", "-o", "todo-c-test", "todo_test.c"}
+	wantCompileArgs := []string{"-std=c11", "-O0", "-g", "-Wall", "-Wextra", "-o", "todo-c-test", testCTestFile}
 	if compileCall.Command != "cc" {
 		t.Fatalf("expected cc compile command, got %q", compileCall.Command)
 	}

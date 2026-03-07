@@ -14,6 +14,7 @@ import (
 const (
 	testRemoteOrigin          = "origin"
 	testExpectedBadJSONErrFmt = "expected invalid_argument for bad JSON, got %#v"
+	testRefspecHeadMain       = "HEAD:refs/heads/main"
 )
 
 // ---------------------------------------------------------------------------
@@ -35,7 +36,7 @@ func TestExecuteGitRemoteCommand_DefaultRemote(t *testing.T) {
 		refspec:   "",
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	output := result.Output.(map[string]any)
 	if output[gitKeyRemote] != testRemoteOrigin {
@@ -107,7 +108,7 @@ func TestExecuteGitRemoteCommand_PushWithFlags(t *testing.T) {
 		actionKey: "pushed",
 		flags:     []string{"-u"},
 		remote:    testRemoteOrigin,
-		refspec:   "HEAD:refs/heads/main",
+		refspec:   testRefspecHeadMain,
 	})
 	if err != nil {
 		t.Fatalf("unexpected push error: %#v", err)
@@ -116,7 +117,7 @@ func TestExecuteGitRemoteCommand_PushWithFlags(t *testing.T) {
 	if output["pushed"] != true {
 		t.Fatalf("expected pushed=true, got %#v", output["pushed"])
 	}
-	if output[gitKeyRefspec] != "HEAD:refs/heads/main" {
+	if output[gitKeyRefspec] != testRefspecHeadMain {
 		t.Fatalf("unexpected refspec in output: %#v", output[gitKeyRefspec])
 	}
 }
@@ -134,7 +135,7 @@ func TestExecuteGitRemoteCommand_PullAfterPush(t *testing.T) {
 		cmdName:   "push",
 		actionKey: "pushed",
 		remote:    testRemoteOrigin,
-		refspec:   "HEAD:refs/heads/main",
+		refspec:   testRefspecHeadMain,
 	})
 	if err != nil {
 		t.Fatalf("push setup failed: %#v", err)
@@ -226,7 +227,7 @@ func TestGitPullHandler_WithRebase(t *testing.T) {
 	remotePath := initBareGitRepo(t)
 	runGit(t, root, "remote", "add", testRemoteOrigin, remotePath)
 	// Push initial commit so remote has something
-	runGit(t, root, "push", testRemoteOrigin, "HEAD:refs/heads/main")
+	runGit(t, root, "push", testRemoteOrigin, testRefspecHeadMain)
 
 	// Write a file so there's something on the branch
 	filePath := filepath.Join(root, "new.txt")
@@ -261,7 +262,7 @@ func TestGitPushHandler_ForceWithLease(t *testing.T) {
 	push := &GitPushHandler{}
 	result, err := push.Invoke(context.Background(), session, mustJSONGit(t, map[string]any{
 		"remote":           testRemoteOrigin,
-		"refspec":          "HEAD:refs/heads/main",
+		"refspec":          testRefspecHeadMain,
 		"force_with_lease": true,
 		"set_upstream":     true,
 	}))

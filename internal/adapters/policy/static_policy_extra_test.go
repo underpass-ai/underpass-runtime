@@ -9,10 +9,6 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
-const (
-	testUnexpectedErrorFmt = "unexpected error: %v"
-)
-
 func TestStaticPolicy_AllowsClusterScopeForDevops(t *testing.T) {
 	engine := NewStaticPolicy()
 	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
@@ -258,7 +254,7 @@ func TestStaticPolicy_DeniesTopicOutsideAllowlist(t *testing.T) {
 			Principal:    domain.Principal{Roles: []string{"devops"}},
 			AllowedPaths: []string{"."},
 			Metadata: map[string]string{
-				"allowed_kafka_topics": "sandbox.,dev.",
+				"allowed_kafka_topics": testSandboxDevTopics,
 			},
 		},
 		Capability: domain.Capability{
@@ -318,7 +314,7 @@ func TestStaticPolicy_DeniesQueueOutsideAllowlist(t *testing.T) {
 			Principal:    domain.Principal{Roles: []string{"devops"}},
 			AllowedPaths: []string{"."},
 			Metadata: map[string]string{
-				"allowed_rabbit_queues": "sandbox.,dev.",
+				"allowed_rabbit_queues": testSandboxDevTopics,
 			},
 		},
 		Capability: domain.Capability{

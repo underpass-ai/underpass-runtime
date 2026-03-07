@@ -24,7 +24,7 @@ func TestConnListProfiles_DefaultProfiles(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	count, ok := output["count"].(int)
 	if !ok || count < 5 {

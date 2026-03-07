@@ -378,7 +378,7 @@ func TestDetectProjectTypeOrError_Success(t *testing.T) {
 	}
 	detected, domErr := detectProjectTypeOrError(context.Background(), runner, session, "no toolchain")
 	if domErr != nil {
-		t.Fatalf("unexpected error: %#v", domErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, domErr)
 	}
 	if detected.Name != "go" {
 		t.Fatalf("expected go project type, got %q", detected.Name)

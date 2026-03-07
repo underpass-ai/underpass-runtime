@@ -14,9 +14,8 @@ import (
 )
 
 const (
-	testModeArrivalRate            = "arrival_rate"
-	testConstraintsViolationMsg    = "constraints violation"
-	testExpectedInvalidArgumentFmt = "expected invalid_argument, got %s"
+	testModeArrivalRate         = "arrival_rate"
+	testConstraintsViolationMsg = "constraints violation"
 )
 
 type fakeBenchmarkRunner struct {
@@ -98,7 +97,7 @@ func TestAPIBenchmarkHandler_Success(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["requests"] != 80 {
 		t.Fatalf("unexpected requests: %#v", output["requests"])
@@ -272,7 +271,7 @@ func TestNormalizeArrivalRateLoad_ValidDefaults(t *testing.T) {
 	// valid: mode="arrival_rate", durationMS=5000, rps=10, vus=0 -> vus defaults to rps (10), no error
 	spec, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, 10, 0)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if spec.Mode != testModeArrivalRate {
 		t.Fatalf("expected mode 'arrival_rate', got %q", spec.Mode)
@@ -329,7 +328,7 @@ func TestNormalizeArrivalRateLoad_ExplicitVUs(t *testing.T) {
 	// valid with explicit vus=20 -> vus=20
 	spec, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, 10, 20)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if spec.VUs != 20 {
 		t.Fatalf("expected VUs=20, got %d", spec.VUs)

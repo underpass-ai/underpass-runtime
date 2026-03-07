@@ -12,8 +12,7 @@ import (
 )
 
 const (
-	testTenantID = "tenant-a"
-	testActorID  = "alice"
+	testActorID = "alice"
 )
 
 func TestLocalManager_CreateSessionFromSourcePath(t *testing.T) {
@@ -26,7 +25,7 @@ func TestLocalManager_CreateSessionFromSourcePath(t *testing.T) {
 	}
 
 	session, err := manager.CreateSession(ctx, app.CreateSessionRequest{
-		SessionID:       "session-1",
+		SessionID:       testSessionID,
 		SourceRepoPath:  source,
 		Principal:       domain.Principal{TenantID: testTenantID, ActorID: testActorID},
 		ExpiresInSecond: 60,
@@ -35,7 +34,7 @@ func TestLocalManager_CreateSessionFromSourcePath(t *testing.T) {
 		t.Fatalf("unexpected create error: %v", err)
 	}
 
-	if session.ID != "session-1" {
+	if session.ID != testSessionID {
 		t.Fatalf("unexpected session id: %s", session.ID)
 	}
 	if _, err := os.Stat(filepath.Join(session.WorkspacePath, "README.md")); err != nil {

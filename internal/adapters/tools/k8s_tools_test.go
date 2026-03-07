@@ -19,6 +19,7 @@ import (
 const (
 	testK8sNsSandbox = "sandbox"
 	testK8sNsDefault = "default"
+	testK8sImageAPI1 = "ghcr.io/acme/api:1"
 )
 
 func TestK8sGetPodsHandler_ListPods(t *testing.T) {
@@ -87,7 +88,7 @@ func TestK8sGetPodsHandler_ListPods(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["namespace"] != testK8sNsSandbox {
 		t.Fatalf("unexpected namespace: %#v", output["namespace"])
@@ -202,7 +203,7 @@ func TestK8sGetDeploymentsHandler_ListDeployments(t *testing.T) {
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
-							{Name: "api", Image: "ghcr.io/acme/api:1"},
+							{Name: "api", Image: testK8sImageAPI1},
 						},
 					},
 				},
@@ -231,7 +232,7 @@ func TestK8sGetDeploymentsHandler_ListDeployments(t *testing.T) {
 		t.Fatalf("expected deployment api, got %#v", deployments[0]["name"])
 	}
 	containers := deployments[0]["containers"].([]map[string]any)
-	if len(containers) != 1 || containers[0]["image"] != "ghcr.io/acme/api:1" {
+	if len(containers) != 1 || containers[0]["image"] != testK8sImageAPI1 {
 		t.Fatalf("unexpected deployment containers: %#v", containers)
 	}
 }
@@ -242,7 +243,7 @@ func TestK8sGetImagesHandler_Aggregates(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: testK8sNsSandbox},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
-					{Name: "api", Image: "ghcr.io/acme/api:1"},
+					{Name: "api", Image: testK8sImageAPI1},
 					{Name: "sidecar", Image: "ghcr.io/acme/sidecar:1"},
 				},
 			},
@@ -251,7 +252,7 @@ func TestK8sGetImagesHandler_Aggregates(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: testK8sNsSandbox},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
-					{Name: "api", Image: "ghcr.io/acme/api:1"},
+					{Name: "api", Image: testK8sImageAPI1},
 				},
 			},
 		},
@@ -268,7 +269,7 @@ func TestK8sGetImagesHandler_Aggregates(t *testing.T) {
 		t.Fatalf("expected 2 images, got %#v", output["count"])
 	}
 	images := output["images"].([]map[string]any)
-	if images[0]["image"] != "ghcr.io/acme/api:1" {
+	if images[0]["image"] != testK8sImageAPI1 {
 		t.Fatalf("expected api image first by occurrences, got %#v", images[0]["image"])
 	}
 	if images[0]["occurrences"] != 2 {
@@ -285,6 +286,6 @@ func TestK8sGetLogsHandler_RequiresPodName(t *testing.T) {
 		t.Fatal("expected invalid_argument when pod_name is missing")
 	}
 	if err.Code != "invalid_argument" {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }

@@ -33,6 +33,7 @@ const (
 	testCIOutputTestsOK            = "tests ok"
 	testCIErrExit1                 = "exit 1"
 	testCIProjectUnknown           = "unknown"
+	testCIWriteGoModFmt            = "write go.mod: %v"
 )
 
 func TestCIRunPipelineHandler_FailFast(t *testing.T) {
@@ -290,7 +291,7 @@ func TestCIRunPipelineHandler_NonGoSkipsCoverage(t *testing.T) {
 		testCIKeyIncludeQualityGate:    false,
 	}))
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	output := result.Output.(map[string]any)
 	steps := output[testCIKeySteps].([]map[string]any)
@@ -403,7 +404,7 @@ func TestCIRunPipelineHandler_FailFastFalse_ContinuesAfterFailure(t *testing.T) 
 	// executing remaining steps instead of aborting early.
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
-		t.Fatalf("write go.mod: %v", err)
+		t.Fatalf(testCIWriteGoModFmt, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
@@ -488,7 +489,7 @@ func TestCIRunPipelineHandler_TestStepFailFast(t *testing.T) {
 	// early-return branch (!ps.runStep && failFast).
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
-		t.Fatalf("write go.mod: %v", err)
+		t.Fatalf(testCIWriteGoModFmt, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
@@ -526,7 +527,7 @@ func TestCIRunPipelineHandler_ValidateFailNoAbort(t *testing.T) {
 	// Validate step fails with fail_fast=false — pipeline continues.
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
-		t.Fatalf("write go.mod: %v", err)
+		t.Fatalf(testCIWriteGoModFmt, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
@@ -560,7 +561,7 @@ func TestCIRunPipelineHandler_ValidateFailFast(t *testing.T) {
 	// runPipelineValidateStep early-return branch.
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
-		t.Fatalf("write go.mod: %v", err)
+		t.Fatalf(testCIWriteGoModFmt, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(_ int, _ app.CommandSpec) (app.CommandResult, error) {
@@ -607,7 +608,7 @@ func TestRunPipelineStaticStep_SkippedOnUnsupported(t *testing.T) {
 		t.Fatal("expected early=false for skipped step")
 	}
 	if domErr != nil {
-		t.Fatalf("unexpected error: %#v", domErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, domErr)
 	}
 	if len(ps.steps) != 1 || ps.steps[0][testCIKeyStatus] != testCIStatusSkipped {
 		t.Fatalf("expected skipped step, got %#v", ps.steps)

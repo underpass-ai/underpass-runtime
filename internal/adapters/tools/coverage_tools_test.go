@@ -53,7 +53,7 @@ func TestRepoCoverageReportHandler_Go(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["project_type"] != "go" {
 		t.Fatalf("unexpected project_type: %#v", output["project_type"])

@@ -14,8 +14,6 @@ import (
 
 const (
 	testLicenseUnknown       = "unknown"
-	testLicenseUnexpectedErr = "unexpected error: %#v"
-	testLicenseUnexpected    = "unexpected error: %v"
 	testLicenseUnknownPolicy = "unknown_policy"
 	testLicenseNameLeftPad   = "left-pad"
 	testLicenseGPL30         = "GPL-3.0"
@@ -246,7 +244,7 @@ func TestParseLicenseCheckRequest_AllBranches(t *testing.T) {
 	// valid with all fields
 	params, err := parseLicenseCheckRequest(json.RawMessage(`{"path":".","unknown_policy":"deny","denied_licenses":["GPL-3.0"],"allowed_licenses":["MIT"]}`))
 	if err != nil {
-		t.Fatalf(testLicenseUnexpectedErr, err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	if params.unknownPolicy != "deny" {
 		t.Fatalf("expected deny, got %q", params.unknownPolicy)
@@ -255,7 +253,7 @@ func TestParseLicenseCheckRequest_AllBranches(t *testing.T) {
 	// empty unknown_policy defaults to warn
 	params2, err2 := parseLicenseCheckRequest(json.RawMessage(`{"path":"."}`))
 	if err2 != nil {
-		t.Fatalf(testLicenseUnexpectedErr, err2)
+		t.Fatalf(testUnexpectedErrorGoFmt, err2)
 	}
 	if params2.unknownPolicy != "warn" {
 		t.Fatalf("expected warn default, got %q", params2.unknownPolicy)
@@ -343,7 +341,7 @@ func TestSecurityLicenseCheckHandler_EnrichmentFailsButEntriesExist(t *testing.T
 		testLicenseUnknownPolicy: "warn",
 	}))
 	if toolErr != nil {
-		t.Fatalf(testLicenseUnexpectedErr, toolErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, toolErr)
 	}
 	output := result.Output.(map[string]any)
 	// Even though enrichment failed, the handler should still produce results
@@ -392,7 +390,7 @@ func TestSecurityLicenseCheckHandler_InventoryRunErrWithEmptyEnriched(t *testing
 	// inventory.RunErr is nil here since runner.Run doesn't return an error,
 	// so the handler returns normally with zero deps.
 	if toolErr != nil {
-		t.Fatalf(testLicenseUnexpectedErr, toolErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, toolErr)
 	}
 	output := result.Output.(map[string]any)
 	if output["dependencies_checked"].(int) != 0 {
@@ -437,7 +435,7 @@ func TestSecurityLicenseCheckHandler_WarnStatus(t *testing.T) {
 		testLicenseUnknownPolicy: "warn",
 	}))
 	if toolErr != nil {
-		t.Fatalf(testLicenseUnexpectedErr, toolErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, toolErr)
 	}
 	output := result.Output.(map[string]any)
 	if output["status"] != "warn" {
@@ -472,7 +470,7 @@ func TestEnrichDependencyLicenses_EmptyEntries(t *testing.T) {
 		},
 	)
 	if err != nil {
-		t.Fatalf(testLicenseUnexpected, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(enriched) != 0 {
 		t.Fatalf("expected empty enriched, got %d entries", len(enriched))
@@ -509,7 +507,7 @@ func TestEnrichDependencyLicenses_DefaultSwitchCase(t *testing.T) {
 		},
 	)
 	if err != nil {
-		t.Fatalf(testLicenseUnexpected, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(enriched) != 1 {
 		t.Fatalf("expected 1 enriched entry, got %d", len(enriched))
@@ -605,7 +603,7 @@ func TestParseRustLicenseMap_EmptyName(t *testing.T) {
 	metadata := `{"packages":[{"name":"","version":"1.0.0","license":"MIT"}]}`
 	m, err := parseRustLicenseMap(metadata, 50)
 	if err != nil {
-		t.Fatalf(testLicenseUnexpected, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(m) != 0 {
 		t.Fatalf("expected empty map for empty-name package, got %d entries", len(m))
@@ -624,7 +622,7 @@ func TestParseRustLicenseMap_Truncation(t *testing.T) {
 	]}`
 	m, err := parseRustLicenseMap(metadata, 2)
 	if err != nil {
-		t.Fatalf(testLicenseUnexpected, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(m) != 2 {
 		t.Fatalf("expected 2 entries (truncated), got %d", len(m))
@@ -643,7 +641,7 @@ func TestParseRustLicenseMap_EmptyLicense(t *testing.T) {
 	]}`
 	m, err := parseRustLicenseMap(metadata, 50)
 	if err != nil {
-		t.Fatalf(testLicenseUnexpected, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(m) != 1 {
 		t.Fatalf("expected 1 entry (empty license skipped), got %d", len(m))

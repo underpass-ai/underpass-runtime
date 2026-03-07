@@ -10,11 +10,14 @@ import (
 )
 
 const (
-	testRoleDeveloper = "developer"
-	testFieldPath     = "path"
-	testFieldPaths    = "paths"
-	testFieldArgs     = "args"
-	testAllowedDir    = "src"
+	testRoleDeveloper      = "developer"
+	testFieldPath          = "path"
+	testFieldPaths         = "paths"
+	testFieldArgs          = "args"
+	testAllowedDir         = "src"
+	testSandboxDevTopics   = "sandbox.,dev."
+	testSandboxJobs        = "sandbox.jobs"
+	testSandboxTodoCreated = "sandbox.todo.created"
 )
 
 func TestStaticPolicy_DeniesClusterScopeWithoutRole(t *testing.T) {
@@ -29,7 +32,7 @@ func TestStaticPolicy_DeniesClusterScopeWithoutRole(t *testing.T) {
 		Args:     json.RawMessage(`{}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected decision to deny cluster scope")
@@ -49,7 +52,7 @@ func TestStaticPolicy_RequiresApproval(t *testing.T) {
 		Args:     json.RawMessage(`{"path":"x.txt"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected decision to deny when approval is missing")
@@ -74,7 +77,7 @@ func TestStaticPolicy_DeniesPathOutsideAllowList(t *testing.T) {
 		Args:     json.RawMessage(`{"path":"../outside.txt"}`),
 	})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if decision.Allow {
 		t.Fatal("expected decision to deny path traversal")
@@ -91,7 +94,7 @@ func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 		"profile":     "dev.redis",
 		"subjects":    []any{"sandbox.events.todo"},
 		"topics":      []any{"sandbox.tasks"},
-		"queues":      []any{"sandbox.jobs"},
+		"queues":      []any{testSandboxJobs},
 		"keys":        []any{"sandbox:todo:1"},
 		"arg":         "--run=TestTodo",
 		testFieldArgs: []any{"-v", "-run=TestTodo"},
@@ -182,8 +185,8 @@ func TestStaticPolicy_MetadataGovernancePolicies(t *testing.T) {
 	metadata := map[string]string{
 		"allowed_profiles":           "dev.redis,dev.nats",
 		"allowed_nats_subjects":      "sandbox.>,dev.>",
-		"allowed_kafka_topics":       "sandbox.,dev.",
-		"allowed_rabbit_queues":      "sandbox.,dev.",
+		"allowed_kafka_topics":       testSandboxDevTopics,
+		"allowed_rabbit_queues":      testSandboxDevTopics,
 		"allowed_redis_key_prefixes": "sandbox:,dev:",
 	}
 
@@ -248,10 +251,10 @@ func TestStaticPolicy_MetadataGovernancePolicies(t *testing.T) {
 }
 
 func TestStaticPolicy_MatchersAndUtilities(t *testing.T) {
-	if !wildcardPatternMatch("*", "sandbox.jobs") {
+	if !wildcardPatternMatch("*", testSandboxJobs) {
 		t.Fatal("expected wildcard * to match any value")
 	}
-	if !wildcardPatternMatch("sandbox.", "sandbox.jobs") {
+	if !wildcardPatternMatch("sandbox.", testSandboxJobs) {
 		t.Fatal("expected prefix-style wildcard pattern to match")
 	}
 	if !wildcardPatternMatch("sandbox.*.jobs", "sandbox.todo.jobs") {
@@ -261,13 +264,13 @@ func TestStaticPolicy_MatchersAndUtilities(t *testing.T) {
 		t.Fatal("did not expect wildcard pattern match")
 	}
 
-	if !natsSubjectMatch("sandbox.*.created", "sandbox.todo.created") {
+	if !natsSubjectMatch("sandbox.*.created", testSandboxTodoCreated) {
 		t.Fatal("expected nats * match")
 	}
-	if !natsSubjectMatch("sandbox.>", "sandbox.todo.created") {
+	if !natsSubjectMatch("sandbox.>", testSandboxTodoCreated) {
 		t.Fatal("expected nats > match")
 	}
-	if natsSubjectMatch("sandbox.todo", "sandbox.todo.created") {
+	if natsSubjectMatch("sandbox.todo", testSandboxTodoCreated) {
 		t.Fatal("did not expect exact nats subject match")
 	}
 
@@ -287,7 +290,7 @@ func TestStaticPolicy_MatchersAndUtilities(t *testing.T) {
 	if !parsedSubjects["sandbox.>"] || !parsedSubjects["dev.>"] {
 		t.Fatalf("unexpected parseAllowedNATSSubjects result: %#v", parsedSubjects)
 	}
-	parsedAllowlist := parseAllowlist(map[string]string{"allowed_kafka_topics": "sandbox.,dev."}, "allowed_kafka_topics")
+	parsedAllowlist := parseAllowlist(map[string]string{"allowed_kafka_topics": testSandboxDevTopics}, "allowed_kafka_topics")
 	if !parsedAllowlist["sandbox."] || !parsedAllowlist["dev."] {
 		t.Fatalf("unexpected parseAllowlist result: %#v", parsedAllowlist)
 	}

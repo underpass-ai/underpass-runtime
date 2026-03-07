@@ -14,21 +14,24 @@ import (
 )
 
 const (
-	testSeverityThreshold  = "severity_threshold"
-	testCommandTrivy       = "trivy"
-	testDockerfileName     = "Dockerfile"
-	testOutputKeyScanner   = "scanner"
-	testScannerHeuristic   = "heuristic-dockerfile"
-	testFindDockerfileOut  = "./Dockerfile\n"
-	testOutputKeyFindings  = "findings_count"
-	testMissingUserFinding = "dockerfile.missing_user"
+	testSeverityThreshold      = "severity_threshold"
+	testCommandTrivy           = "trivy"
+	testDockerfileName         = "Dockerfile"
+	testOutputKeyScanner       = "scanner"
+	testScannerHeuristic       = "heuristic-dockerfile"
+	testFindDockerfileOut      = "./Dockerfile\n"
+	testOutputKeyFindings      = "findings_count"
+	testMissingUserFinding     = "dockerfile.missing_user"
+	testWriteDockerfileFailed  = "write Dockerfile failed: %v"
+	testDidNotExpectTruncation = "did not expect truncation"
+	testExpected2FindingsFmt   = "expected 2 findings, got %d"
 )
 
 func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyMissing(t *testing.T) {
 	root := t.TempDir()
 	dockerfile := "FROM alpine:latest\nRUN curl -sSL https://example.com/install.sh | sh\n"
 	if err := os.WriteFile(filepath.Join(root, testDockerfileName), []byte(dockerfile), 0o644); err != nil {
-		t.Fatalf("write Dockerfile failed: %v", err)
+		t.Fatalf(testWriteDockerfileFailed, err)
 	}
 
 	runner := &fakeSWERuntimeCommandRunner{
@@ -86,7 +89,7 @@ func TestSecurityScanContainerHandler_HeuristicFallbackWhenTrivyHasNoFindings(t 
 	root := t.TempDir()
 	dockerfile := "FROM alpine:latest\nRUN chmod 777 /tmp\n"
 	if err := os.WriteFile(filepath.Join(root, testDockerfileName), []byte(dockerfile), 0o644); err != nil {
-		t.Fatalf("write Dockerfile failed: %v", err)
+		t.Fatalf(testWriteDockerfileFailed, err)
 	}
 
 	trivyNoFindings := `{"Results":[{"Target":"go.mod","Class":"lang-pkgs","Type":"gomod"}]}`
@@ -190,7 +193,7 @@ func TestParseTrivyFindings_AppliesSeverityThreshold(t *testing.T) {
 		t.Fatalf("unexpected parse error: %v", err)
 	}
 	if truncated {
-		t.Fatal("did not expect truncation")
+		t.Fatal(testDidNotExpectTruncation)
 	}
 	if len(findings) != 1 {
 		t.Fatalf("expected one finding above threshold, got %d", len(findings))
@@ -223,7 +226,7 @@ func TestParseTrivyFindings_WithMisconfigAndSecrets(t *testing.T) {
 		t.Fatalf("parseTrivyFindings failed: %v", err)
 	}
 	if truncated {
-		t.Fatal("did not expect truncation")
+		t.Fatal(testDidNotExpectTruncation)
 	}
 	if len(findings) != 3 {
 		t.Fatalf("expected 3 findings, got %d", len(findings))
@@ -272,7 +275,7 @@ func TestSecurityScanContainerHandler_TrivyWithImageRef(t *testing.T) {
 		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	output := result.Output.(map[string]any)
 	if output[testOutputKeyScanner] != testCommandTrivy {
@@ -287,7 +290,7 @@ func TestSecurityScanContainerHandler_TrivyParseFailFallsBackToHeuristic(t *test
 	root := t.TempDir()
 	dockerfile := "FROM alpine:latest\nRUN curl http://x | sh\n"
 	if err := os.WriteFile(filepath.Join(root, testDockerfileName), []byte(dockerfile), 0o644); err != nil {
-		t.Fatalf("write Dockerfile failed: %v", err)
+		t.Fatalf(testWriteDockerfileFailed, err)
 	}
 	runner := &fakeSWERuntimeCommandRunner{
 		run: func(callIndex int, spec app.CommandSpec) (app.CommandResult, error) {
@@ -308,7 +311,7 @@ func TestSecurityScanContainerHandler_TrivyParseFailFallsBackToHeuristic(t *test
 		testSeverityThreshold: testSeverityMedium,
 	}))
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	output := result.Output.(map[string]any)
 	if output[testOutputKeyScanner] != testScannerHeuristic {
@@ -338,13 +341,13 @@ func TestParseTrivyFindings_Truncation(t *testing.T) {
 	]}]}`
 	findings, truncated, err := parseTrivyFindings(raw, "high", 2)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !truncated {
 		t.Fatal("expected truncation")
 	}
 	if len(findings) != 2 {
-		t.Fatalf("expected 2 findings, got %d", len(findings))
+		t.Fatalf(testExpected2FindingsFmt, len(findings))
 	}
 	// critical should be first (sorted by severity)
 	if findings[0]["severity"] != "critical" {
@@ -468,7 +471,7 @@ func TestApplyHeuristicFallback_EmptyExistingCommand(t *testing.T) {
 		heuristicFallbackInput{}, // empty existingOutput and nil existingCommand
 	)
 	if domErr != nil {
-		t.Fatalf("unexpected error: %#v", domErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, domErr)
 	}
 	if len(result.command) != 3 || result.command[0] != "heuristic" {
 		t.Fatalf("expected default heuristic command, got %v", result.command)
@@ -507,13 +510,13 @@ func TestScanContainerHeuristics_NoDockerfilesFound(t *testing.T) {
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
 	findings, truncated, output, err := scanContainerHeuristics(context.Background(), runner, session, ".", testSeverityMedium, 10)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(findings) != 0 {
 		t.Fatalf("expected zero findings, got %d", len(findings))
 	}
 	if truncated {
-		t.Fatal("did not expect truncation")
+		t.Fatal(testDidNotExpectTruncation)
 	}
 	if !strings.Contains(output, "no Dockerfile found") {
 		t.Fatalf("expected 'no Dockerfile found' note in output, got %q", output)
@@ -542,7 +545,7 @@ func TestScanContainerHeuristics_CatCommandError(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	findings, _, _, err := scanContainerHeuristics(context.Background(), runner, session, ".", testSeverityMedium, 10)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	// The second Dockerfile should still produce findings (unpinned + chmod 777 + missing_user).
 	if len(findings) == 0 {
@@ -572,13 +575,13 @@ func TestScanContainerHeuristics_Truncation(t *testing.T) {
 	// maxFindings=2, so we should get truncated after 2 findings
 	findings, truncated, _, err := scanContainerHeuristics(context.Background(), runner, session, ".", testSeverityMedium, 2)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if !truncated {
 		t.Fatal("expected truncation when findings exceed maxFindings")
 	}
 	if len(findings) != 2 {
-		t.Fatalf("expected 2 findings, got %d", len(findings))
+		t.Fatalf(testExpected2FindingsFmt, len(findings))
 	}
 }
 
@@ -589,7 +592,7 @@ func TestScanDockerfileContent_MissingUser(t *testing.T) {
 	content := "FROM alpine:3.18\nRUN echo hello\n"
 	findings, truncated := scanDockerfileContent(nil, content, testDockerfileName, testSeverityMedium, 10)
 	if truncated {
-		t.Fatal("did not expect truncation")
+		t.Fatal(testDidNotExpectTruncation)
 	}
 	var foundMissingUser bool
 	for _, f := range findings {
@@ -607,7 +610,7 @@ func TestScanDockerfileContent_CommentAndBlankLinesSkipped(t *testing.T) {
 	content := "# This is a comment\n\nFROM alpine:3.18\nUSER app\n"
 	findings, truncated := scanDockerfileContent(nil, content, testDockerfileName, testSeverityMedium, 10)
 	if truncated {
-		t.Fatal("did not expect truncation")
+		t.Fatal(testDidNotExpectTruncation)
 	}
 	// With a pinned tag and USER present, no rule should fire
 	for _, f := range findings {
@@ -632,7 +635,7 @@ func TestScanDockerfileContent_TruncationFromMissingUser(t *testing.T) {
 		t.Fatal("expected truncation when findings reach maxFindings")
 	}
 	if len(findings) != 2 {
-		t.Fatalf("expected 2 findings, got %d", len(findings))
+		t.Fatalf(testExpected2FindingsFmt, len(findings))
 	}
 }
 

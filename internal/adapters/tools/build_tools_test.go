@@ -20,6 +20,7 @@ const (
 	testBuildGoModContent     = "module example.com/demo\n\ngo 1.23\n"
 	testBuildPython           = "python"
 	testBuildGoMod            = "go.mod"
+	testBuildCMainSource      = "int main(void){return 0;}"
 )
 
 func TestRepoStaticAnalysisHandler_Go(t *testing.T) {
@@ -49,7 +50,7 @@ func TestRepoStaticAnalysisHandler_Go(t *testing.T) {
 
 func TestRepoPackageHandler_C(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "main.c"), []byte("int main(void){return 0;}"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "main.c"), []byte(testBuildCMainSource), 0o644); err != nil {
 		t.Fatalf("write main.c failed: %v", err)
 	}
 
@@ -138,7 +139,7 @@ func TestRepoPackageHandler_MkdirFailure(t *testing.T) {
 
 func TestStaticAnalysisCommandForProject_AllToolchains(t *testing.T) {
 	workspaceC := t.TempDir()
-	if err := os.WriteFile(filepath.Join(workspaceC, "main.c"), []byte("int main(void){return 0;}"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workspaceC, "main.c"), []byte(testBuildCMainSource), 0o644); err != nil {
 		t.Fatalf("write main.c failed: %v", err)
 	}
 	workspacePy := t.TempDir()
@@ -187,7 +188,7 @@ func TestStaticAnalysisCommandForProject_AllToolchains(t *testing.T) {
 
 func TestPackageCommandForProject_AllToolchains(t *testing.T) {
 	workspaceC := t.TempDir()
-	if err := os.WriteFile(filepath.Join(workspaceC, "app.c"), []byte("int main(void){return 0;}"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workspaceC, "app.c"), []byte(testBuildCMainSource), 0o644); err != nil {
 		t.Fatalf("write app.c failed: %v", err)
 	}
 	workspacePy := t.TempDir()

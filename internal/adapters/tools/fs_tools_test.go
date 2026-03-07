@@ -15,21 +15,25 @@ import (
 )
 
 const (
-	testFSNotesTodo      = "notes/todo.txt"
-	testFSKeyContent     = "content"
-	testFSKeyPath        = "path"
-	testFSKeyRecursive   = "recursive"
-	testFSKeyCreateDirs  = "create_parents"
-	testFSKeySrcPath     = "source_path"
-	testFSKeyDstPath     = "destination_path"
-	testFSKeyOverwrite   = "overwrite"
-	testFSKeyUnifiedDiff = "unified_diff"
-	testFSKeyEncoding    = "encoding"
-	testFSKeyForce       = "force"
-	testFSKeyPattern     = "pattern"
-	testFSKeyExists      = "exists"
-	testFSKeyCount       = "count"
-	testFSTodoContent    = "hola\nTODO: test"
+	testFSNotesTodo        = "notes/todo.txt"
+	testFSKeyContent       = "content"
+	testFSKeyPath          = "path"
+	testFSKeyRecursive     = "recursive"
+	testFSKeyCreateDirs    = "create_parents"
+	testFSKeySrcPath       = "source_path"
+	testFSKeyDstPath       = "destination_path"
+	testFSKeyOverwrite     = "overwrite"
+	testFSKeyUnifiedDiff   = "unified_diff"
+	testFSKeyEncoding      = "encoding"
+	testFSKeyForce         = "force"
+	testFSKeyPattern       = "pattern"
+	testFSKeyExists        = "exists"
+	testFSKeyCount         = "count"
+	testFSTodoContent      = "hola\nTODO: test"
+	testFSNotesTodoMoved   = "notes/todo.moved.txt"
+	testFSCopyDst          = "tmp/archive/input.copy.txt"
+	testFSDiffHunkHeader   = "@@ -1 +1 @@"
+	testFSDiffDeletedHello = "-hello"
 )
 
 func TestFSWriteReadListSearchFlow(t *testing.T) {
@@ -243,8 +247,8 @@ func TestFSPatchHandler_ValidationAndExecution(t *testing.T) {
 			"diff --git a/outside.txt b/outside.txt",
 			"--- a/outside.txt",
 			"+++ b/outside.txt",
-			"@@ -1 +1 @@",
-			"-hello",
+			testFSDiffHunkHeader,
+			testFSDiffDeletedHello,
 			"+hola",
 		}, "\n"),
 	}))
@@ -258,8 +262,8 @@ func TestFSPatchHandler_UsesRunnerAndStrategy(t *testing.T) {
 		"diff --git a/src/a.txt b/src/a.txt",
 		"--- a/src/a.txt",
 		"+++ b/src/a.txt",
-		"@@ -1 +1 @@",
-		"-hello",
+		testFSDiffHunkHeader,
+		testFSDiffDeletedHello,
 		"+hola",
 	}, "\n")
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"src"}}
@@ -295,8 +299,8 @@ func TestFSPatchHandler_MapsRunnerErrors(t *testing.T) {
 		"diff --git a/src/a.txt b/src/a.txt",
 		"--- a/src/a.txt",
 		"+++ b/src/a.txt",
-		"@@ -1 +1 @@",
-		"-hello",
+		testFSDiffHunkHeader,
+		testFSDiffDeletedHello,
 		"+hola",
 	}, "\n")
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"src"}}
@@ -367,7 +371,7 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 
 	_, err = move.Invoke(ctx, session, mustJSON(t, map[string]any{
 		testFSKeySrcPath:    "tmp/work/input.copy.txt",
-		testFSKeyDstPath:    "tmp/archive/input.copy.txt",
+		testFSKeyDstPath:    testFSCopyDst,
 		testFSKeyCreateDirs: true,
 		testFSKeyOverwrite:  true,
 	}))
@@ -375,7 +379,7 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 		t.Fatalf("unexpected fs.move error: %#v", err)
 	}
 
-	statResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: "tmp/archive/input.copy.txt"}))
+	statResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: testFSCopyDst}))
 	if err != nil {
 		t.Fatalf("unexpected fs.stat error: %#v", err)
 	}
@@ -388,7 +392,7 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 	}
 
 	_, err = deleteHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeyPath:      "tmp/archive/input.copy.txt",
+		testFSKeyPath:      testFSCopyDst,
 		testFSKeyRecursive: false,
 		testFSKeyForce:     false,
 	}))
@@ -396,7 +400,7 @@ func TestFSOps_LocalLifecycle(t *testing.T) {
 		t.Fatalf("unexpected fs.delete error: %#v", err)
 	}
 
-	missingResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: "tmp/archive/input.copy.txt"}))
+	missingResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: testFSCopyDst}))
 	if err != nil {
 		t.Fatalf("unexpected fs.stat after delete error: %#v", err)
 	}
@@ -514,14 +518,14 @@ func TestFSOps_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 
 	_, err = move.Invoke(ctx, session, mustJSON(t, map[string]any{
 		testFSKeySrcPath:   "notes/todo.copy.txt",
-		testFSKeyDstPath:   "notes/todo.moved.txt",
+		testFSKeyDstPath:   testFSNotesTodoMoved,
 		testFSKeyOverwrite: true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes fs.move error: %#v", err)
 	}
 
-	statResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: "notes/todo.moved.txt"}))
+	statResult, err := stat.Invoke(ctx, session, mustJSON(t, map[string]any{testFSKeyPath: testFSNotesTodoMoved}))
 	if err != nil {
 		t.Fatalf("unexpected kubernetes fs.stat error: %#v", err)
 	}
@@ -530,7 +534,7 @@ func TestFSOps_KubernetesRuntimeUsesCommandRunner(t *testing.T) {
 	}
 
 	_, err = deleteHandler.Invoke(ctx, session, mustJSON(t, map[string]any{
-		testFSKeyPath:  "notes/todo.moved.txt",
+		testFSKeyPath:  testFSNotesTodoMoved,
 		testFSKeyForce: true,
 	}))
 	if err != nil {

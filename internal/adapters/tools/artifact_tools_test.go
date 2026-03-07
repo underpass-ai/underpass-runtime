@@ -45,7 +45,7 @@ func TestArtifactUploadHandler_UploadsFileAsArtifact(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf("expected map output, got %T", result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["artifact_name"] != "release.txt" {
 		t.Fatalf("unexpected artifact_name: %#v", output["artifact_name"])
@@ -79,7 +79,7 @@ func TestArtifactUploadHandler_PathRequired(t *testing.T) {
 		t.Fatal("expected invalid_argument error")
 	}
 	if err.Code != "invalid_argument" {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }
 
@@ -285,7 +285,7 @@ func TestCollectFlatArtifactEntries_TwoFiles(t *testing.T) {
 
 	entries, err := collectFlatArtifactEntries(workspace, workspace, "", 10)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d: %v", len(entries), entries)
@@ -314,7 +314,7 @@ func TestCollectFlatArtifactEntries_MaxEntriesLimit(t *testing.T) {
 
 	entries, err := collectFlatArtifactEntries(workspace, workspace, "", 1)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(entries) > 1 {
 		t.Fatalf("expected at most 1 entry, got %d", len(entries))

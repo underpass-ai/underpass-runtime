@@ -14,6 +14,9 @@ const (
 	testEnvHostAllowlist     = "WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON"
 	testNatsFallbackEndpoint = "nats://fallback:4222"
 	testNatsAnyHostEndpoint  = "nats://any.host:4222"
+	testHostExampleCom       = "example.com"
+	testHostWildcardExample  = "*.example.com"
+	testCIDR10Network        = "10.0.0.0/24"
 )
 
 // ---------------------------------------------------------------------------
@@ -72,7 +75,7 @@ func TestResolveTypedProfile_DefaultEndpointFallback(t *testing.T) {
 	session := domain.Session{AllowedPaths: []string{"."}}
 	profile, endpoint, err := resolveTypedProfile(session, testProfileDevNats, []string{"nats"}, testProfileDevNats, testNatsFallbackEndpoint)
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	if endpoint != testNatsFallbackEndpoint {
 		t.Fatalf("expected fallback endpoint, got %q", endpoint)
@@ -93,7 +96,7 @@ func TestResolveTypedProfile_EnvEndpointUsed(t *testing.T) {
 	session := domain.Session{AllowedPaths: []string{"."}}
 	_, endpoint, err := resolveTypedProfile(session, testProfileDevNats, []string{"nats"}, testProfileDevNats, testNatsFallbackEndpoint)
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	if endpoint != "nats://custom:4222" {
 		t.Fatalf("expected env endpoint, got %q", endpoint)
@@ -106,7 +109,7 @@ func TestResolveTypedProfile_MultipleAllowedKinds(t *testing.T) {
 	// dev.mongo exists with kind "mongo"; allow both "mongo" and "mongodb"
 	profile, endpoint, err := resolveTypedProfile(session, "dev.mongo", []string{"mongo", "mongodb"}, "dev.mongo", "mongodb://fallback:27017")
 	if err != nil {
-		t.Fatalf("unexpected error: %#v", err)
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
 	}
 	if profile.Kind != "mongo" {
 		t.Fatalf("expected kind mongo, got %q", profile.Kind)
@@ -176,7 +179,7 @@ func TestEndpointHost(t *testing.T) {
 		{"mongodb://MONGO.local:27017", "mongo.local"},
 		{"redis.local:6379", "redis.local"},
 		{"amqp://guest:pass@rabbit.local:5672/", "rabbit.local"},
-		{"https://Example.COM/path", "example.com"},
+		{"https://Example.COM/path", testHostExampleCom},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
@@ -198,16 +201,16 @@ func TestHostMatchesAllowRule(t *testing.T) {
 		rule string
 		want bool
 	}{
-		{"", "example.com", false},
-		{"example.com", "", false},
-		{"example.com", "example.com", true},
-		{"other.com", "example.com", false},
-		{"sub.example.com", "*.example.com", true},
-		{"example.com", "*.example.com", true},
-		{"notexample.com", "*.example.com", false},
-		{"10.0.0.5", "10.0.0.0/24", true},
-		{"10.0.1.5", "10.0.0.0/24", false},
-		{"not-an-ip", "10.0.0.0/24", false},
+		{"", testHostExampleCom, false},
+		{testHostExampleCom, "", false},
+		{testHostExampleCom, testHostExampleCom, true},
+		{"other.com", testHostExampleCom, false},
+		{"sub.example.com", testHostWildcardExample, true},
+		{testHostExampleCom, testHostWildcardExample, true},
+		{"notexample.com", testHostWildcardExample, false},
+		{"10.0.0.5", testCIDR10Network, true},
+		{"10.0.1.5", testCIDR10Network, false},
+		{"not-an-ip", testCIDR10Network, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.host+"_"+tt.rule, func(t *testing.T) {

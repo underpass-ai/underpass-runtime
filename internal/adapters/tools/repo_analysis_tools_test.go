@@ -13,9 +13,8 @@ import (
 )
 
 const (
-	testWorkspaceRepoPath    = "/workspace/repo"
-	testSymbolCreateTodo     = "CreateTodo"
-	testUnexpectedErrorGoFmt = "unexpected error: %#v"
+	testSymbolCreateTodo    = "CreateTodo"
+	testUnexpectedSourceFmt = "unexpected source: %#v"
 )
 
 type fakeRepoAnalysisRunner struct {
@@ -45,7 +44,7 @@ func TestRepoTestFailuresSummaryHandler_WithProvidedOutput(t *testing.T) {
 		t.Fatalf("expected failed_count=3, got %#v", parsed["failed_count"])
 	}
 	if parsed["source"] != "provided_output" {
-		t.Fatalf("unexpected source: %#v", parsed["source"])
+		t.Fatalf(testUnexpectedSourceFmt, parsed["source"])
 	}
 	failures, ok := parsed["failed_tests"].([]summarizedFailure)
 	if !ok {
@@ -114,7 +113,7 @@ func TestRepoTestFailuresSummaryHandler_RunsTestsWhenOutputMissing(t *testing.T)
 	}
 	parsed := result.Output.(map[string]any)
 	if parsed["source"] != "test_run" {
-		t.Fatalf("unexpected source: %#v", parsed["source"])
+		t.Fatalf(testUnexpectedSourceFmt, parsed["source"])
 	}
 	if parsed["exit_code"] != 1 {
 		t.Fatalf("unexpected exit_code: %#v", parsed["exit_code"])
@@ -280,7 +279,7 @@ func TestRepoChangedFilesHandler_RunsGitWhenOutputMissing(t *testing.T) {
 	}
 	output := result.Output.(map[string]any)
 	if output["source"] != "git" {
-		t.Fatalf("unexpected source: %#v", output["source"])
+		t.Fatalf(testUnexpectedSourceFmt, output["source"])
 	}
 	if output["changed_count"] != 3 {
 		t.Fatalf("unexpected changed_count: %#v", output["changed_count"])

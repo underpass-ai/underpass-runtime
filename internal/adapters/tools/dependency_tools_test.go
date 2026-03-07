@@ -15,8 +15,6 @@ import (
 )
 
 const (
-	testUnexpectedError       = "unexpected error: %v"
-	testExpectedMapOutput     = "expected map output, got %T"
 	testExpectedTruncatedTrue = "expected truncated=true"
 	testExpected2Dependencies = "expected 2 dependencies, got %d"
 	testVersion100            = "1.0.0"
@@ -55,7 +53,7 @@ func TestSecurityScanDependenciesHandler_Go(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testExpectedMapOutput, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["dependencies_count"] != 2 {
 		t.Fatalf("unexpected dependencies_count: %#v", output["dependencies_count"])
@@ -93,7 +91,7 @@ func TestSBOMGenerateHandler_GeneratesCycloneDXArtifact(t *testing.T) {
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testExpectedMapOutput, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["artifact_name"] != "sbom.cdx.json" {
 		t.Fatalf("unexpected artifact_name: %#v", output["artifact_name"])
@@ -292,7 +290,7 @@ func TestCollectDependencyInventory_WithSubpath(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: t.TempDir()}, projectType{Name: "go"}, "subdir", 100)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) == 0 {
 		t.Fatal("expected dependencies")
@@ -379,7 +377,7 @@ func TestCollectDependencyInventory_PythonBranch(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: root}, projectType{Name: "python"}, ".", 100)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) != 2 {
 		t.Fatalf(testExpected2Dependencies, len(result.Dependencies))
@@ -404,7 +402,7 @@ func TestCollectDependencyInventory_RustBranch(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: root}, projectType{Name: "rust"}, ".", 100)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) != 2 {
 		t.Fatalf(testExpected2Dependencies, len(result.Dependencies))
@@ -429,7 +427,7 @@ func TestCollectDependencyInventory_JavaMavenBranch(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: root}, projectType{Name: "java", Flavor: "maven"}, ".", 100)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) != 1 {
 		t.Fatalf("expected 1 dependency, got %d", len(result.Dependencies))
@@ -454,7 +452,7 @@ func TestCollectDependencyInventory_JavaGradleBranch(t *testing.T) {
 	}
 	result, err := collectDependencyInventory(context.Background(), runner, domain.Session{WorkspacePath: root}, projectType{Name: "java", Flavor: "gradle"}, ".", 100)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(result.Dependencies) != 1 {
 		t.Fatalf("expected 1 dependency, got %d", len(result.Dependencies))
@@ -521,12 +519,12 @@ func TestBuildSBOMResult_PreviewTruncation(t *testing.T) {
 	}
 	result, domErr := buildSBOMResult("go", inventory)
 	if domErr != nil {
-		t.Fatalf("unexpected error: %#v", domErr)
+		t.Fatalf(testUnexpectedErrorGoFmt, domErr)
 	}
 
 	output, ok := result.Output.(map[string]any)
 	if !ok {
-		t.Fatalf(testExpectedMapOutput, result.Output)
+		t.Fatalf(testExpectedMapOutputFmt, result.Output)
 	}
 	if output["components_count"] != 30 {
 		t.Fatalf("expected 30 total components, got %v", output["components_count"])
@@ -633,7 +631,7 @@ func TestParseRustDependencyInventory_DuplicatesAndTruncation(t *testing.T) {
 	output := "serde v1.0.0\nserde v1.0.0\nregex v1.10.3\ntokio v1.36.0\nhyper v0.14.0\n"
 	deps, truncated, err := parseRustDependencyInventory(output, 3)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	// serde appears twice but dedup should give: serde, regex, tokio = 3, then hyper is truncated
 	if len(deps) != 3 {
@@ -648,7 +646,7 @@ func TestParseRustDependencyInventory_VPrefixStripping(t *testing.T) {
 	output := "serde v1.0.0\nregex 1.10.3\n"
 	deps, _, err := parseRustDependencyInventory(output, 10)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	for _, d := range deps {
 		if strings.HasPrefix(d.Version, "v") {
@@ -669,7 +667,7 @@ func TestParseMavenDependencyInventory_SpacesInGroupSkipped(t *testing.T) {
 		"[INFO] org.apache.commons:commons-lang3:jar:3.13.0:runtime\n"
 	deps, _, err := parseMavenDependencyInventory(output, 10)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(deps) != 1 {
 		t.Fatalf("expected 1 dep (spaces line skipped), got %d", len(deps))
@@ -683,7 +681,7 @@ func TestParseMavenDependencyInventory_LessThan4PartsSkipped(t *testing.T) {
 	output := "[INFO] too:few:parts\n[INFO] org.apache.commons:commons-lang3:jar:3.13.0:runtime\n"
 	deps, _, err := parseMavenDependencyInventory(output, 10)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	if len(deps) != 1 {
 		t.Fatalf("expected 1 dep (<4 parts line skipped), got %d", len(deps))
@@ -697,7 +695,7 @@ func TestParseMavenDependencyInventory_DuplicatesAndTruncation(t *testing.T) {
 		"[INFO] org.slf4j:slf4j-api:jar:1.7.36:runtime\n"
 	deps, truncated, err := parseMavenDependencyInventory(output, 2)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	// After dedup: commons-lang3, guava = 2 unique. slf4j truncated.
 	if len(deps) != 2 {
@@ -719,7 +717,7 @@ func TestParseGradleDependencyInventory_DuplicatesAndTruncation(t *testing.T) {
 		"+--- org.jetbrains.kotlin:kotlin-stdlib:1.9.0\n"
 	deps, truncated, err := parseGradleDependencyInventory(output, 2)
 	if err != nil {
-		t.Fatalf(testUnexpectedError, err)
+		t.Fatalf(testUnexpectedErrorFmt, err)
 	}
 	// After dedup: slf4j-api, guava = 2 unique. kotlin-stdlib truncated.
 	if len(deps) != 2 {

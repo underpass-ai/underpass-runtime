@@ -7,16 +7,14 @@ import (
 )
 
 const (
-	testHeaderTenantID   = "X-Workspace-Tenant-Id"
-	testHeaderActorID    = "X-Workspace-Actor-Id"
-	testHeaderAuthToken  = "X-Workspace-Auth-Token"
-	testHeaderRoles      = "X-Workspace-Roles"
-	testSharedToken      = "shared-token"
-	testTenantA          = "tenant-a"
-	testActorA           = "actor-a"
-	testEnvAuthMode      = "WORKSPACE_AUTH_MODE"
-	testEnvSharedToken   = "WORKSPACE_AUTH_SHARED_TOKEN"
-	testSessionsEndpoint = "/v1/sessions"
+	testHeaderTenantID  = "X-Workspace-Tenant-Id"
+	testHeaderActorID   = "X-Workspace-Actor-Id"
+	testHeaderAuthToken = "X-Workspace-Auth-Token"
+	testHeaderRoles     = "X-Workspace-Roles"
+	testSharedToken     = "shared-token"
+	testActorA          = "actor-a"
+	testEnvAuthMode     = "WORKSPACE_AUTH_MODE"
+	testEnvSharedToken  = "WORKSPACE_AUTH_SHARED_TOKEN"
 )
 
 func TestAuthConfigFromEnv_DefaultPayload(t *testing.T) {
@@ -51,9 +49,9 @@ func TestAuthConfigAuthenticatePrincipal(t *testing.T) {
 		SharedToken:  testSharedToken,
 	}
 
-	req := httptest.NewRequest(http.MethodPost, testSessionsEndpoint, nil)
+	req := httptest.NewRequest(http.MethodPost, testSharedSessionsPath, nil)
 	req.Header.Set(testHeaderAuthToken, testSharedToken)
-	req.Header.Set(testHeaderTenantID, testTenantA)
+	req.Header.Set(testHeaderTenantID, testSharedTenantA)
 	req.Header.Set(testHeaderActorID, testActorA)
 	req.Header.Set(testHeaderRoles, "devops,developer,devops")
 
@@ -61,7 +59,7 @@ func TestAuthConfigAuthenticatePrincipal(t *testing.T) {
 	if authErr != nil {
 		t.Fatalf("unexpected auth error: %#v", authErr)
 	}
-	if principal.TenantID != testTenantA || principal.ActorID != testActorA {
+	if principal.TenantID != testSharedTenantA || principal.ActorID != testActorA {
 		t.Fatalf("unexpected principal: %#v", principal)
 	}
 	if len(principal.Roles) != 2 {
@@ -122,7 +120,7 @@ func TestAuthConfigAuthenticatePrincipalMissingHeaders(t *testing.T) {
 	}
 
 	// Valid token but missing tenant/actor headers.
-	req := httptest.NewRequest(http.MethodPost, testSessionsEndpoint, nil)
+	req := httptest.NewRequest(http.MethodPost, testSharedSessionsPath, nil)
 	req.Header.Set(testHeaderAuthToken, testSharedToken)
 
 	_, authErr := cfg.authenticatePrincipal(req)
@@ -139,9 +137,9 @@ func TestAuthConfigAuthenticatePrincipalRejectsInvalidToken(t *testing.T) {
 	cfg.Mode = authModeTrustedHeaders
 	cfg.SharedToken = "expected-token"
 
-	req := httptest.NewRequest(http.MethodPost, testSessionsEndpoint, nil)
+	req := httptest.NewRequest(http.MethodPost, testSharedSessionsPath, nil)
 	req.Header.Set(cfg.TokenHeader, "bad-token")
-	req.Header.Set(cfg.TenantHeader, testTenantA)
+	req.Header.Set(cfg.TenantHeader, testSharedTenantA)
 	req.Header.Set(cfg.ActorHeader, testActorA)
 
 	_, authErr := cfg.authenticatePrincipal(req)

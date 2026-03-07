@@ -5,8 +5,9 @@ import (
 )
 
 const (
-	testFieldItems       = "items"
-	testReasonItemDenied = "item not allowed"
+	testFieldItems          = "items"
+	testReasonItemDenied    = "item not allowed"
+	testUnexpectedReasonFmt = "unexpected reason: %q"
 )
 
 // ---------------------------------------------------------------------------
@@ -157,7 +158,7 @@ func TestCheckFieldValuesAllowed_OneDenied(t *testing.T) {
 		t.Fatal("expected denial for non-matching value")
 	}
 	if reason != testReasonItemDenied {
-		t.Fatalf("unexpected reason: %q", reason)
+		t.Fatalf(testUnexpectedReasonFmt, reason)
 	}
 }
 
@@ -171,7 +172,7 @@ func TestCheckFieldValuesAllowed_ExtractionError(t *testing.T) {
 		t.Fatal("expected denial on extraction error")
 	}
 	if reason != "invalid field payload" {
-		t.Fatalf("unexpected reason: %q", reason)
+		t.Fatalf(testUnexpectedReasonFmt, reason)
 	}
 }
 
@@ -211,6 +212,6 @@ func TestCheckFieldValuesAllowed_SingleValue(t *testing.T) {
 		t.Fatal("expected denial for non-matching single value")
 	}
 	if reason != "not matching" {
-		t.Fatalf("unexpected reason: %q", reason)
+		t.Fatalf(testUnexpectedReasonFmt, reason)
 	}
 }

@@ -18,6 +18,7 @@ import (
 const (
 	testGitRemoteOrigin    = "origin"
 	testGitBranchLifecycle = "feature/lifecycle"
+	testGitMainTxt         = "main.txt"
 )
 
 func TestGitHandlers_StatusDiffApplyPatch(t *testing.T) {
@@ -25,7 +26,7 @@ func TestGitHandlers_StatusDiffApplyPatch(t *testing.T) {
 	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
 	ctx := context.Background()
 
-	filePath := filepath.Join(root, "main.txt")
+	filePath := filepath.Join(root, testGitMainTxt)
 	if err := os.WriteFile(filePath, []byte("line1\nline2-modified\n"), 0o644); err != nil {
 		t.Fatalf("write file failed: %v", err)
 	}
@@ -36,12 +37,12 @@ func TestGitHandlers_StatusDiffApplyPatch(t *testing.T) {
 		t.Fatalf("unexpected git status error: %v", statusErr)
 	}
 	statusOutput := statusResult.Output.(map[string]any)["status"].(string)
-	if !strings.Contains(statusOutput, "main.txt") {
+	if !strings.Contains(statusOutput, testGitMainTxt) {
 		t.Fatalf("expected modified file in status, got %q", statusOutput)
 	}
 
 	diff := &GitDiffHandler{}
-	diffResult, diffErr := diff.Invoke(ctx, session, mustJSONGit(t, map[string]any{"paths": []string{"main.txt"}}))
+	diffResult, diffErr := diff.Invoke(ctx, session, mustJSONGit(t, map[string]any{"paths": []string{testGitMainTxt}}))
 	if diffErr != nil {
 		t.Fatalf("unexpected git diff error: %v", diffErr)
 	}
@@ -223,7 +224,7 @@ func TestGitHandlers_LifecycleOperations(t *testing.T) {
 		t.Fatalf("expected commit summary in git show output, got %q", showOutput)
 	}
 
-	filePath := filepath.Join(root, "main.txt")
+	filePath := filepath.Join(root, testGitMainTxt)
 	if err := os.WriteFile(filePath, []byte("line1\\nline2-lifecycle\\n"), 0o644); err != nil {
 		t.Fatalf("write file failed: %v", err)
 	}
@@ -331,10 +332,10 @@ func initGitRepo(t *testing.T) string {
 	runGit(t, root, "config", "user.email", "tester@example.com")
 	runGit(t, root, "config", "user.name", "Tester")
 
-	if err := os.WriteFile(filepath.Join(root, "main.txt"), []byte("line1\nline2\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, testGitMainTxt), []byte("line1\nline2\n"), 0o644); err != nil {
 		t.Fatalf("write seed file failed: %v", err)
 	}
-	runGit(t, root, "add", "main.txt")
+	runGit(t, root, "add", testGitMainTxt)
 	runGit(t, root, "commit", "-m", "initial")
 
 	return root

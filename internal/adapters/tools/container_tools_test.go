@@ -168,7 +168,7 @@ func TestContainerExecHandler_DeniesDisallowedCommand(t *testing.T) {
 		t.Fatal("expected command denial")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }
 
@@ -269,7 +269,7 @@ func TestContainerExecHandler_DeniesShellCommands(t *testing.T) {
 		t.Fatal("expected shell command denial")
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
-		t.Fatalf("expected invalid_argument, got %s", err.Code)
+		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }
 
