@@ -7,8 +7,6 @@ import (
 	"os"
 	"reflect"
 	"testing"
-
-	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestEnvOrDefault(t *testing.T) {
@@ -141,7 +139,7 @@ func TestParseBoolOrDefault(t *testing.T) {
 		{"", true, true},
 		{"", false, false},
 		{"unknown", true, true},
-		{"TRUE", false, true}, // toLower("TRUE") = "true" → returns true
+		{"TRUE", false, true},
 	}
 	for _, tc := range cases {
 		got := parseBoolOrDefault(tc.raw, tc.fallback)
@@ -178,7 +176,6 @@ func TestBuildWorkspaceManagerLocalAndErrors(t *testing.T) {
 		t.Fatalf("setup: %v", err)
 	}
 
-	// local backend creates the workspace root if needed
 	workspaceRoot := t.TempDir()
 	manager, err := buildWorkspaceManager("local", workspaceRoot, nil, memStore)
 	if err != nil {
@@ -188,12 +185,6 @@ func TestBuildWorkspaceManagerLocalAndErrors(t *testing.T) {
 		t.Fatal("expected non-nil workspace manager")
 	}
 
-	// kubernetes backend with nil client returns error
-	_, err = buildWorkspaceManager("kubernetes", workspaceRoot, nil, memStore)
-	if err == nil {
-		t.Fatal("expected error for kubernetes backend with nil client")
-	}
-
 	// unsupported backend returns error
 	_, err = buildWorkspaceManager("unsupported-backend", workspaceRoot, nil, memStore)
 	if err == nil {
@@ -201,43 +192,12 @@ func TestBuildWorkspaceManagerLocalAndErrors(t *testing.T) {
 	}
 }
 
-func TestBuildWorkspaceManagerKubernetes(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-	memStore, err := buildSessionStore(logger)
-	if err != nil {
-		t.Fatalf("setup: %v", err)
-	}
-
-	kubeClient := k8sfake.NewSimpleClientset()
-	manager, err := buildWorkspaceManager("kubernetes", t.TempDir(), kubeClient, memStore)
-	if err != nil {
-		t.Fatalf("unexpected kubernetes workspace manager error: %v", err)
-	}
-	if manager == nil {
-		t.Fatal("expected non-nil kubernetes workspace manager")
-	}
-}
-
-func TestBuildCommandRunnerLocalAndErrors(t *testing.T) {
-	// local backend returns a local command runner
-	runner, err := buildCommandRunner("local", nil, nil)
+func TestBuildCommandRunnerLocal(t *testing.T) {
+	runner, err := buildCommandRunner("local", nil)
 	if err != nil {
 		t.Fatalf("unexpected local command runner error: %v", err)
 	}
 	if runner == nil {
 		t.Fatal("expected non-nil local command runner")
-	}
-
-	// kubernetes backend with nil client and nil config returns error
-	_, err = buildCommandRunner("kubernetes", nil, nil)
-	if err == nil {
-		t.Fatal("expected error for kubernetes runner with nil client and config")
-	}
-
-	// kubernetes backend with fake client but nil config still returns error
-	kubeClient := k8sfake.NewSimpleClientset()
-	_, err = buildCommandRunner("kubernetes", kubeClient, nil)
-	if err == nil {
-		t.Fatal("expected error for kubernetes runner with nil rest config")
 	}
 }

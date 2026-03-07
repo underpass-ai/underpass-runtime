@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -20,7 +19,6 @@ import (
 	sessionstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/sessionstore"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/storage"
 	tooladapter "github.com/underpass-ai/underpass-runtime/internal/adapters/tools"
-	workspaceadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/workspace"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
 	"github.com/underpass-ai/underpass-runtime/internal/httpapi"
 	"go.opentelemetry.io/otel"
@@ -30,14 +28,11 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
-	workspaceBackendLocal   = "local"
-	defaultNamespace        = "underpass-runtime"
+	workspaceBackendLocal = "local"
+	defaultNamespace      = "underpass-runtime"
 )
 
 func main() {
@@ -67,16 +62,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	var kubeConfig *rest.Config
-	var kubeClient kubernetes.Interface
-	if workspaceBackend == "kubernetes" {
-		resolvedConfig, resolvedClient, err := buildKubernetesClient()
-		if err != nil {
-			logger.Error("failed to initialize kubernetes client", "error", err)
-			os.Exit(1)
-		}
-		kubeConfig = resolvedConfig
-		kubeClient = resolvedClient
+	k8s, err := initKubernetesRuntime(workspaceBackend)
+	if err != nil {
+		logger.Error("failed to initialize kubernetes client", "error", err)
+		os.Exit(1)
 	}
 
 	sessionStore, err := buildSessionStore(logger)
@@ -85,19 +74,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	workspaceManager, err := buildWorkspaceManager(workspaceBackend, workspaceRoot, kubeClient, sessionStore)
+	workspaceManager, err := buildWorkspaceManager(workspaceBackend, workspaceRoot, k8s, sessionStore)
 	if err != nil {
 		logger.Error("failed to initialize workspace manager", "error", err)
 		os.Exit(1)
 	}
-	podJanitorCancel := startPodJanitorIfEnabled(workspaceBackend, workspaceNamespace, kubeClient, sessionStore, logger)
+	podJanitorCancel := startPodJanitorIfEnabled(workspaceBackend, workspaceNamespace, k8s, sessionStore, logger)
 	catalog := tooladapter.NewCatalog(tooladapter.DefaultCapabilities())
-	commandRunner, err := buildCommandRunner(workspaceBackend, kubeClient, kubeConfig)
+	commandRunner, err := buildCommandRunner(workspaceBackend, k8s)
 	if err != nil {
 		logger.Error("failed to initialize command runner", "error", err)
 		os.Exit(1)
 	}
-	engine := tooladapter.NewEngine(
+	handlers := []tooladapter.Handler{
 		tooladapter.NewFSListHandler(commandRunner),
 		tooladapter.NewFSReadHandler(commandRunner),
 		tooladapter.NewFSWriteHandler(commandRunner),
@@ -160,18 +149,10 @@ func main() {
 		tooladapter.NewImageBuildHandler(commandRunner),
 		tooladapter.NewImagePushHandler(commandRunner),
 		tooladapter.NewImageInspectHandler(commandRunner),
-		tooladapter.NewContainerPSHandlerWithKubernetes(commandRunner, kubeClient, workspaceNamespace),
-		tooladapter.NewContainerLogsHandlerWithKubernetes(commandRunner, kubeClient, workspaceNamespace),
-		tooladapter.NewContainerRunHandlerWithKubernetes(commandRunner, kubeClient, workspaceNamespace),
-		tooladapter.NewContainerExecHandlerWithKubernetes(commandRunner, kubeClient, workspaceNamespace),
-		tooladapter.NewK8sGetPodsHandler(kubeClient, workspaceNamespace),
-		tooladapter.NewK8sGetServicesHandler(kubeClient, workspaceNamespace),
-		tooladapter.NewK8sGetDeploymentsHandler(kubeClient, workspaceNamespace),
-		tooladapter.NewK8sGetImagesHandler(kubeClient, workspaceNamespace),
-		tooladapter.NewK8sGetLogsHandler(kubeClient, workspaceNamespace),
-		tooladapter.NewK8sApplyManifestHandler(kubeClient, workspaceNamespace),
-		tooladapter.NewK8sRolloutStatusHandler(kubeClient, workspaceNamespace),
-		tooladapter.NewK8sRestartDeploymentHandler(kubeClient, workspaceNamespace),
+		tooladapter.NewContainerPSHandler(commandRunner),
+		tooladapter.NewContainerLogsHandler(commandRunner),
+		tooladapter.NewContainerRunHandler(commandRunner),
+		tooladapter.NewContainerExecHandler(commandRunner),
 		tooladapter.NewSecurityScanDependenciesHandler(commandRunner),
 		tooladapter.NewSBOMGenerateHandler(commandRunner),
 		tooladapter.NewSecurityScanSecretsHandler(commandRunner),
@@ -197,7 +178,9 @@ func main() {
 		tooladapter.NewPythonTestHandler(commandRunner),
 		tooladapter.NewCBuildHandler(commandRunner),
 		tooladapter.NewCTestHandler(commandRunner),
-	)
+	}
+	handlers = append(handlers, k8sToolHandlers(commandRunner, k8s, workspaceNamespace)...)
+	engine := tooladapter.NewEngine(handlers...)
 	artifactStore := storage.NewLocalArtifactStore(artifactRoot)
 	policyEngine := policy.NewStaticPolicy()
 	auditLogger := audit.NewLoggerAudit(logger)
@@ -372,97 +355,6 @@ func parseStringMapEnv(raw string) (map[string]string, error) {
 	return parsed, nil
 }
 
-func buildWorkspaceManager(
-	backend string,
-	workspaceRoot string,
-	kubeClient kubernetes.Interface,
-	sessionStore app.SessionStore,
-) (app.WorkspaceManager, error) {
-	switch backend {
-	case "", workspaceBackendLocal:
-		if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
-			return nil, fmt.Errorf("create workspace root: %w", err)
-		}
-		return workspaceadapter.NewLocalManager(workspaceRoot), nil
-	case "kubernetes":
-		if kubeClient == nil {
-			return nil, fmt.Errorf("kubernetes client is required")
-		}
-		runnerImageBundles, err := parseStringMapEnv(os.Getenv("WORKSPACE_K8S_RUNNER_IMAGE_BUNDLES_JSON"))
-		if err != nil {
-			return nil, fmt.Errorf("parse WORKSPACE_K8S_RUNNER_IMAGE_BUNDLES_JSON: %w", err)
-		}
-		return workspaceadapter.NewKubernetesManager(workspaceadapter.KubernetesManagerConfig{
-			Namespace:           envOrDefault("WORKSPACE_K8S_NAMESPACE", defaultNamespace),
-			ServiceAccount:      strings.TrimSpace(os.Getenv("WORKSPACE_K8S_SERVICE_ACCOUNT")),
-			PodImage:            envOrDefault("WORKSPACE_K8S_RUNNER_IMAGE", ""),
-			RunnerImageBundles:  runnerImageBundles,
-			RunnerProfileKey:    envOrDefault("WORKSPACE_K8S_RUNNER_PROFILE_METADATA_KEY", "runner_profile"),
-			InitImage:           envOrDefault("WORKSPACE_K8S_INIT_IMAGE", ""),
-			WorkspaceDir:        envOrDefault("WORKSPACE_K8S_WORKDIR", "/workspace/repo"),
-			RunnerContainerName: envOrDefault("WORKSPACE_K8S_CONTAINER", "runner"),
-			PodNamePrefix:       envOrDefault("WORKSPACE_K8S_POD_PREFIX", "ws"),
-			PodReadyTimeout:     time.Duration(parseIntOrDefault(os.Getenv("WORKSPACE_K8S_READY_TIMEOUT_SECONDS"), 120)) * time.Second,
-			SessionStore:        sessionStore,
-			GitAuthSecretName:   strings.TrimSpace(os.Getenv("WORKSPACE_K8S_GIT_AUTH_SECRET")),
-			GitAuthMetadataKey:  envOrDefault("WORKSPACE_K8S_GIT_AUTH_METADATA_KEY", "git_auth_secret"),
-			RunAsUser:           int64(parseIntOrDefault(os.Getenv("WORKSPACE_K8S_RUN_AS_USER"), 1000)),
-			RunAsGroup:          int64(parseIntOrDefault(os.Getenv("WORKSPACE_K8S_RUN_AS_GROUP"), 1000)),
-			FSGroup:             int64(parseIntOrDefault(os.Getenv("WORKSPACE_K8S_FS_GROUP"), 1000)),
-			ReadOnlyRootFS:      parseBoolOrDefault(os.Getenv("WORKSPACE_K8S_READ_ONLY_ROOT_FS"), false),
-			AutomountSAToken:    parseBoolOrDefault(os.Getenv("WORKSPACE_K8S_AUTOMOUNT_SA_TOKEN"), false),
-		}, kubeClient), nil
-	default:
-		return nil, fmt.Errorf("unsupported WORKSPACE_BACKEND: %s", backend)
-	}
-}
-
-func buildCommandRunner(
-	backend string,
-	kubeClient kubernetes.Interface,
-	kubeConfig *rest.Config,
-) (app.CommandRunner, error) {
-	localRunner := tooladapter.NewLocalCommandRunner()
-	if backend != "kubernetes" {
-		return localRunner, nil
-	}
-	if kubeClient == nil || kubeConfig == nil {
-		return nil, fmt.Errorf("kubernetes runner requires client and rest config")
-	}
-	k8sRunner := tooladapter.NewK8sCommandRunner(
-		kubeClient,
-		kubeConfig,
-		envOrDefault("WORKSPACE_K8S_NAMESPACE", defaultNamespace),
-	)
-	return tooladapter.NewRoutingCommandRunner(localRunner, k8sRunner), nil
-}
-
-func buildKubernetesClient() (*rest.Config, kubernetes.Interface, error) {
-	kubeConfig, err := resolveKubeConfig()
-	if err != nil {
-		return nil, nil, err
-	}
-	clientset, err := kubernetes.NewForConfig(kubeConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	return kubeConfig, clientset, nil
-}
-
-func resolveKubeConfig() (*rest.Config, error) {
-	if kubeconfig := strings.TrimSpace(os.Getenv("KUBECONFIG")); kubeconfig != "" {
-		return clientcmd.BuildConfigFromFlags("", kubeconfig)
-	}
-	home, homeErr := os.UserHomeDir()
-	if homeErr == nil {
-		defaultKubeconfig := filepath.Join(home, ".kube", "config")
-		if _, err := os.Stat(defaultKubeconfig); err == nil {
-			return clientcmd.BuildConfigFromFlags("", defaultKubeconfig)
-		}
-	}
-	return rest.InClusterConfig()
-}
-
 func setupTelemetry(ctx context.Context, logger *slog.Logger) (func(context.Context) error, error) {
 	if !parseBoolOrDefault(os.Getenv("WORKSPACE_OTEL_ENABLED"), false) {
 		return func(context.Context) error { return nil }, nil
@@ -507,42 +399,6 @@ func setupTelemetry(ctx context.Context, logger *slog.Logger) (func(context.Cont
 		"insecure", parseBoolOrDefault(os.Getenv("WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE"), false),
 	)
 	return tracerProvider.Shutdown, nil
-}
-
-func startPodJanitorIfEnabled(
-	workspaceBackend, workspaceNamespace string,
-	kubeClient kubernetes.Interface,
-	sessionStore app.SessionStore,
-	logger *slog.Logger,
-) context.CancelFunc {
-	if workspaceBackend != "kubernetes" || kubeClient == nil || !parseBoolOrDefault(os.Getenv("WORKSPACE_K8S_POD_JANITOR_ENABLED"), true) {
-		return nil
-	}
-	interval := time.Duration(parseIntOrDefault(os.Getenv("WORKSPACE_K8S_POD_JANITOR_INTERVAL_SECONDS"), 60)) * time.Second
-	sessionPodTTL := time.Duration(parseIntOrDefault(os.Getenv("WORKSPACE_K8S_SESSION_POD_TERMINAL_TTL_SECONDS"), 300)) * time.Second
-	containerPodTTL := time.Duration(parseIntOrDefault(os.Getenv("WORKSPACE_K8S_CONTAINER_POD_TERMINAL_TTL_SECONDS"), 300)) * time.Second
-	missingSessionGrace := time.Duration(parseIntOrDefault(os.Getenv("WORKSPACE_K8S_MISSING_SESSION_GRACE_SECONDS"), 120)) * time.Second
-
-	janitor := workspaceadapter.NewKubernetesPodJanitor(kubeClient, workspaceadapter.KubernetesPodJanitorConfig{
-		Namespace:                 workspaceNamespace,
-		SessionStore:              sessionStore,
-		Interval:                  interval,
-		SessionTerminalPodTTL:     sessionPodTTL,
-		ContainerTerminalPodTTL:   containerPodTTL,
-		MissingSessionGracePeriod: missingSessionGrace,
-		Logger:                    logger.With("component", "k8s-pod-janitor"),
-	})
-	janitorCtx, cancel := context.WithCancel(context.Background())
-	go janitor.Start(janitorCtx)
-	logger.Info(
-		"kubernetes pod janitor enabled",
-		"namespace", workspaceNamespace,
-		"interval_seconds", int(interval/time.Second),
-		"session_terminal_ttl_seconds", int(sessionPodTTL/time.Second),
-		"container_terminal_ttl_seconds", int(containerPodTTL/time.Second),
-		"missing_session_grace_seconds", int(missingSessionGrace/time.Second),
-	)
-	return cancel
 }
 
 func startHTTPServer(srv *http.Server, port, workspaceRoot string, logger *slog.Logger) {

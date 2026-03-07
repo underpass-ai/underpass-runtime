@@ -303,7 +303,7 @@ func setupHTTPHandler(t *testing.T, authCfg ...AuthConfig) (http.Handler, string
 	workspaceManager := workspaceadapter.NewLocalManager(workspaceRoot)
 	catalog := tooladapter.NewCatalog(tooladapter.DefaultCapabilities())
 	commandRunner := tooladapter.NewLocalCommandRunner()
-	engine := tooladapter.NewEngine(
+	handlers := []tooladapter.Handler{
 		tooladapter.NewFSListHandler(commandRunner),
 		tooladapter.NewFSReadHandler(commandRunner),
 		tooladapter.NewFSWriteHandler(commandRunner),
@@ -349,11 +349,6 @@ func setupHTTPHandler(t *testing.T, authCfg ...AuthConfig) (http.Handler, string
 		tooladapter.NewImageBuildHandler(commandRunner),
 		tooladapter.NewImagePushHandler(commandRunner),
 		tooladapter.NewImageInspectHandler(commandRunner),
-		tooladapter.NewK8sGetPodsHandler(nil, "default"),
-		tooladapter.NewK8sGetServicesHandler(nil, "default"),
-		tooladapter.NewK8sGetDeploymentsHandler(nil, "default"),
-		tooladapter.NewK8sGetImagesHandler(nil, "default"),
-		tooladapter.NewK8sGetLogsHandler(nil, "default"),
 		tooladapter.NewSecurityScanDependenciesHandler(commandRunner),
 		tooladapter.NewSBOMGenerateHandler(commandRunner),
 		tooladapter.NewSecurityScanSecretsHandler(commandRunner),
@@ -379,7 +374,9 @@ func setupHTTPHandler(t *testing.T, authCfg ...AuthConfig) (http.Handler, string
 		tooladapter.NewPythonTestHandler(commandRunner),
 		tooladapter.NewCBuildHandler(commandRunner),
 		tooladapter.NewCTestHandler(commandRunner),
-	)
+	}
+	handlers = append(handlers, k8sToolHandlers()...)
+	engine := tooladapter.NewEngine(handlers...)
 	artifactStore := storage.NewLocalArtifactStore(artifactRoot)
 	policyEngine := policy.NewStaticPolicy()
 	auditLogger := audit.NewLoggerAudit(logger)

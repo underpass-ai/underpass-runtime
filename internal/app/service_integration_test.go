@@ -143,7 +143,7 @@ func setupService(t *testing.T) *app.Service {
 	workspaceManager := workspaceadapter.NewLocalManager(workspaceRoot)
 	catalog := tooladapter.NewCatalog(tooladapter.DefaultCapabilities())
 	commandRunner := tooladapter.NewLocalCommandRunner()
-	engine := tooladapter.NewEngine(
+	handlers := []tooladapter.Handler{
 		tooladapter.NewFSListHandler(commandRunner),
 		tooladapter.NewFSReadHandler(commandRunner),
 		tooladapter.NewFSWriteHandler(commandRunner),
@@ -210,14 +210,6 @@ func setupService(t *testing.T) *app.Service {
 		tooladapter.NewContainerLogsHandler(commandRunner),
 		tooladapter.NewContainerRunHandler(commandRunner),
 		tooladapter.NewContainerExecHandler(commandRunner),
-		tooladapter.NewK8sGetPodsHandler(nil, "default"),
-		tooladapter.NewK8sGetServicesHandler(nil, "default"),
-		tooladapter.NewK8sGetDeploymentsHandler(nil, "default"),
-		tooladapter.NewK8sGetImagesHandler(nil, "default"),
-		tooladapter.NewK8sGetLogsHandler(nil, "default"),
-		tooladapter.NewK8sApplyManifestHandler(nil, "default"),
-		tooladapter.NewK8sRolloutStatusHandler(nil, "default"),
-		tooladapter.NewK8sRestartDeploymentHandler(nil, "default"),
 		tooladapter.NewSecurityScanDependenciesHandler(commandRunner),
 		tooladapter.NewSBOMGenerateHandler(commandRunner),
 		tooladapter.NewSecurityScanSecretsHandler(commandRunner),
@@ -243,7 +235,9 @@ func setupService(t *testing.T) *app.Service {
 		tooladapter.NewPythonTestHandler(commandRunner),
 		tooladapter.NewCBuildHandler(commandRunner),
 		tooladapter.NewCTestHandler(commandRunner),
-	)
+	}
+	handlers = append(handlers, k8sToolHandlers()...)
+	engine := tooladapter.NewEngine(handlers...)
 	artifactStore := storage.NewLocalArtifactStore(artifactRoot)
 	policyEngine := policy.NewStaticPolicy()
 	auditLogger := audit.NewLoggerAudit(logger)
