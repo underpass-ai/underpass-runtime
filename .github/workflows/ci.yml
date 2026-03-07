@@ -5,11 +5,6 @@ on:
     branches: [main]
   pull_request:
 
-permissions:
-  contents: read
-  pull-requests: write
-  security-events: write
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -25,6 +20,8 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -58,6 +55,8 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       matrix:
         include:
@@ -94,6 +93,8 @@ jobs:
   test:
     name: Test (docker-local)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -136,6 +137,8 @@ jobs:
   test-k8s:
     name: Test (k8s)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -163,6 +166,9 @@ jobs:
   security:
     name: Security
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -183,6 +189,8 @@ jobs:
   docker:
     name: Docker
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [lint, test, build]
     steps:
       - uses: actions/checkout@v4
@@ -207,6 +215,9 @@ jobs:
   sonarcloud:
     name: SonarCloud
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     needs: [test, test-k8s]
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     steps:
