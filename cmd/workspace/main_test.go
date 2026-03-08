@@ -252,3 +252,126 @@ func TestBuildToolRegistry_Local(t *testing.T) {
 		t.Fatal("expected non-nil registry")
 	}
 }
+
+func TestBuildEventBus_None(t *testing.T) {
+	t.Setenv("EVENT_BUS", "none")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	pub, nc, stop := buildEventBus(context.Background(), logger)
+	if pub == nil {
+		t.Fatal("expected non-nil publisher")
+	}
+	if nc != nil {
+		t.Fatal("expected nil nats connection for noop bus")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func for noop bus")
+	}
+}
+
+func TestBuildEventBus_Default(t *testing.T) {
+	_ = os.Unsetenv("EVENT_BUS")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	pub, nc, stop := buildEventBus(context.Background(), logger)
+	if pub == nil {
+		t.Fatal("expected non-nil publisher")
+	}
+	if nc != nil {
+		t.Fatal("expected nil nats connection for default (noop) bus")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func for default bus")
+	}
+}
+
+func TestBuildEventBus_NATSFallbackToNoop(t *testing.T) {
+	// No NATS server running — should fall back to noop
+	t.Setenv("EVENT_BUS", "nats")
+	t.Setenv("EVENT_BUS_NATS_URL", "nats://127.0.0.1:14222") // unreachable port
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	pub, nc, stop := buildEventBus(context.Background(), logger)
+	if pub == nil {
+		t.Fatal("expected non-nil publisher (noop fallback)")
+	}
+	if nc != nil {
+		t.Fatal("expected nil nats connection on fallback")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func on fallback")
+	}
+}
+
+func TestBuildOutboxRelay_Disabled(t *testing.T) {
+	t.Setenv("EVENT_BUS_OUTBOX", "false")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	pub, stop := buildOutboxRelay(context.Background(), logger, nil)
+	if pub != nil {
+		t.Fatal("expected nil publisher when outbox disabled")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func when outbox disabled")
+	}
+}
+
+func TestBuildOutboxRelay_DefaultDisabled(t *testing.T) {
+	_ = os.Unsetenv("EVENT_BUS_OUTBOX")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	pub, stop := buildOutboxRelay(context.Background(), logger, nil)
+	if pub != nil {
+		t.Fatal("expected nil publisher when outbox not set")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func when outbox not set")
+	}
+}
+
+func TestBuildOutboxRelay_EnabledNoValkey(t *testing.T) {
+	t.Setenv("EVENT_BUS_OUTBOX", "true")
+	t.Setenv("VALKEY_ADDR", "127.0.0.1:16379") // unreachable
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	pub, stop := buildOutboxRelay(context.Background(), logger, nil)
+	if pub != nil {
+		t.Fatal("expected nil publisher when valkey unreachable")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func when valkey unreachable")
+	}
+}
+
+func TestBuildOutboxRelay_EnabledHostPort(t *testing.T) {
+	t.Setenv("EVENT_BUS_OUTBOX", "true")
+	_ = os.Unsetenv("VALKEY_ADDR")
+	t.Setenv("VALKEY_HOST", "127.0.0.1")
+	t.Setenv("VALKEY_PORT", "16379") // unreachable
+	t.Setenv("EVENT_BUS_OUTBOX_KEY_PREFIX", "test:outbox")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	pub, stop := buildOutboxRelay(context.Background(), logger, nil)
+	if pub != nil {
+		t.Fatal("expected nil publisher when valkey unreachable via host:port")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func when valkey unreachable via host:port")
+	}
+}
+
+func TestBuildEventBus_UnknownValue(t *testing.T) {
+	t.Setenv("EVENT_BUS", "kafka") // unsupported, falls to default
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	pub, nc, stop := buildEventBus(context.Background(), logger)
+	if pub == nil {
+		t.Fatal("expected non-nil publisher for unknown bus type")
+	}
+	if nc != nil {
+		t.Fatal("expected nil nats connection for unknown bus type")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop for unknown bus type")
+	}
+}
