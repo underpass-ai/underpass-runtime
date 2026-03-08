@@ -36,6 +36,8 @@ type DockerClient interface {
 	ContainerInspect(ctx context.Context, containerID string) (container.InspectResponse, error)
 	ContainerStop(ctx context.Context, containerID string, options container.StopOptions) error
 	ContainerRemove(ctx context.Context, containerID string, options container.RemoveOptions) error
+	ContainerList(ctx context.Context, options container.ListOptions) ([]container.Summary, error)
+	ContainerLogs(ctx context.Context, containerID string, options container.LogsOptions) (io.ReadCloser, error)
 	ContainerExecCreate(ctx context.Context, containerID string, config container.ExecOptions) (container.ExecCreateResponse, error)
 	ContainerExecAttach(ctx context.Context, execID string, config container.ExecAttachOptions) (types.HijackedResponse, error)
 	ContainerExecInspect(ctx context.Context, execID string) (container.ExecInspect, error)

@@ -59,7 +59,7 @@ func TestRegistryDisable_ExcludesBundle(t *testing.T) {
 }
 
 func TestRegistryDisableAll_ProducesZeroHandlers(t *testing.T) {
-	registry := NewRegistry("core", "repo", "secops", "messaging", "data", "image")
+	registry := NewRegistry("core", "repo", "secops", "messaging", "data", "image", "docker")
 	registry.RegisterDefaults()
 
 	handlers := registry.Handlers(localConfig())
@@ -133,11 +133,20 @@ func TestBundleNames(t *testing.T) {
 		{MessagingBundle(), "messaging"},
 		{DataBundle(), "data"},
 		{ImageBundle(), "image"},
+		{DockerBundle(), "docker"},
 	}
 	for _, tt := range tests {
 		if tt.b.Name != tt.name {
 			t.Fatalf("expected bundle name %q, got %q", tt.name, tt.b.Name)
 		}
+	}
+}
+
+func TestDockerBundle_NilClient(t *testing.T) {
+	b := DockerBundle()
+	handlers := b.Build(localConfig())
+	if handlers != nil {
+		t.Fatalf("expected nil handlers for nil DockerClient, got %d", len(handlers))
 	}
 }
 

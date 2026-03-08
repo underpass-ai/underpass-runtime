@@ -1440,6 +1440,10 @@ func isKubernetesRuntime(session domain.Session) bool {
 	return session.Runtime.Kind == domain.RuntimeKindKubernetes
 }
 
+func isDockerRuntime(session domain.Session) bool {
+	return session.Runtime.Kind == domain.RuntimeKindDocker
+}
+
 func resolveKubernetesRunner(runner app.CommandRunner) (app.CommandRunner, *domain.Error) {
 	if runner == nil {
 		return nil, &domain.Error{

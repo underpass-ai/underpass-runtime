@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,12 @@ func (f *fakeDockerExecClient) ContainerStop(_ context.Context, _ string, _ cont
 }
 func (f *fakeDockerExecClient) ContainerRemove(_ context.Context, _ string, _ container.RemoveOptions) error {
 	return nil
+}
+func (f *fakeDockerExecClient) ContainerList(_ context.Context, _ container.ListOptions) ([]container.Summary, error) {
+	return nil, nil
+}
+func (f *fakeDockerExecClient) ContainerLogs(_ context.Context, _ string, _ container.LogsOptions) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
 }
 func (f *fakeDockerExecClient) ContainerExecCreate(_ context.Context, _ string, _ container.ExecOptions) (container.ExecCreateResponse, error) {
 	return container.ExecCreateResponse{ID: f.execCreateID}, f.execCreateErr
