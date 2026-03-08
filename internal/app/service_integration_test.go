@@ -252,6 +252,68 @@ func setupService(t *testing.T) *app.Service {
 	return app.NewService(workspaceManager, catalog, policyEngine, engine, artifactStore, auditLogger)
 }
 
+func TestService_DiscoverTools(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	discovery, discErr := svc.DiscoverTools(ctx, session.ID)
+	if discErr != nil {
+		t.Fatalf("unexpected discovery error: %v", discErr)
+	}
+	if len(discovery.Tools) == 0 {
+		t.Fatal("expected tools in discovery response")
+	}
+	if discovery.Total == 0 {
+		t.Fatal("expected total > 0")
+	}
+	if discovery.Filtered > discovery.Total {
+		t.Fatalf("filtered (%d) should not exceed total (%d)", discovery.Filtered, discovery.Total)
+	}
+
+	// Verify compact fields
+	first := discovery.Tools[0]
+	if first.Name == "" {
+		t.Fatal("expected non-empty tool name")
+	}
+	if first.Description == "" {
+		t.Fatal("expected non-empty description")
+	}
+	if first.Risk == "" {
+		t.Fatal("expected non-empty risk")
+	}
+	if len(first.Tags) == 0 {
+		t.Fatal("expected at least one tag")
+	}
+	if first.Cost == "" {
+		t.Fatal("expected non-empty cost")
+	}
+	if len(first.Description) > 120 {
+		t.Fatalf("description should be <=120 chars, got %d", len(first.Description))
+	}
+
+	// Verify tools are sorted
+	for i := 1; i < len(discovery.Tools); i++ {
+		if discovery.Tools[i].Name < discovery.Tools[i-1].Name {
+			t.Fatalf("tools not sorted: %s before %s", discovery.Tools[i-1].Name, discovery.Tools[i].Name)
+		}
+	}
+}
+
+func TestService_DiscoverTools_InvalidSession(t *testing.T) {
+	svc := setupService(t)
+	_, discErr := svc.DiscoverTools(context.Background(), "nonexistent")
+	if discErr == nil {
+		t.Fatal("expected error for nonexistent session")
+	}
+}
+
 func mustJSON(t *testing.T, payload any) json.RawMessage {
 	t.Helper()
 	data, err := json.Marshal(payload)
