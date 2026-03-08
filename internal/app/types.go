@@ -135,3 +135,13 @@ type AuditLogger interface {
 type EventPublisher interface {
 	Publish(ctx context.Context, event domain.DomainEvent) error
 }
+
+// SnapshotRef identifies a stored workspace snapshot.
+type SnapshotRef struct {
+	ID        string    `json:"id"`
+	SessionID string    `json:"session_id"`
+	Path      string    `json:"path"`
+	Size      int64     `json:"size"`
+	CreatedAt time.Time `json:"created_at"`
+	Checksum  string    `json:"checksum"`
+}
