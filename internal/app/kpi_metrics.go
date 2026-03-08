@@ -95,11 +95,11 @@ func (k *KPIMetrics) PrometheusText() string {
 	b.WriteString("# HELP workspace_tool_calls_per_task Total tool invocations by task context.\n")
 	b.WriteString("# TYPE workspace_tool_calls_per_task counter\n")
 	for _, task := range sortedInnerKeys(k.toolCallsPerTask) {
-		b.WriteString(fmt.Sprintf( //nolint:gocritic // Prometheus exposition format requires explicit quotes
+		fmt.Fprintf(&b, //nolint:gocritic // Prometheus exposition format requires explicit quotes
 			"workspace_tool_calls_per_task{task=\"%s\"} %d\n",
 			escapePrometheusLabelValue(task),
 			k.toolCallsPerTask[task],
-		))
+		)
 	}
 
 	b.WriteString("# HELP workspace_success_on_first_tool Whether the first tool in a session succeeded.\n")
@@ -108,8 +108,8 @@ func (k *KPIMetrics) PrometheusText() string {
 	if k.firstToolTotal > 0 {
 		rate = float64(k.firstToolSuccess) / float64(k.firstToolTotal)
 	}
-	b.WriteString(fmt.Sprintf("workspace_success_on_first_tool_rate %f\n", rate))
-	b.WriteString(fmt.Sprintf("workspace_success_on_first_tool_total %d\n", k.firstToolTotal))
+	fmt.Fprintf(&b, "workspace_success_on_first_tool_rate %f\n", rate)
+	fmt.Fprintf(&b, "workspace_success_on_first_tool_total %d\n", k.firstToolTotal)
 
 	b.WriteString("# HELP workspace_recommendation_acceptance_rate Rate of recommended tools actually used.\n")
 	b.WriteString("# TYPE workspace_recommendation_acceptance_rate gauge\n")
@@ -117,8 +117,8 @@ func (k *KPIMetrics) PrometheusText() string {
 	if k.recommendedTotal > 0 {
 		recRate = float64(k.recommendedUsed) / float64(k.recommendedTotal)
 	}
-	b.WriteString(fmt.Sprintf("workspace_recommendation_acceptance_rate %f\n", recRate))
-	b.WriteString(fmt.Sprintf("workspace_recommendation_total %d\n", k.recommendedTotal))
+	fmt.Fprintf(&b, "workspace_recommendation_acceptance_rate %f\n", recRate)
+	fmt.Fprintf(&b, "workspace_recommendation_total %d\n", k.recommendedTotal)
 
 	b.WriteString("# HELP workspace_policy_denial_rate_bad_recommendation Rate of policy denials on recommended tools.\n")
 	b.WriteString("# TYPE workspace_policy_denial_rate_bad_recommendation gauge\n")
@@ -126,11 +126,11 @@ func (k *KPIMetrics) PrometheusText() string {
 	if k.policyDenialAfterRecN > 0 {
 		denialRate = float64(k.policyDenialAfterRec) / float64(k.policyDenialAfterRecN)
 	}
-	b.WriteString(fmt.Sprintf("workspace_policy_denial_rate_bad_recommendation %f\n", denialRate))
+	fmt.Fprintf(&b, "workspace_policy_denial_rate_bad_recommendation %f\n", denialRate)
 
 	b.WriteString("# HELP workspace_context_bytes_saved Total bytes saved by compact discovery.\n")
 	b.WriteString("# TYPE workspace_context_bytes_saved counter\n")
-	b.WriteString(fmt.Sprintf("workspace_context_bytes_saved %d\n", k.contextBytesSaved))
+	fmt.Fprintf(&b, "workspace_context_bytes_saved %d\n", k.contextBytesSaved)
 
 	return b.String()
 }
