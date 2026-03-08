@@ -48,16 +48,16 @@ func (a *containerDockerAdapter) invokePS(ctx context.Context, _ domain.Session,
 	}
 
 	entries := make([]map[string]any, 0, len(containers))
-	for _, c := range containers {
+	for i := range containers {
 		name := ""
-		if len(c.Names) > 0 {
-			name = strings.TrimPrefix(c.Names[0], "/")
+		if len(containers[i].Names) > 0 {
+			name = strings.TrimPrefix(containers[i].Names[0], "/")
 		}
 		entries = append(entries, map[string]any{
-			"id":     c.ID[:12],
-			"image":  c.Image,
+			"id":     containers[i].ID[:12],
+			"image":  containers[i].Image,
 			"name":   name,
-			"status": c.Status,
+			"status": containers[i].Status,
 		})
 	}
 

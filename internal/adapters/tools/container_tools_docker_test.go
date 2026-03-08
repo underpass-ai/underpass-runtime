@@ -329,4 +329,3 @@ func TestContainerDockerAdapter_Exec_AttachError(t *testing.T) {
 		t.Fatal("expected exec attach error")
 	}
 }
-
