@@ -425,3 +425,52 @@ func TestBuildArtifactStore_S3(t *testing.T) {
 		t.Fatal("expected non-nil S3 store")
 	}
 }
+
+func TestBuildTelemetry_Default(t *testing.T) {
+	_ = os.Unsetenv("TELEMETRY_BACKEND")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	rec, q, stop := buildTelemetry(context.Background(), logger)
+	if rec == nil {
+		t.Fatal("expected non-nil recorder")
+	}
+	if q == nil {
+		t.Fatal("expected non-nil querier")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func for default (noop)")
+	}
+}
+
+func TestBuildTelemetry_Memory(t *testing.T) {
+	t.Setenv("TELEMETRY_BACKEND", "memory")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	rec, q, stop := buildTelemetry(context.Background(), logger)
+	if rec == nil {
+		t.Fatal("expected non-nil recorder")
+	}
+	if q == nil {
+		t.Fatal("expected non-nil querier")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func for memory")
+	}
+}
+
+func TestBuildTelemetry_ValkeyFallback(t *testing.T) {
+	t.Setenv("TELEMETRY_BACKEND", "valkey")
+	t.Setenv("VALKEY_ADDR", "127.0.0.1:16379") // unreachable
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	rec, q, stop := buildTelemetry(context.Background(), logger)
+	if rec == nil {
+		t.Fatal("expected non-nil recorder (fallback)")
+	}
+	if q == nil {
+		t.Fatal("expected non-nil querier (fallback)")
+	}
+	if stop != nil {
+		t.Fatal("expected nil stop func on valkey fallback")
+	}
+}

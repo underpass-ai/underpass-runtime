@@ -29,17 +29,20 @@ const (
 )
 
 type Service struct {
-	workspace WorkspaceManager
-	catalog   CapabilityRegistry
-	policy    Authorizer
-	tools     Invoker
-	invStore  InvocationStore
-	artifacts ArtifactStore
-	audit     AuditLogger
-	events    EventPublisher
-	quotas    *invocationQuotaLimiter
-	metrics   *invocationMetrics
-	tracer    trace.Tracer
+	workspace  WorkspaceManager
+	catalog    CapabilityRegistry
+	policy     Authorizer
+	tools      Invoker
+	invStore   InvocationStore
+	artifacts  ArtifactStore
+	audit      AuditLogger
+	events     EventPublisher
+	telemetry  TelemetryRecorder
+	telemetryQ TelemetryQuerier
+	kpiMetrics *KPIMetrics
+	quotas     *invocationQuotaLimiter
+	metrics    *invocationMetrics
+	tracer     trace.Tracer
 }
 
 func NewService(
@@ -56,17 +59,19 @@ func NewService(
 		resolvedInvocationStore = invStore[0]
 	}
 	return &Service{
-		workspace: workspace,
-		catalog:   catalog,
-		policy:    policy,
-		tools:     tools,
-		invStore:  resolvedInvocationStore,
-		artifacts: artifacts,
-		audit:     audit,
-		events:    &noopEventPublisher{},
-		quotas:    newInvocationQuotaLimiterFromEnv(),
-		metrics:   newInvocationMetrics(),
-		tracer:    otel.Tracer("workspace.service"),
+		workspace:  workspace,
+		catalog:    catalog,
+		policy:     policy,
+		tools:      tools,
+		invStore:   resolvedInvocationStore,
+		artifacts:  artifacts,
+		audit:      audit,
+		events:     &noopEventPublisher{},
+		telemetry:  noopTelemetryRecorder{},
+		telemetryQ: noopTelemetryQuerier{},
+		quotas:     newInvocationQuotaLimiterFromEnv(),
+		metrics:    newInvocationMetrics(),
+		tracer:     otel.Tracer("workspace.service"),
 	}
 }
 
@@ -77,10 +82,35 @@ func (s *Service) SetEventPublisher(pub EventPublisher) {
 	}
 }
 
+// SetTelemetry replaces the default noop telemetry recorder and querier.
+func (s *Service) SetTelemetry(rec TelemetryRecorder, q TelemetryQuerier) {
+	if rec != nil {
+		s.telemetry = rec
+	}
+	if q != nil {
+		s.telemetryQ = q
+	}
+}
+
 // noopEventPublisher is the zero-dependency default that discards events.
 type noopEventPublisher struct{}
 
 func (noopEventPublisher) Publish(context.Context, domain.DomainEvent) error { return nil }
+
+// noopTelemetryRecorder discards all telemetry records.
+type noopTelemetryRecorder struct{}
+
+func (noopTelemetryRecorder) Record(context.Context, TelemetryRecord) error { return nil }
+
+// noopTelemetryQuerier returns empty stats.
+type noopTelemetryQuerier struct{}
+
+func (noopTelemetryQuerier) ToolStats(context.Context, string) (ToolStats, bool, error) {
+	return ToolStats{}, false, nil
+}
+func (noopTelemetryQuerier) AllToolStats(context.Context) (map[string]ToolStats, error) {
+	return nil, nil
+}
 
 func (s *Service) PrometheusMetrics() string {
 	if s.metrics == nil {
@@ -390,6 +420,7 @@ func (s *Service) completeToolInvocation(
 		_ = s.storeInvocation(ctx, inv)
 		s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
 		s.publishInvocationCompleted(ctx, tc.session, inv)
+		s.recordTelemetry(ctx, tc.session, inv, tc.runResult)
 		return inv, runServiceError(toolCtx, tc.runErr)
 	}
 	if artifactErr != nil {
@@ -397,6 +428,7 @@ func (s *Service) completeToolInvocation(
 		_ = s.storeInvocation(ctx, inv)
 		s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
 		s.publishInvocationCompleted(ctx, tc.session, inv)
+		s.recordTelemetry(ctx, tc.session, inv, tc.runResult)
 		return inv, internalError(artifactErr.Error())
 	}
 	if validationErr := validateOutputAgainstSchema(tc.capability.OutputSchema, tc.runResult.Output); validationErr != nil {
@@ -404,6 +436,7 @@ func (s *Service) completeToolInvocation(
 		_ = s.storeInvocation(ctx, inv)
 		s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
 		s.publishInvocationCompleted(ctx, tc.session, inv)
+		s.recordTelemetry(ctx, tc.session, inv, tc.runResult)
 		return inv, internalError(validationErr.Error())
 	}
 	endedAt := time.Now().UTC()
@@ -415,6 +448,7 @@ func (s *Service) completeToolInvocation(
 	}
 	s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
 	s.publishInvocationCompleted(ctx, tc.session, inv)
+	s.recordTelemetry(ctx, tc.session, inv, tc.runResult)
 	return inv, nil
 }
 
@@ -1034,6 +1068,50 @@ func envInt(name string, fallback int) int {
 func samePrincipalIdentity(expected, actual domain.Principal) bool {
 	return strings.TrimSpace(expected.TenantID) == strings.TrimSpace(actual.TenantID) &&
 		strings.TrimSpace(expected.ActorID) == strings.TrimSpace(actual.ActorID)
+}
+
+// recordTelemetry captures a telemetry record for a completed invocation.
+// Errors are silently ignored — telemetry must not block the primary operation.
+func (s *Service) recordTelemetry(ctx context.Context, session domain.Session, inv domain.Invocation, runResult ToolRunResult) {
+	var outputBytes int64
+	if inv.Output != nil {
+		if data, marshalErr := json.Marshal(inv.Output); marshalErr == nil {
+			outputBytes = int64(len(data))
+		}
+	}
+	var logsBytes int64
+	for i := range inv.Logs {
+		logsBytes += int64(len(inv.Logs[i].Message))
+	}
+	var artifactBytes int64
+	for i := range runResult.Artifacts {
+		artifactBytes += int64(len(runResult.Artifacts[i].Data))
+	}
+	errorCode := ""
+	if inv.Error != nil {
+		errorCode = inv.Error.Code
+	}
+	toolFamily := ""
+	if idx := strings.IndexByte(inv.ToolName, '.'); idx > 0 {
+		toolFamily = inv.ToolName[:idx]
+	}
+	rec := TelemetryRecord{
+		InvocationID:  inv.ID,
+		SessionID:     session.ID,
+		ToolName:      inv.ToolName,
+		ToolFamily:    toolFamily,
+		RuntimeKind:   string(session.Runtime.Kind),
+		TenantID:      session.Principal.TenantID,
+		Status:        string(inv.Status),
+		ErrorCode:     errorCode,
+		DurationMs:    inv.DurationMS,
+		OutputBytes:   outputBytes,
+		LogsBytes:     logsBytes,
+		ArtifactCount: len(inv.Artifacts),
+		ArtifactBytes: artifactBytes,
+		Timestamp:     time.Now().UTC(),
+	}
+	_ = s.telemetry.Record(ctx, rec)
 }
 
 // publishEvent builds a DomainEvent and publishes it. Errors are silently
