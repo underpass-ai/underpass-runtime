@@ -14,8 +14,10 @@ import (
 	"time"
 
 	dockerclient "github.com/docker/docker/client"
+	"github.com/nats-io/nats.go"
 
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
+	"github.com/underpass-ai/underpass-runtime/internal/adapters/eventbus"
 	invocationstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/invocationstore"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/policy"
 	sessionstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/sessionstore"
@@ -108,6 +110,8 @@ func main() {
 	}
 
 	service := app.NewService(workspaceManager, catalog, policyEngine, engine, artifactStore, auditLogger, invocationStore)
+	eventPub, natsConn, relayStop := buildEventBus(context.Background(), logger)
+	service.SetEventPublisher(eventPub)
 	authConfig, err := httpapi.AuthConfigFromEnv()
 	if err != nil {
 		logger.Error("failed to initialize auth configuration", "error", err)
@@ -131,6 +135,12 @@ func main() {
 	<-stop
 	if podJanitorCancel != nil {
 		podJanitorCancel()
+	}
+	if relayStop != nil {
+		relayStop()
+	}
+	if natsConn != nil {
+		natsConn.Close()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -392,4 +402,69 @@ func startHTTPServer(srv *http.Server, port, workspaceRoot string, logger *slog.
 			os.Exit(1)
 		}
 	}()
+}
+
+// buildEventBus constructs the event publisher stack based on EVENT_BUS env var.
+// Returns the publisher, optional NATS connection (for cleanup), and optional
+// relay stop function.
+//
+// EVENT_BUS=none  → NoopPublisher (default)
+// EVENT_BUS=nats  → OutboxPublisher → OutboxRelay → NATSPublisher
+func buildEventBus(ctx context.Context, logger *slog.Logger) (app.EventPublisher, *nats.Conn, func()) {
+	bus := strings.ToLower(strings.TrimSpace(envOrDefault("EVENT_BUS", "none")))
+	switch bus {
+	case "nats":
+		natsPub, nc, err := eventbus.NewNATSPublisherFromURL(
+			ctx,
+			envOrDefault("EVENT_BUS_NATS_URL", "nats://localhost:4222"),
+			envOrDefault("EVENT_BUS_NATS_STREAM", ""),
+		)
+		if err != nil {
+			logger.Error("failed to connect to NATS event bus, falling back to noop", "error", err)
+			return eventbus.NewNoopPublisher(logger), nil, nil
+		}
+
+		// Outbox backed by Valkey if available, otherwise use NATS directly.
+		outboxPub, outboxRelay := buildOutboxRelay(ctx, logger, natsPub)
+		if outboxPub != nil {
+			logger.Info("event bus initialized", "bus", "nats+outbox")
+			return outboxPub, nc, outboxRelay
+		}
+
+		logger.Info("event bus initialized", "bus", "nats")
+		return natsPub, nc, nil
+
+	default:
+		logger.Info("event bus initialized", "bus", "noop")
+		return eventbus.NewNoopPublisher(logger), nil, nil
+	}
+}
+
+// buildOutboxRelay creates an outbox-backed publisher with a relay goroutine
+// that forwards events to the downstream publisher. Returns nil if Valkey
+// outbox is not configured.
+func buildOutboxRelay(ctx context.Context, logger *slog.Logger, downstream app.EventPublisher) (app.EventPublisher, func()) {
+	if strings.ToLower(strings.TrimSpace(envOrDefault("EVENT_BUS_OUTBOX", "false"))) != "true" {
+		return nil, nil
+	}
+
+	address := strings.TrimSpace(os.Getenv("VALKEY_ADDR"))
+	if address == "" {
+		host := strings.TrimSpace(envOrDefault("VALKEY_HOST", "localhost"))
+		port := strings.TrimSpace(envOrDefault("VALKEY_PORT", "6379"))
+		address = fmt.Sprintf("%s:%s", host, port)
+	}
+	password := os.Getenv("VALKEY_PASSWORD")
+	db := parseIntOrDefault(os.Getenv("VALKEY_DB"), 0)
+	keyPrefix := envOrDefault("EVENT_BUS_OUTBOX_KEY_PREFIX", "workspace:outbox")
+
+	outbox, err := eventbus.NewOutboxPublisherFromAddress(ctx, address, password, db, keyPrefix)
+	if err != nil {
+		logger.Warn("outbox valkey connection failed, skipping outbox relay", "error", err)
+		return nil, nil
+	}
+
+	relay := eventbus.NewOutboxRelay(outbox, downstream, logger)
+	relay.Start()
+	return outbox, relay.Stop
 }
