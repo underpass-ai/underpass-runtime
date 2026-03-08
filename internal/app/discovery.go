@@ -41,12 +41,12 @@ type FullTool struct {
 
 // ToolStats holds aggregated telemetry per tool. Populated by Phase 6 (WS-TEL-002).
 type ToolStats struct {
-	SuccessRate  float64 `json:"success_rate"`
-	P50Duration  int64   `json:"p50_duration_ms"`
-	P95Duration  int64   `json:"p95_duration_ms"`
-	AvgOutputKB  float64 `json:"avg_output_kb"`
-	DenyRate     float64 `json:"deny_rate"`
-	InvocationN  int     `json:"invocation_count"`
+	SuccessRate float64 `json:"success_rate"`
+	P50Duration int64   `json:"p50_duration_ms"`
+	P95Duration int64   `json:"p95_duration_ms"`
+	AvgOutputKB float64 `json:"avg_output_kb"`
+	DenyRate    float64 `json:"deny_rate"`
+	InvocationN int     `json:"invocation_count"`
 }
 
 // DiscoveryResponse is returned by the discovery endpoint.

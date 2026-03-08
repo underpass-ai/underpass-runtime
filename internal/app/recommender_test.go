@@ -127,8 +127,8 @@ func TestTokenize(t *testing.T) {
 	}{
 		{"", 0},
 		{"run unit tests", 3},
-		{"a", 0},                    // single char filtered
-		{"read the file", 3},        // "the" kept (len>=2)
+		{"a", 0},                      // single char filtered
+		{"read the file", 3},          // "the" kept (len>=2)
 		{"  spaces  everywhere  ", 2}, // trimmed
 		{"punctuation! marks?", 2},
 	}
