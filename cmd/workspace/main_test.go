@@ -246,6 +246,42 @@ func TestParseDisabledBundles(t *testing.T) {
 	}
 }
 
+func TestBuildEventPublisher_None(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	t.Setenv("EVENT_BUS", "none")
+	pub, err := buildEventPublisher(logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pub == nil {
+		t.Fatal("expected non-nil noop publisher")
+	}
+}
+
+func TestBuildEventPublisher_Default(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	_ = os.Unsetenv("EVENT_BUS")
+	pub, err := buildEventPublisher(logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pub == nil {
+		t.Fatal("expected non-nil publisher for default")
+	}
+}
+
+func TestBuildEventPublisher_Unsupported(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	t.Setenv("EVENT_BUS", "kafka")
+	_, err := buildEventPublisher(logger)
+	if err == nil {
+		t.Fatal("expected error for unsupported backend")
+	}
+}
+
 func TestBuildToolRegistry_Local(t *testing.T) {
 	registry := buildToolRegistry(nil, "default")
 	if registry == nil {

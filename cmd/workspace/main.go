@@ -16,6 +16,7 @@ import (
 	dockerclient "github.com/docker/docker/client"
 
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
+	"github.com/underpass-ai/underpass-runtime/internal/adapters/eventbus"
 	invocationstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/invocationstore"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/policy"
 	sessionstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/sessionstore"
@@ -108,6 +109,12 @@ func main() {
 	}
 
 	service := app.NewService(workspaceManager, catalog, policyEngine, engine, artifactStore, auditLogger, invocationStore)
+	if eventPub, pubErr := buildEventPublisher(logger); pubErr != nil {
+		logger.Error("failed to initialize event publisher", "error", pubErr)
+		os.Exit(1)
+	} else if eventPub != nil {
+		service.SetEventPublisher(eventPub)
+	}
 	authConfig, err := httpapi.AuthConfigFromEnv()
 	if err != nil {
 		logger.Error("failed to initialize auth configuration", "error", err)
@@ -382,6 +389,30 @@ func setupTelemetry(ctx context.Context, logger *slog.Logger) (func(context.Cont
 		"insecure", parseBoolOrDefault(os.Getenv("WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE"), false),
 	)
 	return tracerProvider.Shutdown, nil
+}
+
+func buildEventPublisher(logger *slog.Logger) (app.EventPublisher, error) {
+	backend := strings.ToLower(strings.TrimSpace(envOrDefault("EVENT_BUS", "none")))
+	switch backend {
+	case "", "none":
+		logger.Info("event bus initialized", "backend", "noop")
+		return eventbus.NewNoopPublisher(logger), nil
+	case "nats":
+		url := strings.TrimSpace(envOrDefault("EVENT_BUS_NATS_URL", "nats://localhost:4222"))
+		prefix := strings.TrimSpace(envOrDefault("EVENT_BUS_NATS_SUBJECT_PREFIX", "workspace.events"))
+		pub, err := eventbus.NewNATSPublisher(eventbus.NATSPublisherConfig{
+			URL:           url,
+			SubjectPrefix: prefix,
+			Logger:        logger,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("nats event publisher: %w", err)
+		}
+		logger.Info("event bus initialized", "backend", "nats", "url", url, "subject_prefix", prefix)
+		return pub, nil
+	default:
+		return nil, fmt.Errorf("unsupported EVENT_BUS backend: %s", backend)
+	}
 }
 
 func startHTTPServer(srv *http.Server, port, workspaceRoot string, logger *slog.Logger) {
