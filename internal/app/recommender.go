@@ -40,7 +40,17 @@ type RecommendationsResponse struct {
 	TopK            int              `json:"top_k"`
 }
 
-// RecommendTools returns ranked tool recommendations based on static heuristics.
+const (
+	// Telemetry-based scoring weights (WS-TEL-003)
+	telSuccessBonus   = 0.15 // bonus for high success rate tools
+	telSuccessMinN    = 5    // minimum invocations to apply success bonus
+	telDurationPenP95 = 0.10 // penalty for tools in top p95 duration
+	telDenyPenalty    = 0.10 // penalty for tools with high deny rate
+	telDenyThreshold  = 0.20 // deny rate above this triggers penalty
+)
+
+// RecommendTools returns ranked tool recommendations based on static heuristics
+// enhanced with telemetry-based scoring when available (WS-TEL-003).
 // Policy-denied and runtime-unsupported tools are already excluded by ListTools.
 func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint string, topK int) (RecommendationsResponse, *ServiceError) {
 	tools, serviceErr := s.ListTools(ctx, sessionID)
@@ -55,10 +65,18 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		topK = maxTopK
 	}
 
+	// Load telemetry stats for context-aware scoring
+	allStats, _ := s.telemetryQ.AllToolStats(ctx)
+
 	hintTokens := tokenize(taskHint)
 	recs := make([]Recommendation, 0, len(tools))
 	for i := range tools {
-		recs = append(recs, scoreTool(&tools[i], hintTokens))
+		rec := scoreTool(&tools[i], hintTokens)
+		// Apply telemetry-based adjustments if stats exist
+		if allStats != nil {
+			rec = applyTelemetryBoost(rec, allStats[tools[i].Name])
+		}
+		recs = append(recs, rec)
 	}
 
 	sort.Slice(recs, func(i, j int) bool {
@@ -77,6 +95,37 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		TaskHint:        taskHint,
 		TopK:            topK,
 	}, nil
+}
+
+// applyTelemetryBoost adjusts a recommendation score using historical telemetry.
+func applyTelemetryBoost(rec Recommendation, stats ToolStats) Recommendation {
+	if stats.InvocationN < telSuccessMinN {
+		return rec // not enough data
+	}
+
+	// Reward high success rate
+	if stats.SuccessRate >= 0.90 {
+		rec.Score += telSuccessBonus
+		rec.Why += fmt.Sprintf(", %.0f%% success rate (%d invocations)", stats.SuccessRate*100, stats.InvocationN)
+	} else if stats.SuccessRate < 0.50 {
+		rec.Score -= telSuccessBonus
+		rec.Why += fmt.Sprintf(", low success rate %.0f%%", stats.SuccessRate*100)
+	}
+
+	// Penalize tools with slow p95
+	if stats.P95Duration > 10000 {
+		rec.Score -= telDurationPenP95
+		rec.Why += fmt.Sprintf(", slow p95 (%dms)", stats.P95Duration)
+	}
+
+	// Penalize tools with high deny rate
+	if stats.DenyRate > telDenyThreshold {
+		rec.Score -= telDenyPenalty
+		rec.Why += fmt.Sprintf(", %.0f%% deny rate", stats.DenyRate*100)
+	}
+
+	rec.Score = math.Round(rec.Score*100) / 100
+	return rec
 }
 
 // scoreTool applies static heuristic scoring to a capability.

@@ -104,13 +104,22 @@ func discoverCompact(tools []domain.Capability, total int, filter DiscoveryFilte
 }
 
 func (s *Service) discoverFull(tools []domain.Capability, total int, filter DiscoveryFilter) DiscoveryResponse {
+	// Load telemetry stats to populate the stats block in full detail.
+	allStats, _ := s.telemetryQ.AllToolStats(context.Background())
+
 	full := make([]FullTool, 0, len(tools))
 	for i := range tools {
 		ct := toCompactTool(&tools[i])
 		if !matchesFilter(ct, filter) {
 			continue
 		}
-		full = append(full, toFullTool(&tools[i], ct.Tags, ct.Cost))
+		ft := toFullTool(&tools[i], ct.Tags, ct.Cost)
+		if allStats != nil {
+			if ts, ok := allStats[tools[i].Name]; ok && ts.InvocationN > 0 {
+				ft.Stats = &ts
+			}
+		}
+		full = append(full, ft)
 	}
 	sort.Slice(full, func(i, j int) bool {
 		return full[i].Name < full[j].Name

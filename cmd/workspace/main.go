@@ -22,6 +22,7 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/policy"
 	sessionstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/sessionstore"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/storage"
+	telemetryadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/telemetry"
 	tooladapter "github.com/underpass-ai/underpass-runtime/internal/adapters/tools"
 	workspaceadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/workspace"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
@@ -116,6 +117,9 @@ func main() {
 	service := app.NewService(workspaceManager, catalog, policyEngine, engine, artifactStore, auditLogger, invocationStore)
 	eventPub, natsConn, relayStop := buildEventBus(context.Background(), logger)
 	service.SetEventPublisher(eventPub)
+	telRecorder, telQuerier, telStop := buildTelemetry(context.Background(), logger)
+	service.SetTelemetry(telRecorder, telQuerier)
+	service.SetKPIMetrics(app.NewKPIMetrics())
 	authConfig, err := httpapi.AuthConfigFromEnv()
 	if err != nil {
 		logger.Error("failed to initialize auth configuration", "error", err)
@@ -142,6 +146,9 @@ func main() {
 	}
 	if relayStop != nil {
 		relayStop()
+	}
+	if telStop != nil {
+		telStop()
 	}
 	if natsConn != nil {
 		natsConn.Close()
@@ -471,6 +478,56 @@ func buildOutboxRelay(ctx context.Context, logger *slog.Logger, downstream app.E
 	relay := eventbus.NewOutboxRelay(outbox, downstream, logger)
 	relay.Start()
 	return outbox, relay.Stop
+}
+
+// buildTelemetry creates the telemetry recorder and querier based on
+// TELEMETRY_BACKEND env var.
+//
+// TELEMETRY_BACKEND=none   → NoopRecorder + InMemoryAggregator (default)
+// TELEMETRY_BACKEND=memory → InMemoryAggregator (records + queries)
+// TELEMETRY_BACKEND=valkey → ValkeyRecorder + Aggregator (background loop)
+func buildTelemetry(ctx context.Context, logger *slog.Logger) (app.TelemetryRecorder, app.TelemetryQuerier, func()) {
+	backend := strings.ToLower(strings.TrimSpace(envOrDefault("TELEMETRY_BACKEND", "none")))
+	switch backend {
+	case "memory":
+		agg := telemetryadapter.NewInMemoryAggregator()
+		logger.Info("telemetry initialized", "backend", "memory")
+		return agg, agg, nil
+
+	case "valkey":
+		address := strings.TrimSpace(os.Getenv("VALKEY_ADDR"))
+		if address == "" {
+			host := strings.TrimSpace(envOrDefault("VALKEY_HOST", "localhost"))
+			port := strings.TrimSpace(envOrDefault("VALKEY_PORT", "6379"))
+			address = fmt.Sprintf("%s:%s", host, port)
+		}
+		password := os.Getenv("VALKEY_PASSWORD")
+		db := parseIntOrDefault(os.Getenv("VALKEY_DB"), 0)
+		keyPrefix := envOrDefault("TELEMETRY_KEY_PREFIX", "workspace:telemetry")
+		ttlSeconds := parseIntOrDefault(os.Getenv("TELEMETRY_TTL_SECONDS"), 604800) // 7 days
+
+		rec, err := telemetryadapter.NewValkeyRecorderFromAddress(
+			ctx, address, password, db, keyPrefix, time.Duration(ttlSeconds)*time.Second,
+		)
+		if err != nil {
+			logger.Warn("telemetry valkey connection failed, falling back to memory", "error", err)
+			agg := telemetryadapter.NewInMemoryAggregator()
+			return agg, agg, nil
+		}
+
+		intervalSec := parseIntOrDefault(os.Getenv("TELEMETRY_AGGREGATION_INTERVAL_SECONDS"), 300)
+		agg := telemetryadapter.NewAggregator(rec, logger,
+			telemetryadapter.WithAggregationInterval(time.Duration(intervalSec)*time.Second),
+		)
+		agg.Start()
+		logger.Info("telemetry initialized", "backend", "valkey", "address", address, "interval_seconds", intervalSec)
+		return rec, agg, agg.Stop
+
+	default:
+		logger.Info("telemetry initialized", "backend", "noop")
+		agg := telemetryadapter.NewInMemoryAggregator()
+		return telemetryadapter.NoopRecorder{}, agg, nil
+	}
 }
 
 // buildArtifactStore creates the artifact store based on ARTIFACT_BACKEND env var.
