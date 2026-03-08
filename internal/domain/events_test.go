@@ -218,7 +218,7 @@ func TestNewDomainEvent_ArtifactStored(t *testing.T) {
 }
 
 func TestNewDomainEvent_InvalidPayload(t *testing.T) {
-	// channels cannot be marshalled to JSON
+	// channels cannot be marshaled to JSON
 	_, err := NewDomainEvent("evt-bad", EventSessionCreated, "sess-1", "t", "a", make(chan int))
 	if err == nil {
 		t.Fatal("expected marshal error for unmarshalable payload")
