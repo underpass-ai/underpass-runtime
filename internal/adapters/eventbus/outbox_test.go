@@ -274,6 +274,13 @@ func TestOutboxPublisher_AckAll(t *testing.T) {
 	}
 }
 
+func TestNewOutboxPublisherFromAddress_Unreachable(t *testing.T) {
+	_, err := NewOutboxPublisherFromAddress(context.Background(), "127.0.0.1:16379", "", 0, "test")
+	if err == nil {
+		t.Fatal("expected connection error for unreachable address")
+	}
+}
+
 func TestOutboxPublisher_FullCycle(t *testing.T) {
 	fake := &fakeOutboxClient{}
 	pub := NewOutboxPublisher(fake, "test")

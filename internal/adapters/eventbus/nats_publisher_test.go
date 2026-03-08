@@ -231,6 +231,20 @@ func TestNATSPublisher_MultiplePublish(t *testing.T) {
 	}
 }
 
+func TestNewNATSPublisherFromURL_Unreachable(t *testing.T) {
+	_, _, err := NewNATSPublisherFromURL(context.Background(), "nats://127.0.0.1:14222", "")
+	if err == nil {
+		t.Fatal("expected connection error for unreachable NATS")
+	}
+}
+
+func TestNewNATSPublisherFromURL_EmptyStreamName(t *testing.T) {
+	_, _, err := NewNATSPublisherFromURL(context.Background(), "nats://127.0.0.1:14222", "  ")
+	if err == nil {
+		t.Fatal("expected connection error for unreachable NATS")
+	}
+}
+
 func TestEventTypeSuffix(t *testing.T) {
 	tests := []struct {
 		input    domain.EventType
