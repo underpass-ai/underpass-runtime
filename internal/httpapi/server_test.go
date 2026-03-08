@@ -560,6 +560,95 @@ func TestHTTPAPI_InvocationRouteEdgeCases(t *testing.T) {
 	}
 }
 
+func TestHTTPAPI_DiscoveryEndpoint(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-discovery",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", createResp.StatusCode, createResp.Body.String())
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	discoveryResp := doJSONRequest(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID+"/tools/discovery", nil)
+	if discoveryResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", discoveryResp.StatusCode, discoveryResp.Body.String())
+	}
+
+	var body map[string]any
+	mustDecode(t, discoveryResp.Body.Bytes(), &body)
+
+	tools, ok := body["tools"].([]any)
+	if !ok {
+		t.Fatalf("expected tools array, got %T", body["tools"])
+	}
+	if len(tools) == 0 {
+		t.Fatal("expected at least one tool in discovery response")
+	}
+
+	total := body["total"].(float64)
+	filtered := body["filtered"].(float64)
+	if total < filtered {
+		t.Fatalf("total (%v) should be >= filtered (%v)", total, filtered)
+	}
+
+	// Check first tool has required compact fields
+	first := tools[0].(map[string]any)
+	for _, field := range []string{"name", "description", "required_args", "risk", "side_effects", "tags", "cost"} {
+		if _, exists := first[field]; !exists {
+			t.Fatalf("compact tool missing field %q", field)
+		}
+	}
+
+	// Verify response is significantly smaller than full ListTools
+	fullResp := doJSONRequest(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID+testPathSessionTools, nil)
+	if len(discoveryResp.Body.Bytes()) >= len(fullResp.Body.Bytes()) {
+		t.Fatalf("discovery response (%d bytes) should be smaller than full tools response (%d bytes)",
+			len(discoveryResp.Body.Bytes()), len(fullResp.Body.Bytes()))
+	}
+}
+
+func TestHTTPAPI_DiscoveryEndpoint_MethodNotAllowed(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-disc-405",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	postResp := doJSONRequest(t, handler, http.MethodPost, testPathSessionsPrefix+sessionID+"/tools/discovery", map[string]any{})
+	if postResp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", postResp.StatusCode)
+	}
+}
+
+func TestHTTPAPI_DiscoveryEndpoint_InvalidSession(t *testing.T) {
+	handler, _ := setupHTTPHandler(t)
+
+	resp := doJSONRequest(t, handler, http.MethodGet, testPathSessionsPrefix+"nonexistent-session/tools/discovery", nil)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d body=%s", resp.StatusCode, resp.Body.String())
+	}
+}
+
 func TestHTTPAPI_DecodeBodyNilBody(t *testing.T) {
 	handler, _ := setupHTTPHandler(t)
 

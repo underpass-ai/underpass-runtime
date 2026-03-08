@@ -113,6 +113,10 @@ func (s *Server) handleSessionRoutes(w http.ResponseWriter, r *http.Request) {
 		s.handleSessionListTools(w, r, sessionID)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "tools" && parts[2] == "discovery" {
+		s.handleSessionDiscoverTools(w, r, sessionID)
+		return
+	}
 	if len(parts) == 4 && parts[1] == "tools" && parts[3] == "invoke" {
 		s.handleSessionInvokeTool(w, r, sessionID, parts[2])
 		return
@@ -143,6 +147,19 @@ func (s *Server) handleSessionListTools(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tools": tools})
+}
+
+func (s *Server) handleSessionDiscoverTools(w http.ResponseWriter, r *http.Request, sessionID string) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	discovery, serviceErr := s.service.DiscoverTools(r.Context(), sessionID)
+	if serviceErr != nil {
+		writeServiceError(w, serviceErr.Code, serviceErr.Message, serviceErr.HTTPStatus)
+		return
+	}
+	writeJSON(w, http.StatusOK, discovery)
 }
 
 func (s *Server) handleSessionInvokeTool(w http.ResponseWriter, r *http.Request, sessionID, toolName string) {
