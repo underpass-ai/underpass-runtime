@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
@@ -557,6 +558,100 @@ func TestService_DiscoverTools_FullDetailWithFilter(t *testing.T) {
 		if string(tool.RiskLevel) != "low" {
 			t.Fatalf("expected risk_level=low in full view, got %s for %s", tool.RiskLevel, tool.Name)
 		}
+	}
+}
+
+func TestService_RecommendTools(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	resp, recErr := svc.RecommendTools(ctx, session.ID, "", 0)
+	if recErr != nil {
+		t.Fatalf("unexpected error: %v", recErr)
+	}
+	if len(resp.Recommendations) == 0 {
+		t.Fatal("expected recommendations")
+	}
+	if resp.TopK != 10 {
+		t.Fatalf("expected default top_k=10, got %d", resp.TopK)
+	}
+
+	// Verify sorted by score desc
+	for i := 1; i < len(resp.Recommendations); i++ {
+		prev := resp.Recommendations[i-1]
+		cur := resp.Recommendations[i]
+		if cur.Score > prev.Score {
+			t.Fatalf("recommendations not sorted by score: %s(%v) > %s(%v)", cur.Name, cur.Score, prev.Name, prev.Score)
+		}
+	}
+
+	// Verify fields populated
+	first := resp.Recommendations[0]
+	if first.Name == "" {
+		t.Fatal("expected non-empty name")
+	}
+	if first.Score <= 0 {
+		t.Fatal("expected positive score")
+	}
+	if first.Why == "" {
+		t.Fatal("expected non-empty why")
+	}
+	if first.EstimatedCost == "" {
+		t.Fatal("expected non-empty estimated_cost")
+	}
+	if first.PolicyNotes == nil {
+		t.Fatal("expected non-nil policy_notes")
+	}
+}
+
+func TestService_RecommendTools_WithTaskHint(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	resp, _ := svc.RecommendTools(ctx, session.ID, "read file", 5)
+	if len(resp.Recommendations) > 5 {
+		t.Fatalf("expected at most 5 recommendations, got %d", len(resp.Recommendations))
+	}
+	if resp.TaskHint != "read file" {
+		t.Fatalf("expected task_hint echoed, got %q", resp.TaskHint)
+	}
+	if resp.TopK != 5 {
+		t.Fatalf("expected top_k=5, got %d", resp.TopK)
+	}
+
+	// fs.read_file should rank highly with hint "read file"
+	found := false
+	for _, rec := range resp.Recommendations {
+		if rec.Name == "fs.read_file" {
+			found = true
+			if !strings.Contains(rec.Why, "matches task hint") {
+				t.Fatalf("expected hint match reason for fs.read_file, got %q", rec.Why)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected fs.read_file in top recommendations for hint 'read file'")
+	}
+}
+
+func TestService_RecommendTools_InvalidSession(t *testing.T) {
+	svc := setupService(t)
+	_, recErr := svc.RecommendTools(context.Background(), "nonexistent", "", 0)
+	if recErr == nil {
+		t.Fatal("expected error for nonexistent session")
 	}
 }
 

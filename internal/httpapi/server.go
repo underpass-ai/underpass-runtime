@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/underpass-ai/underpass-runtime/internal/app"
@@ -117,6 +118,10 @@ func (s *Server) handleSessionRoutes(w http.ResponseWriter, r *http.Request) {
 		s.handleSessionDiscoverTools(w, r, sessionID)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "tools" && parts[2] == "recommendations" {
+		s.handleSessionRecommendTools(w, r, sessionID)
+		return
+	}
 	if len(parts) == 4 && parts[1] == "tools" && parts[3] == "invoke" {
 		s.handleSessionInvokeTool(w, r, sessionID, parts[2])
 		return
@@ -161,6 +166,27 @@ func (s *Server) handleSessionDiscoverTools(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, discovery)
+}
+
+func (s *Server) handleSessionRecommendTools(w http.ResponseWriter, r *http.Request, sessionID string) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	q := r.URL.Query()
+	taskHint := q.Get("task_hint")
+	topK := 0
+	if v := q.Get("top_k"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			topK = n
+		}
+	}
+	resp, serviceErr := s.service.RecommendTools(r.Context(), sessionID, taskHint, topK)
+	if serviceErr != nil {
+		writeServiceError(w, serviceErr.Code, serviceErr.Message, serviceErr.HTTPStatus)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func parseDiscoveryParams(r *http.Request) (app.DiscoveryDetail, app.DiscoveryFilter) {

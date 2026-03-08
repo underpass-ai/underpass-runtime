@@ -935,6 +935,126 @@ func TestHTTPAPI_DiscoveryEndpoint_DefaultIsCompact(t *testing.T) {
 	}
 }
 
+func TestHTTPAPI_RecommendationsEndpoint(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-rec",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	resp := doJSONRequest(t, handler, http.MethodGet,
+		testPathSessionsPrefix+sessionID+"/tools/recommendations", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, resp.Body.String())
+	}
+	var body map[string]any
+	mustDecode(t, resp.Body.Bytes(), &body)
+
+	recs, ok := body["recommendations"].([]any)
+	if !ok {
+		t.Fatalf("expected recommendations array, got %T", body["recommendations"])
+	}
+	if len(recs) == 0 {
+		t.Fatal("expected at least one recommendation")
+	}
+
+	first := recs[0].(map[string]any)
+	for _, field := range []string{"name", "score", "why", "estimated_cost", "policy_notes"} {
+		if _, exists := first[field]; !exists {
+			t.Fatalf("recommendation missing field %q", field)
+		}
+	}
+
+	topK := body["top_k"].(float64)
+	if topK != 10 {
+		t.Fatalf("expected default top_k=10, got %v", topK)
+	}
+}
+
+func TestHTTPAPI_RecommendationsEndpoint_WithHint(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-rec-hint",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	resp := doJSONRequest(t, handler, http.MethodGet,
+		testPathSessionsPrefix+sessionID+"/tools/recommendations?task_hint=read+file&top_k=5", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var body map[string]any
+	mustDecode(t, resp.Body.Bytes(), &body)
+
+	recs := body["recommendations"].([]any)
+	if len(recs) > 5 {
+		t.Fatalf("expected at most 5 recommendations, got %d", len(recs))
+	}
+	if body["task_hint"] != "read file" {
+		t.Fatalf("expected task_hint echoed, got %v", body["task_hint"])
+	}
+	if body["top_k"].(float64) != 5 {
+		t.Fatalf("expected top_k=5, got %v", body["top_k"])
+	}
+}
+
+func TestHTTPAPI_RecommendationsEndpoint_MethodNotAllowed(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-rec-405",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	postResp := doJSONRequest(t, handler, http.MethodPost,
+		testPathSessionsPrefix+sessionID+"/tools/recommendations", map[string]any{})
+	if postResp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", postResp.StatusCode)
+	}
+}
+
+func TestHTTPAPI_RecommendationsEndpoint_InvalidSession(t *testing.T) {
+	handler, _ := setupHTTPHandler(t)
+
+	resp := doJSONRequest(t, handler, http.MethodGet,
+		testPathSessionsPrefix+"nonexistent/tools/recommendations", nil)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+}
+
 func TestHTTPAPI_DecodeBodyNilBody(t *testing.T) {
 	handler, _ := setupHTTPHandler(t)
 
