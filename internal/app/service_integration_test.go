@@ -253,6 +253,24 @@ func setupService(t *testing.T) *app.Service {
 	return app.NewService(workspaceManager, catalog, policyEngine, engine, artifactStore, auditLogger)
 }
 
+func compactTools(t *testing.T, resp app.DiscoveryResponse) []app.CompactTool {
+	t.Helper()
+	tools, ok := resp.Tools.([]app.CompactTool)
+	if !ok {
+		t.Fatalf("expected []CompactTool, got %T", resp.Tools)
+	}
+	return tools
+}
+
+func fullTools(t *testing.T, resp app.DiscoveryResponse) []app.FullTool {
+	t.Helper()
+	tools, ok := resp.Tools.([]app.FullTool)
+	if !ok {
+		t.Fatalf("expected []FullTool, got %T", resp.Tools)
+	}
+	return tools
+}
+
 func TestService_DiscoverTools(t *testing.T) {
 	svc := setupService(t)
 	ctx := context.Background()
@@ -264,11 +282,12 @@ func TestService_DiscoverTools(t *testing.T) {
 		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
-	discovery, discErr := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{})
+	discovery, discErr := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{})
 	if discErr != nil {
 		t.Fatalf("unexpected discovery error: %v", discErr)
 	}
-	if len(discovery.Tools) == 0 {
+	tools := compactTools(t, discovery)
+	if len(tools) == 0 {
 		t.Fatal("expected tools in discovery response")
 	}
 	if discovery.Total == 0 {
@@ -278,8 +297,7 @@ func TestService_DiscoverTools(t *testing.T) {
 		t.Fatalf("filtered (%d) should not exceed total (%d)", discovery.Filtered, discovery.Total)
 	}
 
-	// Verify compact fields
-	first := discovery.Tools[0]
+	first := tools[0]
 	if first.Name == "" {
 		t.Fatal("expected non-empty tool name")
 	}
@@ -299,17 +317,16 @@ func TestService_DiscoverTools(t *testing.T) {
 		t.Fatalf("description should be <=120 chars, got %d", len(first.Description))
 	}
 
-	// Verify tools are sorted
-	for i := 1; i < len(discovery.Tools); i++ {
-		if discovery.Tools[i].Name < discovery.Tools[i-1].Name {
-			t.Fatalf("tools not sorted: %s before %s", discovery.Tools[i-1].Name, discovery.Tools[i].Name)
+	for i := 1; i < len(tools); i++ {
+		if tools[i].Name < tools[i-1].Name {
+			t.Fatalf("tools not sorted: %s before %s", tools[i-1].Name, tools[i].Name)
 		}
 	}
 }
 
 func TestService_DiscoverTools_InvalidSession(t *testing.T) {
 	svc := setupService(t)
-	_, discErr := svc.DiscoverTools(context.Background(), "nonexistent", app.DiscoveryFilter{})
+	_, discErr := svc.DiscoverTools(context.Background(), "nonexistent", app.DiscoveryDetailCompact, app.DiscoveryFilter{})
 	if discErr == nil {
 		t.Fatal("expected error for nonexistent session")
 	}
@@ -325,21 +342,23 @@ func TestService_DiscoverTools_FilterByRisk(t *testing.T) {
 		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
-	all, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{})
-	low, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"low"}})
-	if len(low.Tools) == 0 {
+	all, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{})
+	low, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{Risk: []string{"low"}})
+	allTools := compactTools(t, all)
+	lowTools := compactTools(t, low)
+	if len(lowTools) == 0 {
 		t.Fatal("expected at least one low-risk tool")
 	}
-	if len(low.Tools) >= len(all.Tools) {
+	if len(lowTools) >= len(allTools) {
 		t.Fatal("filtering by risk=low should return fewer tools than unfiltered")
 	}
-	for _, tool := range low.Tools {
+	for _, tool := range lowTools {
 		if tool.Risk != "low" {
 			t.Fatalf("expected risk=low, got %s for %s", tool.Risk, tool.Name)
 		}
 	}
-	if low.Filtered != len(low.Tools) {
-		t.Fatalf("filtered count (%d) != len(tools) (%d)", low.Filtered, len(low.Tools))
+	if low.Filtered != len(lowTools) {
+		t.Fatalf("filtered count (%d) != len(tools) (%d)", low.Filtered, len(lowTools))
 	}
 }
 
@@ -353,11 +372,12 @@ func TestService_DiscoverTools_FilterByTags(t *testing.T) {
 		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
-	fsTools, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Tags: []string{"fs"}})
-	if len(fsTools.Tools) == 0 {
+	fsResp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{Tags: []string{"fs"}})
+	fsTools := compactTools(t, fsResp)
+	if len(fsTools) == 0 {
 		t.Fatal("expected at least one tool with tag 'fs'")
 	}
-	for _, tool := range fsTools.Tools {
+	for _, tool := range fsTools {
 		if !slices.Contains(tool.Tags, "fs") {
 			t.Fatalf("tool %s should have tag 'fs', got %v", tool.Name, tool.Tags)
 		}
@@ -374,11 +394,12 @@ func TestService_DiscoverTools_FilterBySideEffects(t *testing.T) {
 		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
-	noSideEffects, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{SideEffects: []string{"none"}})
-	if len(noSideEffects.Tools) == 0 {
+	resp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{SideEffects: []string{"none"}})
+	tools := compactTools(t, resp)
+	if len(tools) == 0 {
 		t.Fatal("expected at least one tool with side_effects=none")
 	}
-	for _, tool := range noSideEffects.Tools {
+	for _, tool := range tools {
 		if tool.SideEffects != "none" {
 			t.Fatalf("expected side_effects=none, got %s for %s", tool.SideEffects, tool.Name)
 		}
@@ -395,11 +416,12 @@ func TestService_DiscoverTools_FilterByScope(t *testing.T) {
 		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
-	repoScope, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Scope: []string{"repo"}})
-	if len(repoScope.Tools) == 0 {
+	resp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{Scope: []string{"repo"}})
+	tools := compactTools(t, resp)
+	if len(tools) == 0 {
 		t.Fatal("expected at least one tool with scope=repo")
 	}
-	for _, tool := range repoScope.Tools {
+	for _, tool := range tools {
 		if !slices.Contains(tool.Tags, "repo") {
 			t.Fatalf("tool %s should have tag 'repo', got %v", tool.Name, tool.Tags)
 		}
@@ -416,11 +438,12 @@ func TestService_DiscoverTools_FilterCombined(t *testing.T) {
 		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
-	combined, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{
+	combinedResp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{
 		Risk:        []string{"low"},
 		SideEffects: []string{"none"},
 	})
-	for _, tool := range combined.Tools {
+	combinedTools := compactTools(t, combinedResp)
+	for _, tool := range combinedTools {
 		if tool.Risk != "low" {
 			t.Fatalf("expected risk=low, got %s for %s", tool.Risk, tool.Name)
 		}
@@ -429,9 +452,9 @@ func TestService_DiscoverTools_FilterCombined(t *testing.T) {
 		}
 	}
 
-	lowOnly, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"low"}})
-	noneOnly, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{SideEffects: []string{"none"}})
-	if len(combined.Tools) > len(lowOnly.Tools) || len(combined.Tools) > len(noneOnly.Tools) {
+	lowResp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{Risk: []string{"low"}})
+	noneResp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{SideEffects: []string{"none"}})
+	if len(combinedTools) > len(compactTools(t, lowResp)) || len(combinedTools) > len(compactTools(t, noneResp)) {
 		t.Fatal("AND-combined filter should return fewer or equal tools than individual filters")
 	}
 }
@@ -446,13 +469,94 @@ func TestService_DiscoverTools_FilterMultiValueOR(t *testing.T) {
 		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
-	lowOnly, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"low"}})
-	medOnly, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"medium"}})
-	lowMed, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"low", "medium"}})
+	lowResp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{Risk: []string{"low"}})
+	medResp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{Risk: []string{"medium"}})
+	bothResp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{Risk: []string{"low", "medium"}})
 
-	if len(lowMed.Tools) != len(lowOnly.Tools)+len(medOnly.Tools) {
-		t.Fatalf("risk=low,medium (%d) should equal risk=low (%d) + risk=medium (%d)",
-			len(lowMed.Tools), len(lowOnly.Tools), len(medOnly.Tools))
+	lowN := len(compactTools(t, lowResp))
+	medN := len(compactTools(t, medResp))
+	bothN := len(compactTools(t, bothResp))
+	if bothN != lowN+medN {
+		t.Fatalf("risk=low,medium (%d) should equal risk=low (%d) + risk=medium (%d)", bothN, lowN, medN)
+	}
+}
+
+func TestService_DiscoverTools_FullDetail(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	resp, discErr := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailFull, app.DiscoveryFilter{})
+	if discErr != nil {
+		t.Fatalf("unexpected discovery error: %v", discErr)
+	}
+	tools := fullTools(t, resp)
+	if len(tools) == 0 {
+		t.Fatal("expected tools in full discovery response")
+	}
+
+	first := tools[0]
+	if first.Name == "" {
+		t.Fatal("expected non-empty tool name")
+	}
+	if first.Description == "" {
+		t.Fatal("expected non-empty description (not truncated in full view)")
+	}
+	if first.RiskLevel == "" {
+		t.Fatal("expected non-empty risk_level")
+	}
+	if len(first.InputSchema) == 0 {
+		t.Fatal("expected input_schema in full view")
+	}
+	if len(first.Tags) == 0 {
+		t.Fatal("expected at least one tag")
+	}
+	if first.Cost == "" {
+		t.Fatal("expected non-empty cost")
+	}
+	if first.Constraints.TimeoutSeconds == 0 {
+		t.Fatal("expected non-zero timeout in constraints")
+	}
+
+	// Full view should not truncate descriptions
+	compactResp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailCompact, app.DiscoveryFilter{})
+	compactN := len(compactTools(t, compactResp))
+	if len(tools) != compactN {
+		t.Fatalf("full and compact should return same count without filters: full=%d compact=%d", len(tools), compactN)
+	}
+
+	// Verify tools are sorted
+	for i := 1; i < len(tools); i++ {
+		if tools[i].Name < tools[i-1].Name {
+			t.Fatalf("full tools not sorted: %s before %s", tools[i-1].Name, tools[i].Name)
+		}
+	}
+}
+
+func TestService_DiscoverTools_FullDetailWithFilter(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	resp, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryDetailFull, app.DiscoveryFilter{Risk: []string{"low"}})
+	tools := fullTools(t, resp)
+	if len(tools) == 0 {
+		t.Fatal("expected at least one low-risk tool in full view")
+	}
+	for _, tool := range tools {
+		if string(tool.RiskLevel) != "low" {
+			t.Fatalf("expected risk_level=low in full view, got %s for %s", tool.RiskLevel, tool.Name)
+		}
 	}
 }
 

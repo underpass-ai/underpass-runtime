@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
@@ -230,10 +231,7 @@ func TestDiscoveryFilter_IsEmpty(t *testing.T) {
 }
 
 func TestToCompactTool_DescriptionTruncation(t *testing.T) {
-	longDesc := ""
-	for i := 0; i < 150; i++ {
-		longDesc += "x"
-	}
+	longDesc := strings.Repeat("x", 150)
 	cap := &domain.Capability{
 		Name:        "test.tool",
 		Description: longDesc,
@@ -244,5 +242,55 @@ func TestToCompactTool_DescriptionTruncation(t *testing.T) {
 	}
 	if compact.Description[len(compact.Description)-3:] != "..." {
 		t.Fatal("expected truncated description to end with ...")
+	}
+}
+
+func TestToFullTool(t *testing.T) {
+	cap := &domain.Capability{
+		Name:             "repo.test",
+		Description:      "Run test suite for project",
+		InputSchema:      json.RawMessage(`{"type":"object","required":["cmd"]}`),
+		Scope:            domain.ScopeRepo,
+		SideEffects:      domain.SideEffectsNone,
+		RiskLevel:        domain.RiskLow,
+		RequiresApproval: false,
+		Idempotency:      domain.IdempotencyGuaranteed,
+		Constraints:      domain.Constraints{TimeoutSeconds: 60, OutputLimitKB: 512},
+		Preconditions:    []string{"repo cloned"},
+		Observability:    domain.Observability{TraceName: "repo.test", SpanName: "test"},
+	}
+	tags := []string{"repo", "repo"}
+	cost := "medium"
+
+	ft := toFullTool(cap, tags, cost)
+	if ft.Name != "repo.test" {
+		t.Fatalf("expected name repo.test, got %s", ft.Name)
+	}
+	if ft.Description != "Run test suite for project" {
+		t.Fatalf("expected full description, got %s", ft.Description)
+	}
+	if ft.RiskLevel != domain.RiskLow {
+		t.Fatalf("expected risk_level low, got %s", ft.RiskLevel)
+	}
+	if ft.Constraints.TimeoutSeconds != 60 {
+		t.Fatalf("expected timeout 60, got %d", ft.Constraints.TimeoutSeconds)
+	}
+	if ft.Constraints.OutputLimitKB != 512 {
+		t.Fatalf("expected output_limit_kb 512, got %d", ft.Constraints.OutputLimitKB)
+	}
+	if len(ft.Tags) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(ft.Tags))
+	}
+	if ft.Cost != "medium" {
+		t.Fatalf("expected cost medium, got %s", ft.Cost)
+	}
+	if ft.Stats != nil {
+		t.Fatal("expected nil stats (not yet populated)")
+	}
+	if ft.Idempotency != domain.IdempotencyGuaranteed {
+		t.Fatalf("expected idempotency guaranteed, got %s", ft.Idempotency)
+	}
+	if len(ft.Preconditions) != 1 {
+		t.Fatalf("expected 1 precondition, got %d", len(ft.Preconditions))
 	}
 }

@@ -810,6 +810,131 @@ func TestHTTPAPI_DiscoveryEndpoint_EmptyFilterReturnsAll(t *testing.T) {
 	}
 }
 
+func TestHTTPAPI_DiscoveryEndpoint_FullDetail(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-disc-full",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	// detail=full returns all capability fields
+	fullResp := doJSONRequest(t, handler, http.MethodGet,
+		testPathSessionsPrefix+sessionID+"/tools/discovery?detail=full", nil)
+	if fullResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", fullResp.StatusCode, fullResp.Body.String())
+	}
+	var fullBody map[string]any
+	mustDecode(t, fullResp.Body.Bytes(), &fullBody)
+	tools := fullBody["tools"].([]any)
+	if len(tools) == 0 {
+		t.Fatal("expected at least one tool in full detail response")
+	}
+
+	first := tools[0].(map[string]any)
+	// Full view should include fields absent from compact view
+	for _, field := range []string{"name", "description", "input_schema", "scope", "side_effects",
+		"risk_level", "idempotency", "constraints", "tags", "cost"} {
+		if _, exists := first[field]; !exists {
+			t.Fatalf("full tool missing field %q", field)
+		}
+	}
+
+	// Full response should be larger than compact
+	compactResp := doJSONRequest(t, handler, http.MethodGet,
+		testPathSessionsPrefix+sessionID+"/tools/discovery", nil)
+	if len(fullResp.Body.Bytes()) <= len(compactResp.Body.Bytes()) {
+		t.Fatalf("full response (%d bytes) should be larger than compact (%d bytes)",
+			len(fullResp.Body.Bytes()), len(compactResp.Body.Bytes()))
+	}
+
+	// Both should have the same filtered count
+	var compactBody map[string]any
+	mustDecode(t, compactResp.Body.Bytes(), &compactBody)
+	if fullBody["filtered"] != compactBody["filtered"] {
+		t.Fatalf("filtered count mismatch: full=%v compact=%v", fullBody["filtered"], compactBody["filtered"])
+	}
+}
+
+func TestHTTPAPI_DiscoveryEndpoint_FullDetailWithFilter(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-disc-full-f",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	resp := doJSONRequest(t, handler, http.MethodGet,
+		testPathSessionsPrefix+sessionID+"/tools/discovery?detail=full&risk=low", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var body map[string]any
+	mustDecode(t, resp.Body.Bytes(), &body)
+	tools := body["tools"].([]any)
+
+	for _, raw := range tools {
+		tool := raw.(map[string]any)
+		if tool["risk_level"] != "low" {
+			t.Fatalf("expected risk_level=low in full view with filter, got %v", tool["risk_level"])
+		}
+	}
+}
+
+func TestHTTPAPI_DiscoveryEndpoint_DefaultIsCompact(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-disc-default",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	// No detail param = compact (should have "risk" not "risk_level")
+	resp := doJSONRequest(t, handler, http.MethodGet,
+		testPathSessionsPrefix+sessionID+"/tools/discovery", nil)
+	var body map[string]any
+	mustDecode(t, resp.Body.Bytes(), &body)
+	tools := body["tools"].([]any)
+	first := tools[0].(map[string]any)
+
+	if _, hasRisk := first["risk"]; !hasRisk {
+		t.Fatal("compact view should have 'risk' field")
+	}
+	if _, hasRiskLevel := first["risk_level"]; hasRiskLevel {
+		t.Fatal("compact view should NOT have 'risk_level' field")
+	}
+}
+
 func TestHTTPAPI_DecodeBodyNilBody(t *testing.T) {
 	handler, _ := setupHTTPHandler(t)
 

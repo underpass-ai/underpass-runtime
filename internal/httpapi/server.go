@@ -154,8 +154,8 @@ func (s *Server) handleSessionDiscoverTools(w http.ResponseWriter, r *http.Reque
 		methodNotAllowed(w)
 		return
 	}
-	filter := parseDiscoveryFilter(r)
-	discovery, serviceErr := s.service.DiscoverTools(r.Context(), sessionID, filter)
+	detail, filter := parseDiscoveryParams(r)
+	discovery, serviceErr := s.service.DiscoverTools(r.Context(), sessionID, detail, filter)
 	if serviceErr != nil {
 		writeServiceError(w, serviceErr.Code, serviceErr.Message, serviceErr.HTTPStatus)
 		return
@@ -163,9 +163,13 @@ func (s *Server) handleSessionDiscoverTools(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, discovery)
 }
 
-func parseDiscoveryFilter(r *http.Request) app.DiscoveryFilter {
+func parseDiscoveryParams(r *http.Request) (app.DiscoveryDetail, app.DiscoveryFilter) {
 	q := r.URL.Query()
-	return app.DiscoveryFilter{
+	detail := app.DiscoveryDetailCompact
+	if q.Get("detail") == "full" {
+		detail = app.DiscoveryDetailFull
+	}
+	return detail, app.DiscoveryFilter{
 		Risk:        splitCSV(q.Get("risk")),
 		Tags:        splitCSV(q.Get("tags")),
 		SideEffects: splitCSV(q.Get("side_effects")),

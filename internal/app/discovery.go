@@ -30,11 +30,31 @@ type CompactTool struct {
 	Cost         string   `json:"cost"`
 }
 
+// FullTool is the documentation-grade representation of a capability,
+// including all metadata, policy fields, and optional telemetry stats.
+type FullTool struct {
+	domain.Capability
+	Tags  []string   `json:"tags"`
+	Cost  string     `json:"cost"`
+	Stats *ToolStats `json:"stats,omitempty"`
+}
+
+// ToolStats holds aggregated telemetry per tool. Populated by Phase 6 (WS-TEL-002).
+type ToolStats struct {
+	SuccessRate  float64 `json:"success_rate"`
+	P50Duration  int64   `json:"p50_duration_ms"`
+	P95Duration  int64   `json:"p95_duration_ms"`
+	AvgOutputKB  float64 `json:"avg_output_kb"`
+	DenyRate     float64 `json:"deny_rate"`
+	InvocationN  int     `json:"invocation_count"`
+}
+
 // DiscoveryResponse is returned by the discovery endpoint.
+// Tools is []CompactTool when detail=compact, []FullTool when detail=full.
 type DiscoveryResponse struct {
-	Tools    []CompactTool `json:"tools"`
-	Total    int           `json:"total"`
-	Filtered int           `json:"filtered"`
+	Tools    any `json:"tools"`
+	Total    int `json:"total"`
+	Filtered int `json:"filtered"`
 }
 
 // DiscoveryFilter controls which tools are returned by DiscoverTools.
@@ -54,15 +74,22 @@ func (f DiscoveryFilter) IsEmpty() bool {
 		len(f.Scope) == 0 && len(f.Cost) == 0
 }
 
-// DiscoverTools returns an LLM-optimized compact view of available tools,
-// optionally filtered by the given criteria.
-func (s *Service) DiscoverTools(ctx context.Context, sessionID string, filter DiscoveryFilter) (DiscoveryResponse, *ServiceError) {
+// DiscoverTools returns a filtered view of available tools at the requested detail level.
+func (s *Service) DiscoverTools(ctx context.Context, sessionID string, detail DiscoveryDetail, filter DiscoveryFilter) (DiscoveryResponse, *ServiceError) {
 	tools, serviceErr := s.ListTools(ctx, sessionID)
 	if serviceErr != nil {
 		return DiscoveryResponse{}, serviceErr
 	}
 
 	total := len(s.catalog.List())
+
+	if detail == DiscoveryDetailFull {
+		return s.discoverFull(tools, total, filter), nil
+	}
+	return discoverCompact(tools, total, filter), nil
+}
+
+func discoverCompact(tools []domain.Capability, total int, filter DiscoveryFilter) DiscoveryResponse {
 	compact := make([]CompactTool, 0, len(tools))
 	for i := range tools {
 		ct := toCompactTool(&tools[i])
@@ -70,16 +97,33 @@ func (s *Service) DiscoverTools(ctx context.Context, sessionID string, filter Di
 			compact = append(compact, ct)
 		}
 	}
-
 	sort.Slice(compact, func(i, j int) bool {
 		return compact[i].Name < compact[j].Name
 	})
+	return DiscoveryResponse{Tools: compact, Total: total, Filtered: len(compact)}
+}
 
-	return DiscoveryResponse{
-		Tools:    compact,
-		Total:    total,
-		Filtered: len(compact),
-	}, nil
+func (s *Service) discoverFull(tools []domain.Capability, total int, filter DiscoveryFilter) DiscoveryResponse {
+	full := make([]FullTool, 0, len(tools))
+	for i := range tools {
+		ct := toCompactTool(&tools[i])
+		if !matchesFilter(ct, filter) {
+			continue
+		}
+		full = append(full, toFullTool(&tools[i], ct.Tags, ct.Cost))
+	}
+	sort.Slice(full, func(i, j int) bool {
+		return full[i].Name < full[j].Name
+	})
+	return DiscoveryResponse{Tools: full, Total: total, Filtered: len(full)}
+}
+
+func toFullTool(cap *domain.Capability, tags []string, cost string) FullTool {
+	return FullTool{
+		Capability: *cap,
+		Tags:       tags,
+		Cost:       cost,
+	}
 }
 
 // matchesFilter checks whether a compact tool passes all filter criteria.
