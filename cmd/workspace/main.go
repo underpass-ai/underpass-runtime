@@ -100,7 +100,11 @@ func main() {
 		K8sNamespace:  workspaceNamespace,
 		DockerClient:  dockerClientOrNil(workspaceBackend),
 	})
-	artifactStore := storage.NewLocalArtifactStore(artifactRoot)
+	artifactStore, err := buildArtifactStore(context.Background(), artifactRoot, logger)
+	if err != nil {
+		logger.Error("failed to initialize artifact store", "error", err)
+		os.Exit(1)
+	}
 	policyEngine := policy.NewStaticPolicy()
 	auditLogger := audit.NewLoggerAudit(logger)
 	invocationStore, err := buildInvocationStore(logger)
@@ -467,4 +471,36 @@ func buildOutboxRelay(ctx context.Context, logger *slog.Logger, downstream app.E
 	relay := eventbus.NewOutboxRelay(outbox, downstream, logger)
 	relay.Start()
 	return outbox, relay.Stop
+}
+
+// buildArtifactStore creates the artifact store based on ARTIFACT_BACKEND env var.
+//
+// ARTIFACT_BACKEND=local → LocalArtifactStore (default)
+// ARTIFACT_BACKEND=s3    → S3ArtifactStore (MinIO or AWS S3)
+func buildArtifactStore(ctx context.Context, localRoot string, logger *slog.Logger) (app.ArtifactStore, error) {
+	backend := strings.ToLower(strings.TrimSpace(envOrDefault("ARTIFACT_BACKEND", "local")))
+	switch backend {
+	case "", "local":
+		logger.Info("artifact store initialized", "backend", "local", "root", localRoot)
+		return storage.NewLocalArtifactStore(localRoot), nil
+	case "s3":
+		cfg := storage.S3Config{
+			Bucket:    envOrDefault("ARTIFACT_S3_BUCKET", "workspace-artifacts"),
+			Prefix:    strings.TrimSpace(os.Getenv("ARTIFACT_S3_PREFIX")),
+			Endpoint:  strings.TrimSpace(os.Getenv("ARTIFACT_S3_ENDPOINT")),
+			Region:    envOrDefault("ARTIFACT_S3_REGION", "us-east-1"),
+			AccessKey: strings.TrimSpace(os.Getenv("ARTIFACT_S3_ACCESS_KEY")),
+			SecretKey: os.Getenv("ARTIFACT_S3_SECRET_KEY"),
+			PathStyle: parseBoolOrDefault(os.Getenv("ARTIFACT_S3_PATH_STYLE"), true),
+		}
+		store, err := storage.NewS3ArtifactStoreFromConfig(ctx, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("s3 artifact store: %w", err)
+		}
+		logger.Info("artifact store initialized", "backend", "s3",
+			"bucket", cfg.Bucket, "region", cfg.Region, "endpoint", cfg.Endpoint)
+		return store, nil
+	default:
+		return nil, fmt.Errorf("unsupported ARTIFACT_BACKEND: %s", backend)
+	}
 }

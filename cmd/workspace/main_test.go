@@ -375,3 +375,53 @@ func TestBuildEventBus_UnknownValue(t *testing.T) {
 		t.Fatal("expected nil stop for unknown bus type")
 	}
 }
+
+func TestBuildArtifactStore_Local(t *testing.T) {
+	t.Setenv("ARTIFACT_BACKEND", "local")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	store, err := buildArtifactStore(context.Background(), t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if store == nil {
+		t.Fatal("expected non-nil store")
+	}
+}
+
+func TestBuildArtifactStore_Default(t *testing.T) {
+	_ = os.Unsetenv("ARTIFACT_BACKEND")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	store, err := buildArtifactStore(context.Background(), t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if store == nil {
+		t.Fatal("expected non-nil store")
+	}
+}
+
+func TestBuildArtifactStore_Unsupported(t *testing.T) {
+	t.Setenv("ARTIFACT_BACKEND", "gcs")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	_, err := buildArtifactStore(context.Background(), t.TempDir(), logger)
+	if err == nil {
+		t.Fatal("expected error for unsupported backend")
+	}
+}
+
+func TestBuildArtifactStore_S3(t *testing.T) {
+	t.Setenv("ARTIFACT_BACKEND", "s3")
+	t.Setenv("ARTIFACT_S3_BUCKET", "test-bucket")
+	t.Setenv("ARTIFACT_S3_REGION", "us-west-2")
+	t.Setenv("ARTIFACT_S3_ACCESS_KEY", "testkey")
+	t.Setenv("ARTIFACT_S3_SECRET_KEY", "testsecret")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+
+	store, err := buildArtifactStore(context.Background(), t.TempDir(), logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if store == nil {
+		t.Fatal("expected non-nil S3 store")
+	}
+}
