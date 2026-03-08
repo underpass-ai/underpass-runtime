@@ -151,8 +151,8 @@ func (r *OutboxRelay) drainAndForward(ctx context.Context) (int64, error) {
 		return 0, nil
 	}
 
-	for _, evt := range events {
-		if err := r.downstream.Publish(ctx, evt); err != nil {
+	for i := range events {
+		if err := r.downstream.Publish(ctx, events[i]); err != nil {
 			return 0, err
 		}
 	}

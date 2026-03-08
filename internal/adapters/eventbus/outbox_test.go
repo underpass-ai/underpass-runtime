@@ -296,8 +296,8 @@ func TestOutboxPublisher_FullCycle(t *testing.T) {
 	}
 
 	// Ack 2
-	if err := pub.Ack(ctx, 2); err != nil {
-		t.Fatalf("ack error: %v", err)
+	if ackErr := pub.Ack(ctx, 2); ackErr != nil {
+		t.Fatalf("ack error: %v", ackErr)
 	}
 
 	// Remaining should be 1

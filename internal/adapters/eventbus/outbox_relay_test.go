@@ -52,10 +52,7 @@ func TestOutboxRelay_ForwardsEvents(t *testing.T) {
 
 	// Wait for relay to process
 	deadline := time.After(2 * time.Second)
-	for {
-		if ds.count() >= 3 {
-			break
-		}
+	for ds.count() < 3 {
 		select {
 		case <-deadline:
 			t.Fatalf("timed out waiting for events, got %d", ds.count())
