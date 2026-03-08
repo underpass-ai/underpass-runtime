@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sort"
 	"strings"
 
@@ -36,8 +37,26 @@ type DiscoveryResponse struct {
 	Filtered int           `json:"filtered"`
 }
 
-// DiscoverTools returns an LLM-optimized compact view of available tools.
-func (s *Service) DiscoverTools(ctx context.Context, sessionID string) (DiscoveryResponse, *ServiceError) {
+// DiscoveryFilter controls which tools are returned by DiscoverTools.
+// All non-empty fields are AND-combined. Each multi-value field is OR-combined
+// within itself (e.g., Risk=["low","medium"] matches tools with risk low OR medium).
+type DiscoveryFilter struct {
+	Risk        []string // low, medium, high
+	Tags        []string // family prefix or scope (e.g., "fs", "repo")
+	SideEffects []string // none, reversible, irreversible
+	Scope       []string // repo, workspace, cluster, external
+	Cost        []string // cheap, medium, expensive
+}
+
+// IsEmpty returns true when no filter criteria are set.
+func (f DiscoveryFilter) IsEmpty() bool {
+	return len(f.Risk) == 0 && len(f.Tags) == 0 && len(f.SideEffects) == 0 &&
+		len(f.Scope) == 0 && len(f.Cost) == 0
+}
+
+// DiscoverTools returns an LLM-optimized compact view of available tools,
+// optionally filtered by the given criteria.
+func (s *Service) DiscoverTools(ctx context.Context, sessionID string, filter DiscoveryFilter) (DiscoveryResponse, *ServiceError) {
 	tools, serviceErr := s.ListTools(ctx, sessionID)
 	if serviceErr != nil {
 		return DiscoveryResponse{}, serviceErr
@@ -46,7 +65,10 @@ func (s *Service) DiscoverTools(ctx context.Context, sessionID string) (Discover
 	total := len(s.catalog.List())
 	compact := make([]CompactTool, 0, len(tools))
 	for i := range tools {
-		compact = append(compact, toCompactTool(&tools[i]))
+		ct := toCompactTool(&tools[i])
+		if matchesFilter(ct, filter) {
+			compact = append(compact, ct)
+		}
 	}
 
 	sort.Slice(compact, func(i, j int) bool {
@@ -58,6 +80,36 @@ func (s *Service) DiscoverTools(ctx context.Context, sessionID string) (Discover
 		Total:    total,
 		Filtered: len(compact),
 	}, nil
+}
+
+// matchesFilter checks whether a compact tool passes all filter criteria.
+func matchesFilter(ct CompactTool, f DiscoveryFilter) bool {
+	if len(f.Risk) > 0 && !slices.Contains(f.Risk, ct.Risk) {
+		return false
+	}
+	if len(f.SideEffects) > 0 && !slices.Contains(f.SideEffects, ct.SideEffects) {
+		return false
+	}
+	if len(f.Cost) > 0 && !slices.Contains(f.Cost, ct.Cost) {
+		return false
+	}
+	if len(f.Scope) > 0 && !hasAnyTag(ct.Tags, f.Scope) {
+		return false
+	}
+	if len(f.Tags) > 0 && !hasAnyTag(ct.Tags, f.Tags) {
+		return false
+	}
+	return true
+}
+
+// hasAnyTag reports whether any of wanted appears in tags.
+func hasAnyTag(tags, wanted []string) bool {
+	for _, w := range wanted {
+		if slices.Contains(tags, w) {
+			return true
+		}
+	}
+	return false
 }
 
 func toCompactTool(cap *domain.Capability) CompactTool {

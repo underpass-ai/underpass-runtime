@@ -154,12 +154,42 @@ func (s *Server) handleSessionDiscoverTools(w http.ResponseWriter, r *http.Reque
 		methodNotAllowed(w)
 		return
 	}
-	discovery, serviceErr := s.service.DiscoverTools(r.Context(), sessionID)
+	filter := parseDiscoveryFilter(r)
+	discovery, serviceErr := s.service.DiscoverTools(r.Context(), sessionID, filter)
 	if serviceErr != nil {
 		writeServiceError(w, serviceErr.Code, serviceErr.Message, serviceErr.HTTPStatus)
 		return
 	}
 	writeJSON(w, http.StatusOK, discovery)
+}
+
+func parseDiscoveryFilter(r *http.Request) app.DiscoveryFilter {
+	q := r.URL.Query()
+	return app.DiscoveryFilter{
+		Risk:        splitCSV(q.Get("risk")),
+		Tags:        splitCSV(q.Get("tags")),
+		SideEffects: splitCSV(q.Get("side_effects")),
+		Scope:       splitCSV(q.Get("scope")),
+		Cost:        splitCSV(q.Get("cost")),
+	}
+}
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (s *Server) handleSessionInvokeTool(w http.ResponseWriter, r *http.Request, sessionID, toolName string) {

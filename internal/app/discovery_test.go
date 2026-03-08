@@ -127,6 +127,108 @@ func TestToCompactTool(t *testing.T) {
 	}
 }
 
+func TestMatchesFilter_EmptyFilterMatchesAll(t *testing.T) {
+	ct := CompactTool{Risk: "high", SideEffects: "irreversible", Cost: "expensive", Tags: []string{"k8s", "cluster"}}
+	if !matchesFilter(ct, DiscoveryFilter{}) {
+		t.Fatal("empty filter should match all tools")
+	}
+}
+
+func TestMatchesFilter_Risk(t *testing.T) {
+	ct := CompactTool{Risk: "low", Tags: []string{"fs"}}
+	if !matchesFilter(ct, DiscoveryFilter{Risk: []string{"low"}}) {
+		t.Fatal("should match risk=low")
+	}
+	if matchesFilter(ct, DiscoveryFilter{Risk: []string{"high"}}) {
+		t.Fatal("should not match risk=high")
+	}
+	if !matchesFilter(ct, DiscoveryFilter{Risk: []string{"low", "medium"}}) {
+		t.Fatal("should match risk=low,medium (OR)")
+	}
+}
+
+func TestMatchesFilter_SideEffects(t *testing.T) {
+	ct := CompactTool{SideEffects: "none", Risk: "low", Tags: []string{"fs"}}
+	if !matchesFilter(ct, DiscoveryFilter{SideEffects: []string{"none"}}) {
+		t.Fatal("should match side_effects=none")
+	}
+	if matchesFilter(ct, DiscoveryFilter{SideEffects: []string{"reversible"}}) {
+		t.Fatal("should not match side_effects=reversible")
+	}
+}
+
+func TestMatchesFilter_Cost(t *testing.T) {
+	ct := CompactTool{Cost: "cheap", Risk: "low", Tags: []string{"fs"}}
+	if !matchesFilter(ct, DiscoveryFilter{Cost: []string{"cheap"}}) {
+		t.Fatal("should match cost=cheap")
+	}
+	if matchesFilter(ct, DiscoveryFilter{Cost: []string{"expensive"}}) {
+		t.Fatal("should not match cost=expensive")
+	}
+}
+
+func TestMatchesFilter_Scope(t *testing.T) {
+	ct := CompactTool{Tags: []string{"fs", "repo"}, Risk: "low"}
+	if !matchesFilter(ct, DiscoveryFilter{Scope: []string{"repo"}}) {
+		t.Fatal("should match scope=repo")
+	}
+	if matchesFilter(ct, DiscoveryFilter{Scope: []string{"cluster"}}) {
+		t.Fatal("should not match scope=cluster")
+	}
+}
+
+func TestMatchesFilter_Tags(t *testing.T) {
+	ct := CompactTool{Tags: []string{"git", "repo"}, Risk: "low"}
+	if !matchesFilter(ct, DiscoveryFilter{Tags: []string{"git"}}) {
+		t.Fatal("should match tags=git")
+	}
+	if !matchesFilter(ct, DiscoveryFilter{Tags: []string{"repo", "workspace"}}) {
+		t.Fatal("should match when any tag matches (OR)")
+	}
+	if matchesFilter(ct, DiscoveryFilter{Tags: []string{"k8s"}}) {
+		t.Fatal("should not match tags=k8s")
+	}
+}
+
+func TestMatchesFilter_ANDCombined(t *testing.T) {
+	ct := CompactTool{Risk: "low", SideEffects: "none", Cost: "cheap", Tags: []string{"fs", "repo"}}
+	f := DiscoveryFilter{Risk: []string{"low"}, SideEffects: []string{"none"}, Scope: []string{"repo"}}
+	if !matchesFilter(ct, f) {
+		t.Fatal("should match all AND conditions")
+	}
+	f2 := DiscoveryFilter{Risk: []string{"low"}, SideEffects: []string{"irreversible"}}
+	if matchesFilter(ct, f2) {
+		t.Fatal("should fail when any AND condition fails")
+	}
+}
+
+func TestHasAnyTag(t *testing.T) {
+	if !hasAnyTag([]string{"fs", "repo"}, []string{"fs"}) {
+		t.Fatal("should find fs in tags")
+	}
+	if !hasAnyTag([]string{"fs", "repo"}, []string{"k8s", "repo"}) {
+		t.Fatal("should find repo in tags")
+	}
+	if hasAnyTag([]string{"fs", "repo"}, []string{"k8s", "cluster"}) {
+		t.Fatal("should not find k8s or cluster in tags")
+	}
+	if hasAnyTag([]string{}, []string{"fs"}) {
+		t.Fatal("empty tags should not match anything")
+	}
+}
+
+func TestDiscoveryFilter_IsEmpty(t *testing.T) {
+	if !(DiscoveryFilter{}).IsEmpty() {
+		t.Fatal("zero-value filter should be empty")
+	}
+	if (DiscoveryFilter{Risk: []string{"low"}}).IsEmpty() {
+		t.Fatal("filter with risk should not be empty")
+	}
+	if (DiscoveryFilter{Tags: []string{"fs"}}).IsEmpty() {
+		t.Fatal("filter with tags should not be empty")
+	}
+}
+
 func TestToCompactTool_DescriptionTruncation(t *testing.T) {
 	longDesc := ""
 	for i := 0; i < 150; i++ {

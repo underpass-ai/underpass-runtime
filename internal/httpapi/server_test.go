@@ -649,6 +649,167 @@ func TestHTTPAPI_DiscoveryEndpoint_InvalidSession(t *testing.T) {
 	}
 }
 
+func TestHTTPAPI_DiscoveryEndpoint_FilterByRisk(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-disc-filter",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d body=%s", createResp.StatusCode, createResp.Body.String())
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	// Unfiltered
+	allResp := doJSONRequest(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID+"/tools/discovery", nil)
+	var allBody map[string]any
+	mustDecode(t, allResp.Body.Bytes(), &allBody)
+	allTools := allBody["tools"].([]any)
+
+	// Filter by risk=low
+	filteredResp := doJSONRequest(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID+"/tools/discovery?risk=low", nil)
+	if filteredResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", filteredResp.StatusCode)
+	}
+	var filteredBody map[string]any
+	mustDecode(t, filteredResp.Body.Bytes(), &filteredBody)
+	filteredTools := filteredBody["tools"].([]any)
+
+	if len(filteredTools) == 0 {
+		t.Fatal("expected at least one low-risk tool")
+	}
+	if len(filteredTools) >= len(allTools) {
+		t.Fatal("risk=low filter should return fewer tools")
+	}
+
+	for _, raw := range filteredTools {
+		tool := raw.(map[string]any)
+		if tool["risk"] != "low" {
+			t.Fatalf("expected risk=low, got %v for tool %v", tool["risk"], tool["name"])
+		}
+	}
+
+	filteredCount := filteredBody["filtered"].(float64)
+	if int(filteredCount) != len(filteredTools) {
+		t.Fatalf("filtered count (%v) != tools length (%d)", filteredCount, len(filteredTools))
+	}
+}
+
+func TestHTTPAPI_DiscoveryEndpoint_FilterByMultipleParams(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-disc-multi",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	// Combined filter: risk=low AND side_effects=none
+	resp := doJSONRequest(t, handler, http.MethodGet,
+		testPathSessionsPrefix+sessionID+"/tools/discovery?risk=low&side_effects=none", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var body map[string]any
+	mustDecode(t, resp.Body.Bytes(), &body)
+	tools := body["tools"].([]any)
+
+	for _, raw := range tools {
+		tool := raw.(map[string]any)
+		if tool["risk"] != "low" {
+			t.Fatalf("expected risk=low, got %v", tool["risk"])
+		}
+		if tool["side_effects"] != "none" {
+			t.Fatalf("expected side_effects=none, got %v", tool["side_effects"])
+		}
+	}
+}
+
+func TestHTTPAPI_DiscoveryEndpoint_FilterCSVValues(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-disc-csv",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	// CSV risk=low,medium (OR within field)
+	resp := doJSONRequest(t, handler, http.MethodGet,
+		testPathSessionsPrefix+sessionID+"/tools/discovery?risk=low,medium", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var body map[string]any
+	mustDecode(t, resp.Body.Bytes(), &body)
+	tools := body["tools"].([]any)
+
+	for _, raw := range tools {
+		tool := raw.(map[string]any)
+		risk := tool["risk"].(string)
+		if risk != "low" && risk != "medium" {
+			t.Fatalf("expected risk=low or medium, got %s", risk)
+		}
+	}
+}
+
+func TestHTTPAPI_DiscoveryEndpoint_EmptyFilterReturnsAll(t *testing.T) {
+	handler, sourcePath := setupHTTPHandler(t)
+
+	createResp := doJSONRequest(t, handler, http.MethodPost, testSharedSessionsPath, map[string]any{
+		testHTTPKeyPrincipal: map[string]any{
+			testHTTPKeyTenantID: testSharedTenantA,
+			testHTTPKeyActorID:  "agent-disc-empty",
+			testHTTPKeyRoles:    []string{testHTTPRoleDeveloper},
+		},
+		testHTTPSourceRepoPath: sourcePath,
+	})
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", createResp.StatusCode)
+	}
+	var createBody map[string]any
+	mustDecode(t, createResp.Body.Bytes(), &createBody)
+	sessionID := createBody[testHTTPKeySession].(map[string]any)[testHTTPKeyID].(string)
+
+	noFilter := doJSONRequest(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID+"/tools/discovery", nil)
+	withEmpty := doJSONRequest(t, handler, http.MethodGet, testPathSessionsPrefix+sessionID+"/tools/discovery?risk=&tags=", nil)
+
+	var noFilterBody, emptyBody map[string]any
+	mustDecode(t, noFilter.Body.Bytes(), &noFilterBody)
+	mustDecode(t, withEmpty.Body.Bytes(), &emptyBody)
+
+	noFilterCount := noFilterBody["filtered"].(float64)
+	emptyCount := emptyBody["filtered"].(float64)
+	if noFilterCount != emptyCount {
+		t.Fatalf("empty string params should behave like no filter: %v vs %v", noFilterCount, emptyCount)
+	}
+}
+
 func TestHTTPAPI_DecodeBodyNilBody(t *testing.T) {
 	handler, _ := setupHTTPHandler(t)
 

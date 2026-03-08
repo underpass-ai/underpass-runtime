@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
@@ -263,7 +264,7 @@ func TestService_DiscoverTools(t *testing.T) {
 		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
 	}
 
-	discovery, discErr := svc.DiscoverTools(ctx, session.ID)
+	discovery, discErr := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{})
 	if discErr != nil {
 		t.Fatalf("unexpected discovery error: %v", discErr)
 	}
@@ -308,9 +309,150 @@ func TestService_DiscoverTools(t *testing.T) {
 
 func TestService_DiscoverTools_InvalidSession(t *testing.T) {
 	svc := setupService(t)
-	_, discErr := svc.DiscoverTools(context.Background(), "nonexistent")
+	_, discErr := svc.DiscoverTools(context.Background(), "nonexistent", app.DiscoveryFilter{})
 	if discErr == nil {
 		t.Fatal("expected error for nonexistent session")
+	}
+}
+
+func TestService_DiscoverTools_FilterByRisk(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	all, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{})
+	low, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"low"}})
+	if len(low.Tools) == 0 {
+		t.Fatal("expected at least one low-risk tool")
+	}
+	if len(low.Tools) >= len(all.Tools) {
+		t.Fatal("filtering by risk=low should return fewer tools than unfiltered")
+	}
+	for _, tool := range low.Tools {
+		if tool.Risk != "low" {
+			t.Fatalf("expected risk=low, got %s for %s", tool.Risk, tool.Name)
+		}
+	}
+	if low.Filtered != len(low.Tools) {
+		t.Fatalf("filtered count (%d) != len(tools) (%d)", low.Filtered, len(low.Tools))
+	}
+}
+
+func TestService_DiscoverTools_FilterByTags(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	fsTools, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Tags: []string{"fs"}})
+	if len(fsTools.Tools) == 0 {
+		t.Fatal("expected at least one tool with tag 'fs'")
+	}
+	for _, tool := range fsTools.Tools {
+		if !slices.Contains(tool.Tags, "fs") {
+			t.Fatalf("tool %s should have tag 'fs', got %v", tool.Name, tool.Tags)
+		}
+	}
+}
+
+func TestService_DiscoverTools_FilterBySideEffects(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	noSideEffects, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{SideEffects: []string{"none"}})
+	if len(noSideEffects.Tools) == 0 {
+		t.Fatal("expected at least one tool with side_effects=none")
+	}
+	for _, tool := range noSideEffects.Tools {
+		if tool.SideEffects != "none" {
+			t.Fatalf("expected side_effects=none, got %s for %s", tool.SideEffects, tool.Name)
+		}
+	}
+}
+
+func TestService_DiscoverTools_FilterByScope(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	repoScope, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Scope: []string{"repo"}})
+	if len(repoScope.Tools) == 0 {
+		t.Fatal("expected at least one tool with scope=repo")
+	}
+	for _, tool := range repoScope.Tools {
+		if !slices.Contains(tool.Tags, "repo") {
+			t.Fatalf("tool %s should have tag 'repo', got %v", tool.Name, tool.Tags)
+		}
+	}
+}
+
+func TestService_DiscoverTools_FilterCombined(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	combined, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{
+		Risk:        []string{"low"},
+		SideEffects: []string{"none"},
+	})
+	for _, tool := range combined.Tools {
+		if tool.Risk != "low" {
+			t.Fatalf("expected risk=low, got %s for %s", tool.Risk, tool.Name)
+		}
+		if tool.SideEffects != "none" {
+			t.Fatalf("expected side_effects=none, got %s for %s", tool.SideEffects, tool.Name)
+		}
+	}
+
+	lowOnly, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"low"}})
+	noneOnly, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{SideEffects: []string{"none"}})
+	if len(combined.Tools) > len(lowOnly.Tools) || len(combined.Tools) > len(noneOnly.Tools) {
+		t.Fatal("AND-combined filter should return fewer or equal tools than individual filters")
+	}
+}
+
+func TestService_DiscoverTools_FilterMultiValueOR(t *testing.T) {
+	svc := setupService(t)
+	ctx := context.Background()
+	session, err := svc.CreateSession(ctx, app.CreateSessionRequest{
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testActorID, Roles: []string{testRoleDeveloper}},
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedCreateSessionErrFmt, err)
+	}
+
+	lowOnly, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"low"}})
+	medOnly, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"medium"}})
+	lowMed, _ := svc.DiscoverTools(ctx, session.ID, app.DiscoveryFilter{Risk: []string{"low", "medium"}})
+
+	if len(lowMed.Tools) != len(lowOnly.Tools)+len(medOnly.Tools) {
+		t.Fatalf("risk=low,medium (%d) should equal risk=low (%d) + risk=medium (%d)",
+			len(lowMed.Tools), len(lowOnly.Tools), len(medOnly.Tools))
 	}
 }
 
