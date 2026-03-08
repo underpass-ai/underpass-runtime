@@ -122,9 +122,12 @@ func createTarGz(srcDir string) ([]byte, error) {
 			if openErr != nil {
 				return openErr
 			}
-			defer f.Close()
 			_, copyErr := io.Copy(tw, f)
-			return copyErr
+			closeErr := f.Close()
+			if copyErr != nil {
+				return copyErr
+			}
+			return closeErr
 		})
 		_ = tw.Close()
 		_ = gw.Close()
@@ -153,7 +156,7 @@ func extractTarGz(data []byte, targetDir string) error {
 	if err != nil {
 		return fmt.Errorf("gzip reader: %w", err)
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 	for {
@@ -185,10 +188,12 @@ func extractTarGz(data []byte, targetDir string) error {
 				return createErr
 			}
 			if _, copyErr := io.Copy(f, tr); copyErr != nil {
-				f.Close()
+				_ = f.Close()
 				return copyErr
 			}
-			f.Close()
+			if closeErr := f.Close(); closeErr != nil {
+				return closeErr
+			}
 		}
 	}
 	return nil

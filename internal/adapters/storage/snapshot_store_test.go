@@ -55,8 +55,9 @@ func TestSnapshotStore_CreateAndRestore(t *testing.T) {
 
 	// Restore snapshot to new directory
 	restoreDir := t.TempDir()
-	if err := snapStore.Restore(ctx, ref, restoreDir); err != nil {
-		t.Fatalf("restore snapshot error: %v", err)
+	restoreErr := snapStore.Restore(ctx, ref, restoreDir)
+	if restoreErr != nil {
+		t.Fatalf("restore snapshot error: %v", restoreErr)
 	}
 
 	// Verify restored files
@@ -126,8 +127,9 @@ func TestSnapshotStore_EmptyWorkspace(t *testing.T) {
 	}
 
 	restoreDir := t.TempDir()
-	if err := snapStore.Restore(ctx, ref, restoreDir); err != nil {
-		t.Fatalf("restore snapshot error: %v", err)
+	restoreErr := snapStore.Restore(ctx, ref, restoreDir)
+	if restoreErr != nil {
+		t.Fatalf("restore snapshot error: %v", restoreErr)
 	}
 
 	entries, err := os.ReadDir(restoreDir)

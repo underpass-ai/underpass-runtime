@@ -188,7 +188,7 @@ func (s *S3ArtifactStore) Read(ctx context.Context, path string) ([]byte, error)
 	if err != nil {
 		return nil, fmt.Errorf("s3 get artifact %s: %w", path, err)
 	}
-	defer output.Body.Close()
+	defer func() { _ = output.Body.Close() }()
 
 	data, err := io.ReadAll(output.Body)
 	if err != nil {
