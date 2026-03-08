@@ -129,3 +129,9 @@ type AuditEvent struct {
 type AuditLogger interface {
 	Record(ctx context.Context, event AuditEvent)
 }
+
+// EventPublisher publishes domain events to an event bus.
+// The default implementation is a noop that logs at debug level.
+type EventPublisher interface {
+	Publish(ctx context.Context, event domain.DomainEvent) error
+}

@@ -36,6 +36,7 @@ type Service struct {
 	invStore  InvocationStore
 	artifacts ArtifactStore
 	audit     AuditLogger
+	events    EventPublisher
 	quotas    *invocationQuotaLimiter
 	metrics   *invocationMetrics
 	tracer    trace.Tracer
@@ -62,11 +63,24 @@ func NewService(
 		invStore:  resolvedInvocationStore,
 		artifacts: artifacts,
 		audit:     audit,
+		events:    &noopEventPublisher{},
 		quotas:    newInvocationQuotaLimiterFromEnv(),
 		metrics:   newInvocationMetrics(),
 		tracer:    otel.Tracer("workspace.service"),
 	}
 }
+
+// SetEventPublisher replaces the default noop event publisher.
+func (s *Service) SetEventPublisher(pub EventPublisher) {
+	if pub != nil {
+		s.events = pub
+	}
+}
+
+// noopEventPublisher is the zero-dependency default that discards events.
+type noopEventPublisher struct{}
+
+func (noopEventPublisher) Publish(context.Context, domain.DomainEvent) error { return nil }
 
 func (s *Service) PrometheusMetrics() string {
 	if s.metrics == nil {
@@ -90,6 +104,13 @@ func (s *Service) CreateSession(ctx context.Context, req CreateSessionRequest) (
 	if err != nil {
 		return domain.Session{}, internalError(err.Error())
 	}
+	s.publishEvent(ctx, domain.EventSessionCreated, session, domain.SessionCreatedPayload{
+		RuntimeKind:  session.Runtime.Kind,
+		RepoURL:      session.RepoURL,
+		RepoRef:      session.RepoRef,
+		ExpiresAt:    session.ExpiresAt,
+		WorkspaceDir: session.WorkspacePath,
+	})
 	return session, nil
 }
 
@@ -97,8 +118,16 @@ func (s *Service) CloseSession(ctx context.Context, sessionID string) *ServiceEr
 	if sessionID == "" {
 		return invalidArgumentError("session_id is required")
 	}
+	session, found, _ := s.workspace.GetSession(ctx, sessionID)
 	if err := s.workspace.CloseSession(ctx, sessionID); err != nil {
 		return internalError(err.Error())
+	}
+	if found {
+		durationSec := int64(time.Since(session.CreatedAt).Seconds())
+		s.publishEvent(ctx, domain.EventSessionClosed, session, domain.SessionClosedPayload{
+			RuntimeKind: session.Runtime.Kind,
+			DurationSec: durationSec,
+		})
 	}
 	return nil
 }
@@ -217,6 +246,11 @@ func (s *Service) InvokeTool(ctx context.Context, sessionID, toolName string, re
 	if serviceErr := s.storeInvocation(ctx, invocation); serviceErr != nil {
 		return invocation, serviceErr
 	}
+	s.publishEvent(ctx, domain.EventInvocationStarted, session, domain.InvocationStartedPayload{
+		InvocationID:  invocationID,
+		ToolName:      toolName,
+		CorrelationID: invocation.CorrelationID,
+	})
 
 	invocation, releaseConcurrency, authErr := s.authorizeToolInvocation(ctx, invocation, startedAt, session, capability, req.Args, req.Approved)
 	if authErr != nil {
@@ -355,18 +389,21 @@ func (s *Service) completeToolInvocation(
 		inv = s.finishWithError(inv, tc.startedAt, tc.runErr)
 		_ = s.storeInvocation(ctx, inv)
 		s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
+		s.publishInvocationCompleted(ctx, tc.session, inv)
 		return inv, runServiceError(toolCtx, tc.runErr)
 	}
 	if artifactErr != nil {
 		inv = s.finishWithError(inv, tc.startedAt, &domain.Error{Code: ErrorCodeInternal, Message: artifactErr.Error(), Retryable: false})
 		_ = s.storeInvocation(ctx, inv)
 		s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
+		s.publishInvocationCompleted(ctx, tc.session, inv)
 		return inv, internalError(artifactErr.Error())
 	}
 	if validationErr := validateOutputAgainstSchema(tc.capability.OutputSchema, tc.runResult.Output); validationErr != nil {
 		inv = s.finishWithError(inv, tc.startedAt, &domain.Error{Code: ErrorCodeInternal, Message: validationErr.Error(), Retryable: false})
 		_ = s.storeInvocation(ctx, inv)
 		s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
+		s.publishInvocationCompleted(ctx, tc.session, inv)
 		return inv, internalError(validationErr.Error())
 	}
 	endedAt := time.Now().UTC()
@@ -377,6 +414,7 @@ func (s *Service) completeToolInvocation(
 		return inv, serviceErr
 	}
 	s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
+	s.publishInvocationCompleted(ctx, tc.session, inv)
 	return inv, nil
 }
 
@@ -387,6 +425,12 @@ func (s *Service) denyInvocation(ctx context.Context, invocation domain.Invocati
 	invocation = s.finishWithError(invocation, startedAt, domErr)
 	_ = s.storeInvocation(ctx, invocation)
 	s.audit.Record(ctx, auditEventFromInvocation(session, invocation))
+	s.publishEvent(ctx, domain.EventInvocationDenied, session, domain.InvocationDeniedPayload{
+		InvocationID:  invocation.ID,
+		ToolName:      invocation.ToolName,
+		CorrelationID: invocation.CorrelationID,
+		Reason:        domErr.Message,
+	})
 	return invocation
 }
 
@@ -990,4 +1034,34 @@ func envInt(name string, fallback int) int {
 func samePrincipalIdentity(expected, actual domain.Principal) bool {
 	return strings.TrimSpace(expected.TenantID) == strings.TrimSpace(actual.TenantID) &&
 		strings.TrimSpace(expected.ActorID) == strings.TrimSpace(actual.ActorID)
+}
+
+// publishEvent builds a DomainEvent and publishes it. Errors are silently
+// ignored — event publishing must not block the primary operation.
+func (s *Service) publishEvent(ctx context.Context, eventType domain.EventType, session domain.Session, payload any) {
+	evt, err := domain.NewDomainEvent(newID("evt"), eventType, session.ID, session.Principal.TenantID, session.Principal.ActorID, payload)
+	if err != nil {
+		return
+	}
+	_ = s.events.Publish(ctx, evt)
+}
+
+// publishInvocationCompleted publishes an EventInvocationCompleted with output size estimation.
+func (s *Service) publishInvocationCompleted(ctx context.Context, session domain.Session, inv domain.Invocation) {
+	var outputBytes int64
+	if inv.Output != nil {
+		if data, err := json.Marshal(inv.Output); err == nil {
+			outputBytes = int64(len(data))
+		}
+	}
+	s.publishEvent(ctx, domain.EventInvocationCompleted, session, domain.InvocationCompletedPayload{
+		InvocationID:  inv.ID,
+		ToolName:      inv.ToolName,
+		CorrelationID: inv.CorrelationID,
+		Status:        inv.Status,
+		ExitCode:      inv.ExitCode,
+		DurationMS:    inv.DurationMS,
+		OutputBytes:   outputBytes,
+		ArtifactCount: len(inv.Artifacts),
+	})
 }
