@@ -1,0 +1,64 @@
+workspace_tests:
+  - id: "01"
+    name: "01-health"
+    job_name: "e2e-health"
+    tier: "smoke"
+    kind: "workspace"
+    timeout_override: 300
+    tags: ["workspace", "health", "metrics", "smoke"]
+
+  - id: "02"
+    name: "02-session-lifecycle"
+    job_name: "e2e-session-lifecycle"
+    tier: "smoke"
+    kind: "workspace"
+    timeout_override: 600
+    tags: ["workspace", "session", "lifecycle", "smoke"]
+
+  - id: "03"
+    name: "03-tool-discovery"
+    job_name: "e2e-tool-discovery"
+    tier: "smoke"
+    kind: "workspace"
+    timeout_override: 600
+    tags: ["workspace", "discovery", "catalog", "filters", "smoke"]
+
+  - id: "04"
+    name: "04-recommendations"
+    job_name: "e2e-recommendations"
+    tier: "core"
+    kind: "workspace"
+    timeout_override: 600
+    tags: ["workspace", "recommendations", "scoring"]
+
+  - id: "05"
+    name: "05-invoke-basic"
+    job_name: "e2e-invoke-basic"
+    tier: "smoke"
+    kind: "workspace"
+    timeout_override: 600
+    tags: ["workspace", "invoke", "fs", "smoke"]
+
+  - id: "06"
+    name: "06-invoke-policy"
+    job_name: "e2e-invoke-policy"
+    tier: "core"
+    kind: "workspace"
+    timeout_override: 600
+    tags: ["workspace", "invoke", "policy", "approval", "traversal"]
+
+  - id: "07"
+    name: "07-invocation-retrieval"
+    job_name: "e2e-invocation-retrieval"
+    tier: "core"
+    kind: "workspace"
+    timeout_override: 600
+    tags: ["workspace", "invocation", "retrieval", "logs", "artifacts"]
+
+  - id: "08"
+    name: "08-data-flow"
+    job_name: "e2e-data-flow"
+    tier: "core"
+    kind: "workspace"
+    timeout_override: 900
+    tags: ["workspace", "data-flow", "write", "read", "end-to-end"]

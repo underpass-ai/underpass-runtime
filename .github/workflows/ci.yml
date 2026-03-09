@@ -261,8 +261,8 @@ jobs:
             -Dsonar.projectKey=underpass-ai_underpass-runtime
             -Dsonar.go.coverage.reportPaths=coverage-full.out
             -Dsonar.sources=.
-            -Dsonar.exclusions=**/*_test.go,**/testdata/**,**/vendor/**
+            -Dsonar.exclusions=**/*_test.go,**/testdata/**,**/vendor/**,e2e/**
             -Dsonar.tests=.
-            -Dsonar.test.inclusions=**/*_test.go
+            -Dsonar.test.inclusions=**/*_test.go,e2e/**/*.py
             -Dsonar.coverage.minimum=70
             -Dsonar.newCode.coverage.minimum=80
