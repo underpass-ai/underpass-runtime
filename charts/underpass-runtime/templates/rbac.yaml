@@ -1,0 +1,42 @@
+{{- if and (eq .Values.config.workspaceBackend "kubernetes") .Values.kubernetesBackend.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "underpass-runtime.fullname" . }}-runner
+  namespace: {{ .Values.kubernetesBackend.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+    {{- if .Values.kubernetesBackend.gitAuthSecret }}
+    resourceNames:
+      - {{ .Values.kubernetesBackend.gitAuthSecret }}
+    {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "underpass-runtime.fullname" . }}-runner
+  namespace: {{ .Values.kubernetesBackend.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "underpass-runtime.fullname" . }}-runner
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "underpass-runtime.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

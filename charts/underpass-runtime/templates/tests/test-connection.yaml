@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "underpass-runtime.fullname" . }}-test-connection"
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: wget
+      image: docker.io/busybox:1.36
+      command: ['wget']
+      args: ['--spider', '--timeout=5', '{{ include "underpass-runtime.fullname" . }}:{{ .Values.service.port }}/healthz']
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      resources:
+        limits:
+          cpu: 100m
+          memory: 64Mi
+          ephemeral-storage: 16Mi
+        requests:
+          cpu: 50m
+          memory: 32Mi
+          ephemeral-storage: 8Mi
+  restartPolicy: Never

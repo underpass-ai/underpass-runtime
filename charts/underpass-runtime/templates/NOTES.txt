@@ -1,0 +1,20 @@
+UnderPass Runtime has been deployed.
+
+Get the service URL:
+{{- if eq .Values.service.type "ClusterIP" }}
+  kubectl port-forward svc/{{ include "underpass-runtime.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+{{- else if eq .Values.service.type "NodePort" }}
+  export NODE_PORT=$(kubectl get svc {{ include "underpass-runtime.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+  export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if eq .Values.service.type "LoadBalancer" }}
+  export SERVICE_IP=$(kubectl get svc {{ include "underpass-runtime.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+{{- end }}
+
+Health check:
+  curl http://localhost:{{ .Values.service.port }}/healthz
+
+Backend: {{ .Values.config.workspaceBackend }}
+Stores:  {{ .Values.stores.backend }}
+Events:  {{ .Values.eventBus.type }}
