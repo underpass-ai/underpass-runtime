@@ -234,6 +234,206 @@ underpass-runtime supports the same auth mode with the same header names and tok
 > Prepare repository for open-source publication.
 > Licensing, documentation, CI hardening, public registry images.
 
+### Phase 10 — Tool Learning Service (DuckDB)
+
+New Python microservice (`services/tool-learning/`) — bounded context for offline/nearline
+tool-selection policy learning. DuckDB as analytical engine over MinIO Parquet lake.
+
+#### 10.1 Architecture
+
+- **Hexagonal**: domain → application (use cases + ports) → adapters
+- **Stateless DuckDB** (Option A): no persistent DB file, each CronJob scans Parquet and
+  writes results back. Avoids single-writer locking, simplifies HA.
+- **K8s CronJob**: hourly (warm) + daily (cold) schedules
+
+#### 10.2 Data Flow
+
+```
+Phase 6 Telemetry (Valkey)
+    │
+    ▼  TL-006: exporter
+MinIO Telemetry Lake (Parquet, partitioned by dt/hour)
+    │
+    ▼  TL-003: DuckDB httpfs/S3 scan
+DuckDB (stateless, in-memory)
+    │  aggregate + Thompson Sampling
+    ▼
+┌───────────────┬────────────────┬──────────────────┐
+│ MinIO (audit) │ Valkey (hot)   │ NATS event       │
+│ policy/*.json │ tool_policy:*  │ ToolPolicyUpdated │
+└───────────────┴────────────────┴──────────────────┘
+```
+
+#### 10.3 Storage Isolation (MinIO)
+
+**Two logical domains — never cross-read:**
+
+| Domain | Bucket | Access | Purpose |
+|--------|--------|--------|---------|
+| Workspace Store | `workspace-artifacts` | workspace-svc R/W | Execution artefacts (repos, builds, outputs, caches) |
+| Telemetry Lake | `telemetry-lake` | telemetry-svc W, tool-learning R | Parquet partitions for learning |
+| Policy Output | `telemetry-policy` | tool-learning R/W | Policy snapshots (audit trail) |
+
+**Isolation strategy** (start Opción B, path to A):
+- **Opción B (initial)**: 1 MinIO tenant, 3 buckets, 3 S3 users with scoped policies
+  - `workspace-svc`: only `workspace-artifacts`
+  - `telemetry-svc`: only write `telemetry-lake`
+  - `tool-learning`: read `telemetry-lake`, R/W `telemetry-policy`
+- **Opción A (target)**: 2 MinIO tenants (`minio-workspace`, `minio-telemetry`) with separate
+  credentials, NetworkPolicies, endpoints. Migration path: change S3 endpoint env vars.
+
+**Critical rule**: tool-learning **NEVER reads from workspace-store**. If workspace context
+is needed (language, repo size, task type), it must be emitted as telemetry fields or
+`TaskMetadata` events into the lake.
+
+#### 10.4 Data Privacy & Key Model
+
+**Pseudonymization in the lake:**
+- `subject_id_hash = HMAC(tenant_key, user_id)` — group by user without storing PII
+- `workspace_id_hash` — correlate without exposing workspace paths
+- No paths, repo names, tokens, env vars in telemetry records
+
+**Valkey key model (runtime consumption):**
+```
+valkey:tool_policy:{context_sig}:{tool_id} → {
+  alpha, beta, p95_latency_ms, p95_cost,
+  error_rate, n_samples, freshness_ts
+}
+```
+`context_sig` uses categorical dimensions only: `task_family`, `lang`, `constraints_class`.
+No sensitive workspace data in the key.
+
+#### 10.5 Retention & Lifecycle
+
+| Tier | Data | Retention | Action |
+|------|------|-----------|--------|
+| Hot | Raw hourly Parquet | 7–14 days | Lifecycle delete |
+| Warm | Daily aggregates | 30–90 days | Compaction job rewrites partitions |
+| Cold | Policy snapshots | 90+ days | Audit archive |
+| Workspace caches | Build caches, temp outputs | Days | Session cleanup cron |
+| Workspace outputs | Release artefacts | Months | Configurable per tenant |
+
+Lifecycle rules configured in Helm values per bucket.
+
+#### 10.6 Network Security
+
+```
+┌─────────────────┐     ┌──────────────────┐
+│ workspace pods   │────▶│ minio-workspace  │
+│ (SA: workspace)  │     │ bucket only      │
+└─────────────────┘     └──────────────────┘
+
+┌─────────────────┐     ┌──────────────────┐
+│ tool-learning    │────▶│ minio-telemetry  │
+│ (SA: learning)   │     │ lake + policy    │
+└─────────────────┘     └──────────────────┘
+```
+- NetworkPolicies: workspace pods → minio-workspace only; tool-learning → minio-telemetry only
+- Separate ServiceAccounts + separate S3 credentials (never share access keys)
+- mTLS / service mesh: distinct identities per tenant
+
+#### 10.7 Domain Model
+
+```python
+ToolInvocation(invocation_id, dt, ts, tool_id, agent_id, task_id,
+               context_signature, outcome, error_type, latency_ms,
+               cost_units, tool_version)
+
+ToolPolicy(context_signature, tool_id, alpha, beta,
+           p95_latency_ms, p95_cost, error_rate,
+           n_samples, freshness_ts, confidence)
+
+ContextSignature(task_family, lang, constraints_class)
+```
+
+#### 10.8 Analytical Schema (DuckDB over Parquet)
+
+```sql
+-- Fact table (partitioned Parquet in MinIO)
+CREATE TABLE tool_invocations (
+  invocation_id   VARCHAR,
+  dt              DATE,
+  ts              TIMESTAMP,
+  tool_id         VARCHAR,
+  agent_id_hash   VARCHAR,
+  task_id         VARCHAR,
+  context_signature VARCHAR,
+  outcome         VARCHAR,    -- 'success' | 'failure'
+  error_type      VARCHAR,
+  latency_ms      BIGINT,
+  cost_units      DOUBLE,
+  tool_version    VARCHAR
+);
+
+-- Materialized aggregate (computed by CronJob)
+SELECT
+  dt, context_signature, tool_id,
+  COUNT(*)                                             AS n,
+  AVG(CASE WHEN outcome='success' THEN 1 ELSE 0 END)  AS p_success,
+  QUANTILE_CONT(latency_ms, 0.95)                     AS p95_latency_ms,
+  QUANTILE_CONT(cost_units, 0.95)                      AS p95_cost,
+  AVG(CASE WHEN outcome='failure' THEN 1 ELSE 0 END)  AS error_rate
+FROM tool_invocations
+GROUP BY dt, context_signature, tool_id;
+```
+
+#### 10.9 Learning Algorithm
+
+**Thompson Sampling with Beta priors** per `(context_signature, tool_id)`:
+- `alpha = successes + prior_alpha` (prior_alpha=1)
+- `beta = failures + prior_beta` (prior_beta=1)
+- Runtime samples `Beta(alpha, beta)` to rank tools → automatic exploration
+
+**Hard constraints** (filter before sampling):
+- `p95_latency_ms > MAX_P95_LATENCY_MS` → exclude
+- `error_rate > MAX_ERROR_RATE` → exclude
+- `p95_cost > MAX_P95_COST` → exclude
+
+**Poisoned metrics protection:**
+- Cap latency at configurable max (discard outliers)
+- Ignore cancelled invocations
+- Separate infra failures from tool semantic failures
+
+#### 10.10 Event Integration (NATS)
+
+**Inputs** (consumed from NATS or exported from Valkey telemetry):
+- `workspace.invocation.completed` — tool outcome + metrics
+- `workspace.invocation.denied` — policy denial signal
+
+**Outputs** (published to NATS):
+- `tool_learning.policy.updated` — per context cluster or global
+- `tool_learning.tool.degraded` — SLO violation alert
+
+#### 10.11 Hexagonal Boundaries
+
+| Layer | Components |
+|-------|------------|
+| **Domain** | ToolInvocation, ToolPolicy, ContextSignature, aggregation semantics, bandit model |
+| **Application** | ComputeHourlyPolicyUseCase, ComputeDailyPolicyUseCase, PublishPolicyUseCase |
+| **Ports** | TelemetryLakePort (read), PolicyStorePort (write), PolicyEventPublisherPort, ClockPort |
+| **Adapters** | DuckDB+MinIO (lake), Valkey (policy), NATS (events) |
+
+#### 10.12 Observability
+
+CronJob metrics (emitted to stdout JSON or Prometheus pushgateway):
+- `partitions_processed`, `rows_scanned`, `policy_keys_written`
+- `time_to_policy_seconds`, `failures_by_stage` (read/transform/write/publish)
+
+#### 10.13 Backlog
+
+| ID | Task | Depends | Effort |
+|----|------|---------|--------|
+| TL-001 | Domain model + analytical schema (Parquet) | — | Small |
+| TL-002 | Application layer (use cases + ports) | TL-001 | Small |
+| TL-003 | DuckDB + MinIO adapter (lake reader) | TL-002 | Medium |
+| TL-004 | Valkey adapter (policy store) | TL-002 | Small |
+| TL-005 | NATS adapter (policy event publisher) | TL-002 | Small |
+| TL-006 | Telemetry exporter (Phase 6 Valkey → Parquet in MinIO) | TL-001 | Medium |
+| TL-007 | CronJob manifest + Dockerfile + Makefile | TL-003..005 | Medium |
+| TL-008 | MinIO bucket isolation (3 users, 3 policies, NetworkPolicies) | — | Medium |
+| TL-009 | Lifecycle rules (retention per tier in Helm values) | TL-008 | Small |
+| TL-010 | E2E test (CronJob → policy computed → runtime reads priors) | TL-007 | Medium |
+
 ---
 
 ## 6. Conclusion
