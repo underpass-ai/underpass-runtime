@@ -1,0 +1,84 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-llm-agent-loop
+  labels:
+    app: e2e-llm-agent-loop
+    tier: llm
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: e2e-llm-agent-loop
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: test
+          image: registry.underpassai.com/underpass-runtime/e2e-llm-agent-loop:v1.0.0
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: WORKSPACE_URL
+              value: "http://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            - name: WORKSPACE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: workspace-auth
+                  key: shared_token
+                  optional: true
+            - name: LLM_PROVIDER
+              value: "claude"   # claude | openai | vllm
+            # --- Claude ---
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-api-keys
+                  key: anthropic_api_key
+                  optional: true
+            - name: CLAUDE_MODEL
+              value: "claude-sonnet-4-20250514"
+            # --- OpenAI ---
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: llm-api-keys
+                  key: openai_api_key
+                  optional: true
+            - name: OPENAI_MODEL
+              value: "gpt-4o-mini"
+            # --- vLLM (Qwen) ---
+            - name: VLLM_URL
+              value: "http://vllm-server.underpass-runtime.svc.cluster.local:8000"
+            - name: VLLM_MODEL
+              value: "Qwen/Qwen3-Coder-Next-AWQ-4bit"
+            # --- Test config ---
+            - name: EVIDENCE_FILE
+              value: "/tmp/evidence-10-llm-agent-loop.json"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: E2E_DEBUG
+              value: "0"
+            - name: E2E_SKIP_CLEANUP
+              value: "0"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+              ephemeral-storage: 128Mi
