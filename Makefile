@@ -13,7 +13,7 @@ CORE_TEST_PACKAGES := ./internal/app ./internal/adapters/audit ./internal/adapte
 export GOCACHE ?= /tmp/go-cache-workspace
 export GOTMPDIR ?= /tmp/go-tmp-workspace
 
-.PHONY: help run build test test-all test-core coverage coverage-core coverage-full catalog-docs clean docker-build docker-push
+.PHONY: help run build test test-all test-core coverage coverage-core coverage-full catalog-docs clean docker-build docker-push integration-test integration-up integration-down
 
 help:
 	@echo "Workspace service commands"
@@ -26,6 +26,9 @@ help:
 	@echo "  make catalog-docs       # Regenerate docs/CAPABILITY_CATALOG.md from DefaultCapabilities()"
 	@echo "  make docker-build       # Build container image"
 	@echo "  make docker-push        # Push container image"
+	@echo "  make integration-test   # Run integration tests in devcontainer"
+	@echo "  make integration-up     # Start devcontainer services"
+	@echo "  make integration-down   # Stop devcontainer services"
 	@echo ""
 	@echo "Variables:"
 	@echo "  COVERAGE_MIN=$(COVERAGE_MIN)"
@@ -84,6 +87,29 @@ catalog-docs:
 
 clean:
 	rm -rf bin coverage*.out
+
+COMPOSE_FILE := .devcontainer/docker-compose.yml
+COMPOSE_CMD := $(shell command -v podman-compose 2>/dev/null || echo "docker compose")
+
+integration-up:
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) up -d --build
+	@echo "Waiting for runtime to become healthy..."
+	@for i in $$(seq 1 30); do \
+		if $(COMPOSE_CMD) -f $(COMPOSE_FILE) exec -T devcontainer wget -q --spider http://runtime:50053/healthz 2>/dev/null; then \
+			echo "Runtime is healthy."; \
+			break; \
+		fi; \
+		if [ $$i -eq 30 ]; then echo "Timeout waiting for runtime."; exit 1; fi; \
+		sleep 2; \
+	done
+
+integration-test: integration-up
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) exec -T -w /workspace/tests/integration devcontainer \
+		sh -c 'mkdir -p /tmp/go-cache /tmp/go-tmp && go test -tags=integration -v -count=1 ./...'
+	@echo "Integration tests passed."
+
+integration-down:
+	$(COMPOSE_CMD) -f $(COMPOSE_FILE) down -v
 
 docker-build:
 	@BUILDER=$$(command -v podman 2>/dev/null || command -v docker 2>/dev/null); \
