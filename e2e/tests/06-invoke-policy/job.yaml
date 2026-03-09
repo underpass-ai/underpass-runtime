@@ -1,0 +1,68 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-invoke-policy
+  namespace: underpass-runtime
+  labels:
+    app: e2e-invoke-policy
+    test-type: e2e
+    test-suite: workspace
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  activeDeadlineSeconds: 600
+
+  template:
+    metadata:
+      labels:
+        app: e2e-invoke-policy
+        test-type: e2e
+        test-suite: workspace
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+
+      containers:
+        - name: test-runner
+          image: registry.underpassai.com/underpass-runtime/e2e-invoke-policy:v1.0.0
+          imagePullPolicy: Always
+          env:
+            - name: WORKSPACE_URL
+              value: "http://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            - name: WORKSPACE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: workspace-auth
+                  key: shared_token
+                  optional: true
+            - name: WORKSPACE_AUTH_TENANT_ID
+              value: "e2e-tenant"
+            - name: WORKSPACE_AUTH_ACTOR_ID
+              value: "e2e-actor"
+            - name: WORKSPACE_AUTH_ROLES
+              value: "developer"
+            - name: EVIDENCE_FILE
+              value: "/tmp/evidence-06.json"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+              ephemeral-storage: "64Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+              ephemeral-storage: "256Mi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+
+      dnsPolicy: ClusterFirst

@@ -5,3 +5,7 @@ cover*.out
 *.exe
 *.test
 *.prof
+swe-ai-fleet-codebase-delete-me-when-standalone-extraction-finish/
+
+# E2E evidence (runtime artifacts)
+e2e/evidence/
