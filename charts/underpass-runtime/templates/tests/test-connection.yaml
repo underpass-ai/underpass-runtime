@@ -29,7 +29,9 @@ spec:
         limits:
           cpu: 100m
           memory: 64Mi
+          ephemeral-storage: 16Mi
         requests:
           cpu: 50m
           memory: 32Mi
+          ephemeral-storage: 8Mi
   restartPolicy: Never
