@@ -1,6 +1,10 @@
 ---
-# vLLM Server — Qwen3-Coder-Next AWQ 4-bit
+# vLLM Server — Qwen3-8B
 # Ephemeral deployment for Phase 8 LLM integration testing.
+#
+# IMPORTANT: requires LD_LIBRARY_PATH=/usr/lib for CUDA driver
+# compatibility with vllm-openai:v0.15.0-cu130 on NVIDIA 590.x drivers.
+# See memory/vllm-qwen3-coder-next-awq.md for details on AWQ model issues.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,15 +27,11 @@ spec:
           image: docker.io/vllm/vllm-openai:v0.15.0-cu130
           args:
             - "--model"
-            - "Qwen/Qwen3-Coder-Next-AWQ-4bit"
-            - "--quantization"
-            - "awq"
+            - "Qwen/Qwen3-8B"
             - "--max-model-len"
-            - "32768"
+            - "16384"
             - "--gpu-memory-utilization"
             - "0.90"
-            - "--tensor-parallel-size"
-            - "4"
           ports:
             - containerPort: 8000
           env:
@@ -39,12 +39,8 @@ spec:
               value: "0.0.0.0"
             - name: PORT
               value: "8000"
-            - name: CUDA_VISIBLE_DEVICES
-              value: "0,1,2,3"
             - name: VLLM_ATTENTION_BACKEND
               value: "FLASHINFER"
-            - name: VLLM_WORKER_MULTIPROC_METHOD
-              value: "spawn"
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: LD_LIBRARY_PATH
@@ -57,13 +53,13 @@ spec:
           resources:
             requests:
               nvidia.com/gpu: 1
-              memory: "8Gi"
-              cpu: "2"
+              memory: "16Gi"
+              cpu: "4"
               ephemeral-storage: 4Gi
             limits:
               nvidia.com/gpu: 1
-              memory: "16Gi"
-              cpu: "4"
+              memory: "32Gi"
+              cpu: "8"
               ephemeral-storage: 8Gi
           volumeMounts:
             - name: huggingface-cache
@@ -72,16 +68,17 @@ spec:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 120
+            initialDelaySeconds: 300
             periodSeconds: 15
             timeoutSeconds: 10
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 120
+            initialDelaySeconds: 300
             periodSeconds: 30
             timeoutSeconds: 10
+            failureThreshold: 10
       volumes:
         - name: huggingface-cache
           persistentVolumeClaim:

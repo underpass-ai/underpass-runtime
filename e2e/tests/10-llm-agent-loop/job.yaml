@@ -63,7 +63,7 @@ spec:
             - name: VLLM_URL
               value: "http://vllm-server.underpass-runtime.svc.cluster.local:8000"
             - name: VLLM_MODEL
-              value: "Qwen/Qwen3-Coder-Next-AWQ-4bit"
+              value: "Qwen/Qwen3-8B"
             # --- Test config ---
             - name: EVIDENCE_FILE
               value: "/tmp/evidence-10-llm-agent-loop.json"
