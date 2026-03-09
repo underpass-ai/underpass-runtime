@@ -94,11 +94,15 @@ config:
 workspace:
   # -- Root directory for workspaces (emptyDir mount)
   root: /tmp/workspaces
+  # -- Size limit for workspace emptyDir volume
+  sizeLimit: 2Gi
 
 # -- Artifact storage
 artifacts:
   # -- Root directory for local artifacts (emptyDir mount)
   root: /tmp/artifacts
+  # -- Size limit for artifacts emptyDir volume
+  sizeLimit: 1Gi
   # -- Artifact backend: local, s3
   backend: local
   s3:
@@ -222,6 +226,32 @@ kubernetesBackend:
   rbac:
     # -- Create ClusterRole and ClusterRoleBinding for K8s backend
     create: false
+
+# ---------------------------------------------------------------------------
+# Prometheus ServiceMonitor
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Network Policy
+# ---------------------------------------------------------------------------
+
+networkPolicy:
+  # -- Create a NetworkPolicy restricting ingress/egress
+  enabled: false
+  # -- Additional ingress from rules (e.g. namespaceSelector, podSelector)
+  ingressFrom: []
+
+# ---------------------------------------------------------------------------
+# Pod Disruption Budget
+# ---------------------------------------------------------------------------
+
+podDisruptionBudget:
+  # -- Create a PodDisruptionBudget
+  enabled: false
+  # -- Minimum available pods (mutually exclusive with maxUnavailable)
+  minAvailable: ""
+  # -- Maximum unavailable pods
+  maxUnavailable: 1
 
 # ---------------------------------------------------------------------------
 # Prometheus ServiceMonitor

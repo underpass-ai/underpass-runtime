@@ -26,6 +26,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "underpass-runtime.serviceAccountName" . }}
+      automountServiceAccountToken: {{ eq .Values.config.workspaceBackend "kubernetes" }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -98,11 +99,14 @@ spec:
               mountPath: /tmp
       volumes:
         - name: workspaces
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: {{ .Values.workspace.sizeLimit }}
         - name: artifacts
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: {{ .Values.artifacts.sizeLimit }}
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
