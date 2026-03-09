@@ -1,0 +1,118 @@
+---
+# vLLM Server — Qwen3-Coder-Next AWQ 4-bit
+# Ephemeral deployment for Phase 8 LLM integration testing.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-server
+  labels:
+    app: vllm-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-server
+  template:
+    metadata:
+      labels:
+        app: vllm-server
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: vllm
+          image: docker.io/vllm/vllm-openai:v0.15.0-cu130
+          args:
+            - "--model"
+            - "Qwen/Qwen3-Coder-Next-AWQ-4bit"
+            - "--quantization"
+            - "awq"
+            - "--max-model-len"
+            - "32768"
+            - "--gpu-memory-utilization"
+            - "0.90"
+            - "--tensor-parallel-size"
+            - "4"
+          ports:
+            - containerPort: 8000
+          env:
+            - name: HOST
+              value: "0.0.0.0"
+            - name: PORT
+              value: "8000"
+            - name: CUDA_VISIBLE_DEVICES
+              value: "0,1,2,3"
+            - name: VLLM_ATTENTION_BACKEND
+              value: "FLASHINFER"
+            - name: VLLM_WORKER_MULTIPROC_METHOD
+              value: "spawn"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: LD_LIBRARY_PATH
+              value: "/usr/lib"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: huggingface-token
+                  key: HF_TOKEN
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              memory: "8Gi"
+              cpu: "2"
+              ephemeral-storage: 4Gi
+            limits:
+              nvidia.com/gpu: 1
+              memory: "16Gi"
+              cpu: "4"
+              ephemeral-storage: 8Gi
+          volumeMounts:
+            - name: huggingface-cache
+              mountPath: /root/.cache/huggingface
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+      volumes:
+        - name: huggingface-cache
+          persistentVolumeClaim:
+            claimName: huggingface-cache-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-server
+  labels:
+    app: vllm-server
+spec:
+  selector:
+    app: vllm-server
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: huggingface-cache-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: local-path

@@ -62,3 +62,11 @@ workspace_tests:
     kind: "workspace"
     timeout_override: 900
     tags: ["workspace", "data-flow", "write", "read", "end-to-end"]
+
+  - id: "10"
+    name: "10-llm-agent-loop"
+    job_name: "e2e-llm-agent-loop"
+    tier: "full"
+    kind: "llm"
+    timeout_override: 600
+    tags: ["llm", "agent-loop", "discovery", "invoke", "claude", "openai", "vllm"]
