@@ -45,16 +45,18 @@ make runner-build-push PROFILE=all TAG=v0.1.0
 
 Image names follow this pattern:
 
-- `registry.underpassai.com/swe-ai-fleet/workspace-runner-base:<tag>`
-- `registry.underpassai.com/swe-ai-fleet/workspace-runner-toolchains:<tag>`
-- `registry.underpassai.com/swe-ai-fleet/workspace-runner-secops:<tag>`
-- `registry.underpassai.com/swe-ai-fleet/workspace-runner-container:<tag>`
-- `registry.underpassai.com/swe-ai-fleet/workspace-runner-k6:<tag>`
-- `registry.underpassai.com/swe-ai-fleet/workspace-runner-fat:<tag>`
+- `ghcr.io/underpass-ai/underpass-runtime/workspace-runner-base:<tag>`
+- `ghcr.io/underpass-ai/underpass-runtime/workspace-runner-toolchains:<tag>`
+- `ghcr.io/underpass-ai/underpass-runtime/workspace-runner-secops:<tag>`
+- `ghcr.io/underpass-ai/underpass-runtime/workspace-runner-container:<tag>`
+- `ghcr.io/underpass-ai/underpass-runtime/workspace-runner-k6:<tag>`
+- `ghcr.io/underpass-ai/underpass-runtime/workspace-runner-fat:<tag>`
+
+Override the default registry with `REGISTRY=your-registry.com/org make -C runner-images build`.
 
 ## Wiring
 
-`deploy/k8s/30-microservices/workspace.yaml` maps runner profiles through:
+Runner profiles are configured through:
 
 - `WORKSPACE_K8S_RUNNER_IMAGE`
 - `WORKSPACE_K8S_RUNNER_IMAGE_BUNDLES_JSON`

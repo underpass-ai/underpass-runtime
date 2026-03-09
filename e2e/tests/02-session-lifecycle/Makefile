@@ -1,4 +1,4 @@
-REGISTRY ?= registry.underpassai.com/underpass-runtime
+REGISTRY ?= ghcr.io/underpass-ai/underpass-runtime
 IMAGE_NAME = e2e-session-lifecycle
 VERSION ?= v1.0.0
 NAMESPACE ?= underpass-runtime

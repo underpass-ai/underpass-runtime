@@ -60,8 +60,8 @@ func main() {
 	}()
 
 	port := envOrDefault("PORT", "50053")
-	workspaceRoot := envOrDefault("WORKSPACE_ROOT", "/tmp/swe-workspaces")
-	artifactRoot := envOrDefault("ARTIFACT_ROOT", "/tmp/swe-artifacts")
+	workspaceRoot := envOrDefault("WORKSPACE_ROOT", "/tmp/underpass-workspaces")
+	artifactRoot := envOrDefault("ARTIFACT_ROOT", "/tmp/underpass-artifacts")
 	workspaceBackend := strings.ToLower(strings.TrimSpace(envOrDefault("WORKSPACE_BACKEND", workspaceBackendLocal)))
 	workspaceNamespace := envOrDefault("WORKSPACE_K8S_NAMESPACE", defaultNamespace)
 

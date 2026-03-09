@@ -3,7 +3,7 @@ replicaCount: 1
 
 image:
   # -- Container image registry + repository
-  repository: registry.underpassai.com/underpass-runtime
+  repository: ghcr.io/underpass-ai/underpass-runtime
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Overrides the image tag (defaults to Chart appVersion)

@@ -1,4 +1,4 @@
-REGISTRY ?= registry.underpassai.com/underpass-runtime
+REGISTRY ?= ghcr.io/underpass-ai/underpass-runtime
 VERSION  ?= v1.0.0
 
 PROFILES = base toolchains secops container k6 fat

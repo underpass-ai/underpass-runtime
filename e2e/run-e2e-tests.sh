@@ -16,7 +16,7 @@ set -euo pipefail
 #   --skip-push                    Skip pushing images to registry
 #   --cleanup                      Delete jobs after completion
 #   --namespace <ns>               K8s namespace (default: underpass-runtime)
-#   --registry <reg>               Container registry (default: registry.underpassai.com/underpass-runtime)
+#   --registry <reg>               Container registry (default: ghcr.io/underpass-ai/underpass-runtime)
 #   --timeout <secs>               Default per-test timeout (default: 600)
 #   --evidence-dir <dir>           Local dir for evidence files (default: e2e/evidence)
 #   --help                         Show this help
@@ -34,7 +34,7 @@ SKIP_BUILD=false
 SKIP_PUSH=false
 CLEANUP=false
 NAMESPACE="underpass-runtime"
-REGISTRY="registry.underpassai.com/underpass-runtime"
+REGISTRY="ghcr.io/underpass-ai/underpass-runtime"
 DEFAULT_TIMEOUT=600
 EVIDENCE_DIR="${SCRIPT_DIR}/evidence"
 

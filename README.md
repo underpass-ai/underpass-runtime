@@ -185,6 +185,10 @@ docker compose up
 docker compose -f docker-compose.yml -f docker-compose.full.yml up
 ```
 
+## Author
+
+Created by [Tirso Garcia](https://github.com/underpass-ai) — UnderPass AI
+
 ## License
 
-Proprietary — UnderPass AI
+Apache License 2.0 — see [LICENSE](LICENSE) for details.

@@ -257,7 +257,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: >
-            -Dsonar.organization=underpass-ai-swe-ai-fleet
+            -Dsonar.organization=underpass-ai
             -Dsonar.projectKey=underpass-ai_underpass-runtime
             -Dsonar.go.coverage.reportPaths=coverage-full.out
             -Dsonar.sources=.
