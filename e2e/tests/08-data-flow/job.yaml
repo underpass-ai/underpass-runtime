@@ -45,6 +45,10 @@ spec:
               value: "/tmp/evidence-08.json"
             - name: PYTHONUNBUFFERED
               value: "1"
+            - name: E2E_DEBUG
+              value: "0"
+            - name: E2E_SKIP_CLEANUP
+              value: "0"
           resources:
             requests:
               cpu: "200m"

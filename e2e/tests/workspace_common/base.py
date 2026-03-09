@@ -10,7 +10,15 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
-from .console import print_warning
+from .console import print_info, print_warning
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    """Read a boolean from an environment variable (1/true/yes)."""
+    val = os.getenv(name, "").strip().lower()
+    if not val:
+        return default
+    return val in ("1", "true", "yes")
 
 
 class WorkspaceE2EBase:
@@ -21,6 +29,11 @@ class WorkspaceE2EBase:
     - session lifecycle helpers
     - tool invocation tracking
     - evidence recording and emission
+
+    Debug mode (E2E_DEBUG=1):
+    - Logs every HTTP request/response
+    - Skips session cleanup so workspaces can be inspected
+    - Prints session IDs and invocation details inline
     """
 
     def __init__(
@@ -36,6 +49,9 @@ class WorkspaceE2EBase:
         self.evidence_file = evidence_file
         self.run_id = f"{run_id_prefix}-{int(time.time())}"
 
+        self.debug = _env_bool("E2E_DEBUG")
+        self.skip_cleanup = _env_bool("E2E_SKIP_CLEANUP") or self.debug
+
         self.sessions: list[str] = []
         self.invocation_counter = 0
 
@@ -45,10 +61,18 @@ class WorkspaceE2EBase:
             "status": "running",
             "started_at": self.now_iso(),
             "workspace_url": self.workspace_url,
+            "debug": self.debug,
+            "skip_cleanup": self.skip_cleanup,
             "steps": [],
             "sessions": [],
             "invocations": [],
         }
+
+        if self.debug:
+            print_info(f"DEBUG MODE — cleanup disabled, verbose logging")
+            print_info(f"  test_id:       {self.test_id}")
+            print_info(f"  run_id:        {self.run_id}")
+            print_info(f"  workspace_url: {self.workspace_url}")
 
     @staticmethod
     def now_iso() -> str:
@@ -83,20 +107,31 @@ class WorkspaceE2EBase:
         if payload is not None:
             data = json.dumps(payload).encode("utf-8")
 
+        if self.debug:
+            print_info(f"  >> {method} {path}")
+            if payload is not None:
+                print_info(f"     body: {json.dumps(payload, ensure_ascii=False)[:200]}")
+
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 body = response.read().decode("utf-8")
+                code = response.getcode()
                 try:
-                    return response.getcode(), (json.loads(body) if body else {})
+                    parsed = json.loads(body) if body else {}
                 except (json.JSONDecodeError, ValueError):
-                    return response.getcode(), {"raw": body}
+                    parsed = {"raw": body}
+                if self.debug:
+                    print_info(f"  << {code} ({len(body)} bytes)")
+                return code, parsed
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8")
             try:
                 parsed = json.loads(body) if body else {}
             except Exception:
                 parsed = {"raw": body}
+            if self.debug:
+                print_info(f"  << {exc.code} (error, {len(body)} bytes)")
             return exc.code, parsed
 
     def record_step(self, name: str, status: str, data: Any | None = None) -> None:
@@ -155,7 +190,18 @@ class WorkspaceE2EBase:
             entry.update(session_record)
         else:
             entry["payload"] = payload
+
+        # Capture workspace_path from response for debug inspection
+        workspace_path = body.get("session", {}).get("workspace_path", "")
+        if workspace_path:
+            entry["workspace_path"] = workspace_path
+
         self.evidence["sessions"].append(entry)
+
+        if self.debug:
+            print_info(f"  SESSION created: {session_id}")
+            if workspace_path:
+                print_info(f"    workspace_path: {workspace_path}")
         return session_id
 
     def invoke(
@@ -187,6 +233,13 @@ class WorkspaceE2EBase:
             invocation=invocation if isinstance(invocation, dict) else None,
             body=body if isinstance(body, dict) else {},
         )
+
+        if self.debug and isinstance(invocation, dict):
+            inv_id = invocation.get("id", "?")
+            inv_status = invocation.get("status", "?")
+            duration = invocation.get("duration_ms", "?")
+            print_info(f"  INVOKE {tool_name} -> {inv_status} (id={inv_id}, {duration}ms)")
+
         return status, body, invocation if isinstance(invocation, dict) else None
 
     def assert_invocation_succeeded(
@@ -248,6 +301,9 @@ class WorkspaceE2EBase:
         if error_message:
             self.evidence["error_message"] = error_message
 
+        if self.debug:
+            self._print_debug_summary()
+
         try:
             with open(self.evidence_file, "w", encoding="utf-8") as handle:
                 json.dump(self.evidence, handle, ensure_ascii=False, indent=2)
@@ -259,7 +315,43 @@ class WorkspaceE2EBase:
         print(json.dumps(self.evidence, ensure_ascii=False, indent=2))
         print("EVIDENCE_JSON_END")
 
+    def _print_debug_summary(self) -> None:
+        from .console import Colors
+        sep = f"{Colors.BLUE}{'─' * 72}{Colors.NC}"
+        print(f"\n{sep}")
+        print(f"{Colors.BLUE}  DEBUG SUMMARY — {self.test_id} ({self.run_id}){Colors.NC}")
+        print(sep)
+
+        print(f"\n  Sessions ({len(self.sessions)}):")
+        for s in self.evidence.get("sessions", []):
+            sid = s.get("session_id", "?")
+            wp = s.get("workspace_path", "(no path)")
+            print(f"    {sid}  ->  {wp}")
+
+        invocations = self.evidence.get("invocations", [])
+        print(f"\n  Invocations ({len(invocations)}):")
+        for inv in invocations:
+            iid = inv.get("invocation_id") or "—"
+            tool = inv.get("tool", "?")
+            ist = inv.get("invocation_status") or inv.get("error_code") or "?"
+            http = inv.get("http_status", "?")
+            print(f"    {iid}  {tool:30s}  {ist:12s}  HTTP {http}")
+
+        if self.skip_cleanup:
+            print(f"\n  {Colors.YELLOW}Sessions left open for inspection.{Colors.NC}")
+            print(f"  Inspect with:")
+            print(f"    kubectl exec -n underpass-runtime deploy/valkey -- valkey-cli KEYS 'workspace:session:*'")
+            print(f"    kubectl debug -n underpass-runtime <pod> --image=busybox --target=underpass-runtime --profile=general")
+
+        print(f"\n{sep}\n")
+
     def cleanup_sessions(self) -> None:
+        if self.skip_cleanup:
+            print_warning(
+                f"SKIP CLEANUP — {len(self.sessions)} session(s) left open for inspection: "
+                + ", ".join(self.sessions)
+            )
+            return
         for session_id in self.sessions:
             try:
                 self.request("DELETE", f"/v1/sessions/{session_id}")
