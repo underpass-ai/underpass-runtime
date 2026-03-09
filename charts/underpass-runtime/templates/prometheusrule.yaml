@@ -1,0 +1,62 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "underpass-runtime.fullname" . }}
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: {{ include "underpass-runtime.fullname" . }}.rules
+      rules:
+        - alert: WorkspaceDown
+          expr: max_over_time(up{job="{{ include "underpass-runtime.fullname" . }}", namespace="{{ .Release.Namespace }}"}[5m]) == 0
+          for: 5m
+          labels:
+            severity: critical
+            service: {{ include "underpass-runtime.fullname" . }}
+          annotations:
+            summary: "{{ include "underpass-runtime.fullname" . }} is down"
+            description: "Prometheus has not seen a healthy target in the last 5 minutes."
+        - alert: WorkspaceInvocationFailureRateHigh
+          expr: |
+            (
+              sum(rate(invocations_total{job="{{ include "underpass-runtime.fullname" . }}", namespace="{{ .Release.Namespace }}", status="failed"}[5m]))
+              /
+              clamp_min(sum(rate(invocations_total{job="{{ include "underpass-runtime.fullname" . }}", namespace="{{ .Release.Namespace }}"}[5m])), 1)
+            ) > 0.05
+            and
+            sum(rate(invocations_total{job="{{ include "underpass-runtime.fullname" . }}", namespace="{{ .Release.Namespace }}"}[5m])) >= 0.2
+          for: 10m
+          labels:
+            severity: warning
+            service: {{ include "underpass-runtime.fullname" . }}
+          annotations:
+            summary: "{{ include "underpass-runtime.fullname" . }} invocation failure rate is high"
+            description: "Failure ratio is above 5% for 10 minutes with sustained traffic."
+        - alert: WorkspaceInvocationDeniedRateHigh
+          expr: sum(rate(invocations_total{job="{{ include "underpass-runtime.fullname" . }}", namespace="{{ .Release.Namespace }}", status="denied"}[5m])) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            service: {{ include "underpass-runtime.fullname" . }}
+          annotations:
+            summary: "{{ include "underpass-runtime.fullname" . }} denied invocation rate is high"
+            description: "Denied invocations are above 0.5 req/s for 10 minutes. Check policy drift or abuse."
+        - alert: WorkspaceP95InvocationLatencyHigh
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (rate(duration_ms_bucket{job="{{ include "underpass-runtime.fullname" . }}", namespace="{{ .Release.Namespace }}"}[5m]))
+            ) > 2000
+          for: 10m
+          labels:
+            severity: warning
+            service: {{ include "underpass-runtime.fullname" . }}
+          annotations:
+            summary: "{{ include "underpass-runtime.fullname" . }} p95 invocation latency is high"
+            description: "P95 tool invocation latency is above 2000ms for 10 minutes."
+{{- end }}
