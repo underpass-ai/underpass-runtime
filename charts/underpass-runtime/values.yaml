@@ -224,14 +224,25 @@ kubernetesBackend:
     terminalTTLSeconds: 300
     missingSessionGraceSeconds: 120
 
+  # -- Delivery tools (K8s apply, rollout, etc.)
+  deliveryTools:
+    # -- Create delivery ServiceAccount + Role for K8s delivery tools
+    enabled: false
+
   # -- RBAC for runner pod management
   rbac:
-    # -- Create ClusterRole and ClusterRoleBinding for K8s backend
+    # -- Create Role and RoleBinding for K8s backend
     create: false
 
 # ---------------------------------------------------------------------------
-# Prometheus ServiceMonitor
+# Prometheus PrometheusRule (alerts)
 # ---------------------------------------------------------------------------
+
+prometheusRule:
+  # -- Create a PrometheusRule with workspace alerts
+  enabled: false
+  # -- Additional labels (e.g. release: kube-prometheus-stack)
+  labels: {}
 
 # ---------------------------------------------------------------------------
 # Network Policy
