@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "underpass-runtime.fullname" . }}-test-connection"
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: docker.io/busybox:1.36
+      command: ['wget']
+      args: ['--spider', '--timeout=5', '{{ include "underpass-runtime.fullname" . }}:{{ .Values.service.port }}/healthz']
+  restartPolicy: Never

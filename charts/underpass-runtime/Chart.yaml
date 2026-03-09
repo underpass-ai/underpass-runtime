@@ -1,0 +1,16 @@
+apiVersion: v2
+name: underpass-runtime
+description: Workspace execution service for tool-driven AI agents
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - workspace
+  - ai-agents
+  - tool-execution
+home: https://github.com/underpass-ai/underpass-runtime
+sources:
+  - https://github.com/underpass-ai/underpass-runtime
+maintainers:
+  - name: underpass-ai
+    url: https://github.com/underpass-ai

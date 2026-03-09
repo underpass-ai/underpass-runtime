@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "underpass-runtime.fullname" . }}
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+data:
+  PORT: "{{ .Values.service.port }}"
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  WORKSPACE_BACKEND: {{ .Values.config.workspaceBackend | quote }}
+  WORKSPACE_VERSION: {{ .Values.config.version | quote }}
+  WORKSPACE_ENV: {{ .Values.config.environment | quote }}
+  WORKSPACE_ROOT: {{ .Values.workspace.root | quote }}
+  ARTIFACT_ROOT: {{ .Values.artifacts.root | quote }}
+  ARTIFACT_BACKEND: {{ .Values.artifacts.backend | quote }}
+  SESSION_STORE_BACKEND: {{ .Values.stores.backend | quote }}
+  INVOCATION_STORE_BACKEND: {{ .Values.stores.backend | quote }}
+  SESSION_STORE_TTL_SECONDS: {{ .Values.stores.sessionTTLSeconds | quote }}
+  INVOCATION_STORE_TTL_SECONDS: {{ .Values.stores.invocationTTLSeconds | quote }}
+  EVENT_BUS: {{ .Values.eventBus.type | quote }}
+  TELEMETRY_BACKEND: {{ .Values.telemetry.backend | quote }}
+  WORKSPACE_AUTH_MODE: {{ .Values.auth.mode | quote }}
+  {{- if .Values.disabledBundles }}
+  WORKSPACE_DISABLED_BUNDLES: {{ .Values.disabledBundles | quote }}
+  {{- end }}
+  {{- /* Valkey */}}
+  {{- if .Values.valkey.enabled }}
+  VALKEY_HOST: {{ .Values.valkey.host | quote }}
+  VALKEY_PORT: {{ .Values.valkey.port | quote }}
+  VALKEY_DB: {{ .Values.valkey.db | quote }}
+  {{- end }}
+  {{- /* NATS */}}
+  {{- if eq .Values.eventBus.type "nats" }}
+  EVENT_BUS_NATS_URL: {{ .Values.eventBus.nats.url | quote }}
+  {{- if .Values.eventBus.nats.stream }}
+  EVENT_BUS_NATS_STREAM: {{ .Values.eventBus.nats.stream | quote }}
+  {{- end }}
+  {{- if .Values.eventBus.outbox }}
+  EVENT_BUS_OUTBOX: "true"
+  {{- end }}
+  {{- end }}
+  {{- /* S3 artifacts */}}
+  {{- if eq .Values.artifacts.backend "s3" }}
+  ARTIFACT_S3_BUCKET: {{ .Values.artifacts.s3.bucket | quote }}
+  ARTIFACT_S3_REGION: {{ .Values.artifacts.s3.region | quote }}
+  ARTIFACT_S3_PATH_STYLE: {{ .Values.artifacts.s3.pathStyle | quote }}
+  {{- if .Values.artifacts.s3.prefix }}
+  ARTIFACT_S3_PREFIX: {{ .Values.artifacts.s3.prefix | quote }}
+  {{- end }}
+  {{- if .Values.artifacts.s3.endpoint }}
+  ARTIFACT_S3_ENDPOINT: {{ .Values.artifacts.s3.endpoint | quote }}
+  {{- end }}
+  {{- end }}
+  {{- /* Telemetry */}}
+  {{- if ne .Values.telemetry.backend "none" }}
+  TELEMETRY_TTL_SECONDS: {{ .Values.telemetry.ttlSeconds | quote }}
+  TELEMETRY_AGGREGATION_INTERVAL_SECONDS: {{ .Values.telemetry.aggregationIntervalSeconds | quote }}
+  {{- end }}
+  {{- if .Values.telemetry.otel.enabled }}
+  WORKSPACE_OTEL_ENABLED: "true"
+  {{- if .Values.telemetry.otel.endpoint }}
+  WORKSPACE_OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.telemetry.otel.endpoint | quote }}
+  {{- end }}
+  {{- if .Values.telemetry.otel.insecure }}
+  WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE: "true"
+  {{- end }}
+  {{- end }}
+  {{- /* Kubernetes backend */}}
+  {{- if eq .Values.config.workspaceBackend "kubernetes" }}
+  WORKSPACE_K8S_NAMESPACE: {{ .Values.kubernetesBackend.namespace | default .Release.Namespace | quote }}
+  {{- if .Values.kubernetesBackend.serviceAccount }}
+  WORKSPACE_K8S_SERVICE_ACCOUNT: {{ .Values.kubernetesBackend.serviceAccount | quote }}
+  {{- end }}
+  {{- if .Values.kubernetesBackend.runnerImage }}
+  WORKSPACE_K8S_RUNNER_IMAGE: {{ .Values.kubernetesBackend.runnerImage | quote }}
+  {{- end }}
+  {{- if .Values.kubernetesBackend.imageBundlesJSON }}
+  WORKSPACE_K8S_RUNNER_IMAGE_BUNDLES_JSON: {{ .Values.kubernetesBackend.imageBundlesJSON | quote }}
+  {{- end }}
+  {{- if .Values.kubernetesBackend.initImage }}
+  WORKSPACE_K8S_INIT_IMAGE: {{ .Values.kubernetesBackend.initImage | quote }}
+  {{- end }}
+  WORKSPACE_K8S_WORKDIR: {{ .Values.kubernetesBackend.workdir | quote }}
+  WORKSPACE_K8S_POD_PREFIX: {{ .Values.kubernetesBackend.podPrefix | quote }}
+  WORKSPACE_K8S_READY_TIMEOUT_SECONDS: {{ .Values.kubernetesBackend.readyTimeoutSeconds | quote }}
+  {{- if .Values.kubernetesBackend.gitAuthSecret }}
+  WORKSPACE_K8S_GIT_AUTH_SECRET: {{ .Values.kubernetesBackend.gitAuthSecret | quote }}
+  {{- end }}
+  WORKSPACE_K8S_RUN_AS_USER: {{ .Values.kubernetesBackend.runAsUser | quote }}
+  WORKSPACE_K8S_RUN_AS_GROUP: {{ .Values.kubernetesBackend.runAsGroup | quote }}
+  WORKSPACE_K8S_FS_GROUP: {{ .Values.kubernetesBackend.fsGroup | quote }}
+  WORKSPACE_K8S_READ_ONLY_ROOT_FS: {{ .Values.kubernetesBackend.readOnlyRootFS | quote }}
+  WORKSPACE_K8S_POD_JANITOR_ENABLED: {{ .Values.kubernetesBackend.janitor.enabled | quote }}
+  WORKSPACE_K8S_POD_JANITOR_INTERVAL_SECONDS: {{ .Values.kubernetesBackend.janitor.intervalSeconds | quote }}
+  WORKSPACE_K8S_SESSION_POD_TERMINAL_TTL_SECONDS: {{ .Values.kubernetesBackend.janitor.terminalTTLSeconds | quote }}
+  WORKSPACE_K8S_MISSING_SESSION_GRACE_SECONDS: {{ .Values.kubernetesBackend.janitor.missingSessionGraceSeconds | quote }}
+  {{- end }}

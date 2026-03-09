@@ -1,0 +1,238 @@
+# -- Number of replicas
+replicaCount: 1
+
+image:
+  # -- Container image registry + repository
+  repository: registry.underpassai.com/underpass-runtime
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag (defaults to Chart appVersion)
+  tag: ""
+
+# -- Image pull secrets
+imagePullSecrets: []
+# -- Override the release name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Create a ServiceAccount
+  create: true
+  # -- Annotations for the ServiceAccount
+  annotations: {}
+  # -- ServiceAccount name (generated if empty)
+  name: ""
+
+# -- Pod-level annotations
+podAnnotations: {}
+
+# -- Pod-level security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port
+  port: 50053
+
+# -- Resource requests and limits
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+
+autoscaling:
+  # -- Enable HPA
+  enabled: false
+  # -- Minimum replicas
+  minReplicas: 1
+  # -- Maximum replicas
+  maxReplicas: 5
+  # -- Target CPU utilization percentage
+  targetCPUUtilizationPercentage: 75
+
+# -- Node selector
+nodeSelector: {}
+# -- Tolerations
+tolerations: []
+# -- Affinity rules
+affinity: {}
+
+# ---------------------------------------------------------------------------
+# Runtime configuration
+# ---------------------------------------------------------------------------
+
+config:
+  # -- Log level: debug, info, warn, error
+  logLevel: info
+  # -- Workspace backend: local, docker, kubernetes
+  workspaceBackend: local
+  # -- Service version label (for telemetry)
+  version: "0.1.0"
+  # -- Environment label (for telemetry)
+  environment: production
+
+# -- Workspace storage
+workspace:
+  # -- Root directory for workspaces (emptyDir mount)
+  root: /tmp/workspaces
+
+# -- Artifact storage
+artifacts:
+  # -- Root directory for local artifacts (emptyDir mount)
+  root: /tmp/artifacts
+  # -- Artifact backend: local, s3
+  backend: local
+  s3:
+    # -- S3 bucket name
+    bucket: workspace-artifacts
+    # -- S3 key prefix
+    prefix: ""
+    # -- S3 endpoint (MinIO or AWS)
+    endpoint: ""
+    # -- AWS region
+    region: us-east-1
+    # -- Use path-style URLs (required for MinIO)
+    pathStyle: true
+    # -- Reference to an existing Secret with accessKey and secretKey
+    existingSecret: ""
+    # -- Key in the secret for access key
+    accessKeyKey: accessKey
+    # -- Key in the secret for secret key
+    secretKeyKey: secretKey
+
+# -- Session and invocation stores
+stores:
+  # -- Store backend: memory, valkey
+  backend: memory
+  # -- Session TTL in seconds
+  sessionTTLSeconds: 86400
+  # -- Invocation TTL in seconds
+  invocationTTLSeconds: 86400
+
+# -- Valkey (Redis-compatible) configuration
+valkey:
+  # -- Enable Valkey connection (required when stores.backend=valkey)
+  enabled: false
+  # -- Valkey host
+  host: valkey
+  # -- Valkey port
+  port: 6379
+  # -- Valkey database number
+  db: 0
+  # -- Reference to existing Secret with Valkey password
+  existingSecret: ""
+  # -- Key in the secret for password
+  passwordKey: password
+
+# -- Event bus configuration
+eventBus:
+  # -- Event bus type: none, nats
+  type: none
+  nats:
+    # -- NATS server URL
+    url: nats://nats:4222
+    # -- NATS stream name (optional)
+    stream: ""
+  # -- Enable outbox pattern (requires Valkey)
+  outbox: false
+
+# -- Telemetry configuration
+telemetry:
+  # -- Telemetry backend: none, memory, valkey
+  backend: none
+  # -- Telemetry data TTL in seconds
+  ttlSeconds: 604800
+  # -- Aggregation interval in seconds
+  aggregationIntervalSeconds: 300
+  otel:
+    # -- Enable OpenTelemetry tracing
+    enabled: false
+    # -- OTLP exporter endpoint
+    endpoint: ""
+    # -- Allow insecure HTTP for OTLP
+    insecure: false
+
+# -- Authentication configuration
+auth:
+  # -- Auth mode: payload (no auth), trusted_headers
+  mode: payload
+  # -- Reference to existing Secret with shared token
+  existingSecret: ""
+  # -- Key in the secret for the shared token
+  tokenKey: sharedToken
+
+# -- Tool bundles to disable (comma-separated)
+disabledBundles: ""
+
+# ---------------------------------------------------------------------------
+# Kubernetes backend (when config.workspaceBackend=kubernetes)
+# ---------------------------------------------------------------------------
+
+kubernetesBackend:
+  # -- K8s namespace for runner pods
+  namespace: ""
+  # -- Service account for runner pods
+  serviceAccount: ""
+  # -- Default runner image
+  runnerImage: ""
+  # -- Runner image bundles JSON
+  imageBundlesJSON: ""
+  # -- Init container image
+  initImage: ""
+  # -- Pod working directory
+  workdir: /workspace/repo
+  # -- Pod name prefix
+  podPrefix: ws
+  # -- Pod ready timeout seconds
+  readyTimeoutSeconds: 120
+  # -- Git auth secret name
+  gitAuthSecret: ""
+  # -- Pod security
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  readOnlyRootFS: false
+  # -- Pod janitor
+  janitor:
+    enabled: true
+    intervalSeconds: 60
+    terminalTTLSeconds: 300
+    missingSessionGraceSeconds: 120
+
+  # -- RBAC for runner pod management
+  rbac:
+    # -- Create ClusterRole and ClusterRoleBinding for K8s backend
+    create: false
+
+# ---------------------------------------------------------------------------
+# Prometheus ServiceMonitor
+# ---------------------------------------------------------------------------
+
+serviceMonitor:
+  # -- Create a Prometheus ServiceMonitor
+  enabled: false
+  # -- Additional labels
+  labels: {}
+  # -- Scrape interval
+  interval: 30s
+  # -- Scrape path
+  path: /metrics
