@@ -433,7 +433,7 @@ func TestStaticPolicy_DeniesRegistryOutsideAllowlist(t *testing.T) {
 			Principal:    domain.Principal{Roles: []string{"developer"}},
 			AllowedPaths: []string{"."},
 			Metadata: map[string]string{
-				"allowed_image_registries": "ghcr.io,registry.underpassai.com",
+				"allowed_image_registries": "ghcr.io,docker.io",
 			},
 		},
 		Capability: domain.Capability{

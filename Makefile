@@ -111,13 +111,16 @@ integration-test: integration-up
 integration-down:
 	$(COMPOSE_CMD) -f $(COMPOSE_FILE) down -v
 
+REGISTRY ?= ghcr.io/underpass-ai/underpass-runtime
+VERSION  ?= latest
+
 docker-build:
 	@BUILDER=$$(command -v podman 2>/dev/null || command -v docker 2>/dev/null); \
 	if [ -z "$$BUILDER" ]; then \
 		echo "No container builder found (podman or docker)"; \
 		exit 1; \
 	fi; \
-	$$BUILDER build -f Dockerfile -t registry.underpassai.com/underpass-runtime:v0.1.0 -t registry.underpassai.com/underpass-runtime:latest .
+	$$BUILDER build -f Dockerfile -t $(REGISTRY):$(VERSION) -t $(REGISTRY):latest .
 
 docker-push:
 	@BUILDER=$$(command -v podman 2>/dev/null || command -v docker 2>/dev/null); \
@@ -125,5 +128,5 @@ docker-push:
 		echo "No container builder found (podman or docker)"; \
 		exit 1; \
 	fi; \
-	$$BUILDER push registry.underpassai.com/underpass-runtime:v0.1.0; \
-	$$BUILDER push registry.underpassai.com/underpass-runtime:latest
+	$$BUILDER push $(REGISTRY):$(VERSION); \
+	$$BUILDER push $(REGISTRY):latest

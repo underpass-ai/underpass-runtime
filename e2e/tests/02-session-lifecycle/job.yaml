@@ -24,7 +24,7 @@ spec:
 
       containers:
         - name: test-runner
-          image: registry.underpassai.com/underpass-runtime/e2e-session-lifecycle:v1.0.0
+          image: ghcr.io/underpass-ai/underpass-runtime/e2e-session-lifecycle:v1.0.0
           imagePullPolicy: Always
           env:
             - name: WORKSPACE_URL

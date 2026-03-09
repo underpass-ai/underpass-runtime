@@ -5,5 +5,31 @@ cover*.out
 *.exe
 *.test
 *.prof
+
 # E2E evidence (runtime artifacts)
 e2e/evidence/
+
+# Environment files
+.env
+.env.local
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
