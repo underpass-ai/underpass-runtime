@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import time
+import urllib.parse
 from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -99,7 +100,7 @@ class LLMAgentLoopE2E(WorkspaceE2EBase):
         """Fetch tool recommendations for a task hint."""
         status, body = self.request(
             "GET",
-            f"/v1/sessions/{session_id}/tools/recommendations?task_hint={hint}&top_k=10",
+            f"/v1/sessions/{session_id}/tools/recommendations?task_hint={urllib.parse.quote(hint)}&top_k=10",
         )
         if status != 200:
             print_warning(f"recommendations failed ({status}), continuing without")
@@ -123,14 +124,15 @@ class LLMAgentLoopE2E(WorkspaceE2EBase):
         return "\n".join(lines)
 
     def _parse_llm_response(self, text: str) -> dict[str, Any]:
-        """Parse JSON from LLM response, handling markdown fences."""
+        """Parse JSON from LLM response, handling markdown fences and <think> tags."""
+        import re
         cleaned = text.strip()
+        # Strip <think>...</think> reasoning blocks (Qwen3, etc.)
+        cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.DOTALL).strip()
         # Strip markdown code fences if present
         if cleaned.startswith("```"):
             lines = cleaned.split("\n")
-            # Remove first line (```json or ```)
             lines = lines[1:]
-            # Remove last line (```)
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             cleaned = "\n".join(lines).strip()
@@ -192,7 +194,10 @@ class LLMAgentLoopE2E(WorkspaceE2EBase):
         # Step 1: Create session
         print_step(1, "Creating workspace session")
         session_id = self.create_session(
-            payload={"metadata": {"runner_profile": "base", "task": "go-hello-world"}},
+            payload={
+                "principal": {"tenant_id": "e2e-tenant", "actor_id": "llm-agent-loop", "roles": ["developer"]},
+                "metadata": {"runner_profile": "base", "task": "go-hello-world"},
+            },
         )
         self.record_step("create_session", "pass", {"session_id": session_id})
         print_success(f"Session created: {session_id}")
@@ -294,7 +299,12 @@ class LLMAgentLoopE2E(WorkspaceE2EBase):
         files_found = []
         if inv and inv.get("status") == "succeeded":
             output = inv.get("output", "")
-            files_found = [f.strip() for f in output.strip().split("\n") if f.strip()]
+            if isinstance(output, list):
+                files_found = [str(f) for f in output]
+            elif isinstance(output, dict):
+                files_found = [str(f) for f in output.get("files", output.get("entries", []))]
+            elif isinstance(output, str):
+                files_found = [f.strip() for f in output.strip().split("\n") if f.strip()]
 
         has_main = any("main.go" in f and "test" not in f for f in files_found)
         has_test = any("main_test.go" in f or "test" in f.lower() for f in files_found)

@@ -108,7 +108,7 @@ class VLLMProvider(LLMProvider):
 
     def __init__(self) -> None:
         self.url = os.getenv("VLLM_URL", "http://vllm:8000") + "/v1/chat/completions"
-        self.model = os.getenv("VLLM_MODEL", "Qwen/Qwen2.5-3B-Instruct")
+        self.model = os.getenv("VLLM_MODEL", "Qwen/Qwen3-8B")
 
     def chat(self, messages: list[dict[str, str]], tools_schema: list[dict] | None = None) -> str:
         body: dict[str, Any] = {
