@@ -1,0 +1,92 @@
+# DevContainer composition — runtime + deps for integration testing
+#
+# The devcontainer mounts the source tree at /workspace.
+# The runtime service is built from the repo Dockerfile and exposes :50053.
+# Integration tests in tests/integration/ run inside the devcontainer and
+# hit the runtime over the docker-compose network.
+
+services:
+  devcontainer:
+    image: docker.io/library/golang:1.25-alpine
+    container_name: underpass-devcontainer
+    command: sleep infinity
+    volumes:
+      - ..:/workspace:cached
+    working_dir: /workspace
+    environment:
+      - GOCACHE=/tmp/go-cache
+      - GOTMPDIR=/tmp/go-tmp
+      - RUNTIME_URL=http://runtime:50053
+    depends_on:
+      valkey:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      runtime:
+        condition: service_started
+
+  runtime:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: underpass-runtime-test
+    ports:
+      - "50053:50053"
+    environment:
+      - PORT=50053
+      - WORKSPACE_ROOT=/tmp/workspaces
+      - ARTIFACT_ROOT=/tmp/artifacts
+      - LOG_LEVEL=debug
+      - WORKSPACE_BACKEND=local
+      - SESSION_STORE_BACKEND=valkey
+      - INVOCATION_STORE_BACKEND=valkey
+      - VALKEY_HOST=valkey
+      - EVENT_BUS=nats
+      - EVENT_BUS_NATS_URL=nats://nats:4222
+      - TELEMETRY_BACKEND=memory
+    volumes:
+      - workspace-data:/tmp/workspaces
+      - workspace-artifacts:/tmp/artifacts
+    depends_on:
+      valkey:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+
+  valkey:
+    image: docker.io/valkey/valkey:8-alpine
+    container_name: underpass-valkey-test
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+  nats:
+    image: docker.io/library/nats:2.10-alpine
+    container_name: underpass-nats-test
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command:
+      - --jetstream
+      - --store_dir=/data
+      - -m
+      - "8222"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+volumes:
+  workspace-data:
+  workspace-artifacts:
+  valkey-data:
+  nats-data:
