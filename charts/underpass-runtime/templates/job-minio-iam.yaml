@@ -30,14 +30,15 @@ spec:
           image: {{ .Values.minioIAM.image | quote }}
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
           env:
             - name: MC_CONFIG_DIR
               value: /tmp/.mc
-            - name: MINIO_ENDPOINT
+            {{- /* MC_HOST_minio avoids passing credentials as CLI arguments */}}
+            - name: MC_HOST_minio
               value: {{ .Values.minioIAM.endpoint | quote }}
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -75,7 +76,8 @@ spec:
             - /bin/sh
             - -ce
             - |
-              mc alias set minio "${MINIO_ENDPOINT}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
+              # Configure mc alias using credentials from env vars (not CLI args)
+              mc alias set minio "${MC_HOST_minio}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
 
               # Create buckets (idempotent)
               mc mb --ignore-existing minio/{{ .Values.minioIAM.buckets.artifacts }}
@@ -101,6 +103,9 @@ spec:
 
               echo "MinIO IAM setup complete"
               mc admin user list minio
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             limits:
               cpu: 200m
@@ -108,4 +113,8 @@ spec:
             requests:
               cpu: 100m
               memory: 64Mi
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
 {{- end }}

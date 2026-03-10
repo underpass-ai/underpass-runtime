@@ -42,7 +42,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("duckdb open: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Configure S3
 	s3Configs := [][2]string{
