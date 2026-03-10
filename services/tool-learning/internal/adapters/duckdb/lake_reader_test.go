@@ -167,6 +167,22 @@ func TestNewLakeReaderFromS3WithSSL(t *testing.T) {
 	defer reader.Close()
 }
 
+func TestNewLakeReaderUnsafeSource(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		t.Fatalf("duckdb open: %v", err)
+	}
+	defer db.Close()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic for unsafe source")
+		}
+	}()
+
+	NewLakeReader(db, "invocations; DROP TABLE users --")
+}
+
 func TestLakeReaderClose(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
 	if err != nil {

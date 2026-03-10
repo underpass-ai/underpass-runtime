@@ -4,12 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
 	"time"
 
 	_ "github.com/marcboeker/go-duckdb"
 
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/domain"
 )
+
+// safeSource matches table identifiers (e.g. "invocations") and
+// DuckDB read_parquet(...) expressions produced by NewLakeReaderFromS3.
+// This prevents SQL injection via the source parameter.
+var safeSource = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$|^read_parquet\('.+'\s*(,.+)*\)$`)
 
 // LakeReader implements app.TelemetryLakeReader using DuckDB
 // to query Parquet files from an S3-compatible object store (MinIO).
@@ -19,7 +25,11 @@ type LakeReader struct {
 }
 
 // NewLakeReader creates a reader with a pre-configured DuckDB database.
+// source must be a table identifier or a read_parquet(...) expression.
 func NewLakeReader(db *sql.DB, source string) *LakeReader {
+	if !safeSource.MatchString(source) {
+		panic(fmt.Sprintf("duckdb: unsafe source expression: %q", source))
+	}
 	return &LakeReader{db: db, source: source}
 }
 
