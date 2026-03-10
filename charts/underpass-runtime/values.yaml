@@ -279,3 +279,105 @@ serviceMonitor:
   interval: 30s
   # -- Scrape path
   path: /metrics
+
+# ---------------------------------------------------------------------------
+# Tool Learning CronJobs (Phase 10)
+# ---------------------------------------------------------------------------
+
+toolLearning:
+  # -- Enable tool-learning CronJobs
+  enabled: false
+
+  image:
+    # -- Tool-learning container image
+    repository: ghcr.io/underpass-ai/underpass-runtime/tool-learning
+    # -- Image pull policy
+    pullPolicy: IfNotPresent
+    # -- Overrides the image tag (defaults to Chart appVersion)
+    tag: ""
+
+  # -- CronJob schedules to deploy
+  schedules:
+    - name: hourly
+      cron: "0 * * * *"
+    - name: daily
+      cron: "0 0 * * *"
+
+  # -- Log level: debug, info, warn, error
+  logLevel: info
+
+  # -- Hard policy constraints (0 = disabled)
+  constraints:
+    maxP95LatencyMs: 0
+    maxErrorRate: 0
+    maxP95Cost: 0
+
+  # -- S3 / MinIO configuration (telemetry lake + audit)
+  s3:
+    # -- S3-compatible endpoint
+    endpoint: minio:9000
+    # -- AWS region
+    region: us-east-1
+    # -- Use TLS for S3 connections
+    useSSL: false
+    # -- Bucket for telemetry Parquet lake
+    lakeBucket: telemetry-lake
+    # -- Bucket for policy audit snapshots
+    auditBucket: policy-audit
+    # -- Existing Secret with S3 credentials
+    existingSecret: ""
+    # -- Key in secret for access key
+    accessKeyKey: accessKey
+    # -- Key in secret for secret key
+    secretKeyKey: secretKey
+
+  # -- Valkey configuration (policy store)
+  valkey:
+    # -- Valkey host
+    host: valkey
+    # -- Valkey port
+    port: 6379
+    # -- Valkey database number
+    db: 0
+    # -- Key prefix for policy entries
+    keyPrefix: tool_policy
+    # -- Policy TTL
+    ttl: 2h
+    # -- Existing Secret with Valkey password
+    existingSecret: ""
+    # -- Key in secret for password
+    passwordKey: password
+
+  # -- NATS configuration (policy event publisher)
+  nats:
+    # -- NATS server URL
+    url: nats://nats:4222
+
+  # -- Resource requests and limits
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+  # -- Job active deadline in seconds (10 min)
+  activeDeadlineSeconds: 600
+  # -- Number of retries before marking job as failed
+  backoffLimit: 2
+  # -- Maximum delay before starting a missed job (5 min)
+  startingDeadlineSeconds: 300
+  # -- Number of successful jobs to keep
+  successfulJobsHistoryLimit: 3
+  # -- Number of failed jobs to keep
+  failedJobsHistoryLimit: 3
+
+  # -- Pod annotations
+  podAnnotations: {}
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity rules
+  affinity: {}
