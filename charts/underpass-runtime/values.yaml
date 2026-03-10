@@ -381,3 +381,35 @@ toolLearning:
   tolerations: []
   # -- Affinity rules
   affinity: {}
+
+# ---------------------------------------------------------------------------
+# MinIO IAM Setup (TL-008 — bucket isolation)
+# ---------------------------------------------------------------------------
+
+minioIAM:
+  # -- Enable MinIO IAM setup Job (runs as Helm hook)
+  enabled: false
+  # -- MinIO Client image
+  image: docker.io/minio/mc:latest
+  # -- MinIO endpoint (with scheme)
+  endpoint: http://minio:9000
+  # -- Existing Secret with MinIO root credentials
+  rootSecret: minio-credentials
+  # -- Key in rootSecret for access key
+  rootAccessKeyKey: accessKey
+  # -- Key in rootSecret for secret key
+  rootSecretKeyKey: secretKey
+
+  # -- Existing Secret for workspace-svc S3 user
+  workspaceSecret: minio-workspace-svc
+  # -- Existing Secret for tool-learning S3 user
+  toolLearningSecret: minio-tool-learning
+
+  # -- Bucket names
+  buckets:
+    # -- Workspace execution artifacts (workspace-svc R/W)
+    artifacts: workspace-artifacts
+    # -- Telemetry Parquet lake (telemetry-svc W, tool-learning R)
+    telemetryLake: telemetry-lake
+    # -- Policy audit snapshots (tool-learning R/W)
+    policyAudit: policy-audit

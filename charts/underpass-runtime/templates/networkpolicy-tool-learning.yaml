@@ -1,0 +1,39 @@
+{{- if and .Values.toolLearning.enabled .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "underpass-runtime.fullname" . }}-tool-learning
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tool-learning
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "underpass-runtime.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: tool-learning
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # MinIO / S3 (telemetry-lake read + policy-audit write)
+    - ports:
+        - port: 9000
+          protocol: TCP
+        - port: 443
+          protocol: TCP
+    # Valkey (policy store write)
+    - ports:
+        - port: {{ .Values.toolLearning.valkey.port }}
+          protocol: TCP
+    # NATS (policy event publish)
+    - ports:
+        - port: 4222
+          protocol: TCP
+{{- end }}
