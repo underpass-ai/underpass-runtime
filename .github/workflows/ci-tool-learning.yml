@@ -1,0 +1,191 @@
+name: CI — Tool Learning
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/tool-learning/**"
+      - ".github/workflows/ci-tool-learning.yml"
+  pull_request:
+    paths:
+      - "services/tool-learning/**"
+      - ".github/workflows/ci-tool-learning.yml"
+
+concurrency:
+  group: ci-tool-learning-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: services/tool-learning
+
+env:
+  GO_VERSION: "1.25"
+  GOLANGCI_LINT_VERSION: "v2.11"
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Decoupling guard — reject workspace imports
+  # ──────────────────────────────────────────────
+  decoupling-guard:
+    name: Decoupling Guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reject workspace module imports
+        run: |
+          if grep -q 'github.com/underpass-ai/underpass-runtime' services/tool-learning/go.mod 2>/dev/null; then
+            # go.mod declares the module path itself — that's OK.
+            # But any require of the root module is forbidden.
+            if grep -E '^\s*require\s' services/tool-learning/go.mod | grep -q 'github.com/underpass-ai/underpass-runtime[^/]'; then
+              echo "::error::tool-learning go.mod imports the workspace module. This violates the decoupling contract."
+              exit 1
+            fi
+          fi
+          # Check source files for direct imports of the workspace module
+          if grep -rn '"github.com/underpass-ai/underpass-runtime/' services/tool-learning/ --include='*.go' | grep -v 'services/tool-learning/'; then
+            echo "::error::Go source files import the workspace module. This violates the decoupling contract."
+            exit 1
+          fi
+          echo "Decoupling guard passed — no workspace module imports found."
+        working-directory: .
+
+  # ──────────────────────────────────────────────
+  # Lint
+  # ──────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: services/tool-learning
+          args: --timeout=5m
+          only-new-issues: true
+
+      - name: go vet
+        run: go vet ./...
+
+  # ──────────────────────────────────────────────
+  # Build
+  # ──────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build
+        run: CGO_ENABLED=0 go build -o bin/tool-learning ./cmd/tool-learning
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: tool-learning-linux-amd64
+          path: services/tool-learning/bin/tool-learning
+          retention-days: 5
+
+  # ──────────────────────────────────────────────
+  # Test
+  # ──────────────────────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run tests
+        run: go test -race -count=1 -v ./...
+
+      - name: Coverage gate (80%)
+        run: |
+          go test ./... -coverprofile=coverage.out -covermode=atomic
+          COVERAGE=$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}' | sed 's/%//')
+          echo "Coverage: ${COVERAGE}%"
+          if awk "BEGIN {exit !(${COVERAGE} >= 80)}"; then
+            echo "Coverage gate PASSED: ${COVERAGE}% >= 80%"
+          else
+            echo "::error::Coverage gate FAILED: ${COVERAGE}% < 80%"
+            exit 1
+          fi
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-tool-learning
+          path: services/tool-learning/coverage.out
+          retention-days: 5
+
+  # ──────────────────────────────────────────────
+  # Security — govulncheck
+  # ──────────────────────────────────────────────
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+        continue-on-error: true
+
+  # ──────────────────────────────────────────────
+  # Docker — image build
+  # ──────────────────────────────────────────────
+  docker:
+    name: Docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: [lint, test, build, decoupling-guard]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: services/tool-learning
+          file: services/tool-learning/Dockerfile
+          push: false
+          tags: |
+            tool-learning:${{ github.sha }}
+            tool-learning:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

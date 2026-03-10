@@ -1,9 +1,15 @@
-name: CI
+name: CI — Workspace
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "services/**"
+      - ".github/workflows/ci-tool-learning.yml"
   pull_request:
+    paths-ignore:
+      - "services/**"
+      - ".github/workflows/ci-tool-learning.yml"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -261,7 +267,7 @@ jobs:
             -Dsonar.projectKey=underpass-ai_underpass-runtime
             -Dsonar.go.coverage.reportPaths=coverage-full.out
             -Dsonar.sources=.
-            -Dsonar.exclusions=**/*_test.go,**/testdata/**,**/vendor/**,e2e/**
+            -Dsonar.exclusions=**/*_test.go,**/testdata/**,**/vendor/**,e2e/**,services/**
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.go,e2e/**/*.py
             -Dsonar.coverage.minimum=70
