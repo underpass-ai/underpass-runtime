@@ -13,9 +13,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
+	"strconv"
 
 	_ "github.com/marcboeker/go-duckdb"
 )
+
+// safeBucket validates that a bucket name contains only alphanumeric, hyphens and dots.
+var safeBucket = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.\-]{1,61}[a-zA-Z0-9]$`)
 
 func main() {
 	if err := run(); err != nil {
@@ -37,6 +42,9 @@ func run() error {
 	region := envOrDefault("S3_REGION", "us-east-1")
 	useSSL := envOrDefault("S3_USE_SSL", "false")
 	bucket := envOrDefault("LAKE_BUCKET", "telemetry-lake")
+	if !safeBucket.MatchString(bucket) {
+		return fmt.Errorf("invalid bucket name: %q", bucket)
+	}
 
 	db, err := sql.Open("duckdb", "")
 	if err != nil {
@@ -64,17 +72,20 @@ func run() error {
 
 	logger.Info("S3 configured", "endpoint", endpoint, "bucket", bucket)
 
-	// Generate synthetic invocations in-memory
-	genSQL := fmt.Sprintf(`
+	// Generate synthetic invocations in-memory.
+	// Integer params are safe; built via strconv to avoid fmt.Sprintf SQL patterns.
+	minuteSpan := strconv.Itoa(*hours * 60)
+	totalRows := strconv.Itoa(*hours * *perHour)
+	genSQL := `
 CREATE TABLE invocations AS
 SELECT
     'inv-' || gen_random_uuid()::VARCHAR AS invocation_id,
     ts,
-    strftime(ts, '%%Y-%%m-%%d') AS dt,
+    strftime(ts, '%Y-%m-%d') AS dt,
     CAST(hour(ts) AS VARCHAR) AS "hour",
     tool_id,
-    'agent-' || (abs(hash(gen_random_uuid())) %% 5 + 1)::VARCHAR AS agent_id_hash,
-    'task-' || (abs(hash(gen_random_uuid())) %% 20 + 1)::VARCHAR AS task_id,
+    'agent-' || (abs(hash(gen_random_uuid())) % 5 + 1)::VARCHAR AS agent_id_hash,
+    'task-' || (abs(hash(gen_random_uuid())) % 20 + 1)::VARCHAR AS task_id,
     context_signature,
     CASE
         WHEN random() < error_rate THEN 'failure'
@@ -83,15 +94,15 @@ SELECT
     CASE
         WHEN random() < error_rate THEN
             (ARRAY['timeout', 'permission_denied', 'not_found', 'internal'])[
-                CAST(abs(hash(gen_random_uuid())) %% 4 + 1 AS BIGINT)]
+                CAST(abs(hash(gen_random_uuid())) % 4 + 1 AS BIGINT)]
         ELSE ''
     END AS error_type,
-    CAST(base_latency + abs(hash(gen_random_uuid())) %% variance AS BIGINT) AS latency_ms,
+    CAST(base_latency + abs(hash(gen_random_uuid())) % variance AS BIGINT) AS latency_ms,
     ROUND(base_cost + random() * cost_variance, 4) AS cost_units,
     'v1.0.0' AS tool_version
 FROM (
     SELECT
-        now()::TIMESTAMP - INTERVAL (abs(hash(gen_random_uuid())) %% (%d * 60)) MINUTE AS ts,
+        now()::TIMESTAMP - INTERVAL (abs(hash(gen_random_uuid())) % ` + minuteSpan + `) MINUTE AS ts,
         tool_id,
         context_signature,
         error_rate,
@@ -99,7 +110,7 @@ FROM (
         variance,
         base_cost,
         cost_variance
-    FROM generate_series(1, %d) AS _(i)
+    FROM generate_series(1, ` + totalRows + `) AS _(i)
     CROSS JOIN (VALUES
         ('fs.write',    'gen:go:std',       0.05,  80,  120, 0.08, 0.04),
         ('fs.read',     'gen:go:std',       0.02,  30,   40, 0.03, 0.02),
@@ -119,7 +130,7 @@ FROM (
         ('security.scan','gen:go:std',      0.05, 200,  500, 0.20, 0.10)
     ) AS tools(tool_id, context_signature, error_rate, base_latency, variance, base_cost, cost_variance)
 )
-`, *hours, *hours**perHour)
+`
 
 	if _, err := db.ExecContext(context.Background(), genSQL); err != nil {
 		return fmt.Errorf("generate data: %w", err)
@@ -131,8 +142,9 @@ FROM (
 	}
 	logger.Info("generated synthetic invocations", "count", count, "hours", *hours)
 
-	// Write as Hive-partitioned Parquet to S3
-	exportSQL := fmt.Sprintf(`
+	// Write as Hive-partitioned Parquet to S3.
+	// Bucket name is regex-validated above; built via concatenation to avoid dynamic SQL.
+	exportSQL := `
 COPY (
     SELECT
         invocation_id, ts, tool_id, agent_id_hash, task_id,
@@ -141,9 +153,9 @@ COPY (
         dt, "hour"
     FROM invocations
 )
-TO 's3://%s'
+TO 's3://` + bucket + `'
 (FORMAT PARQUET, PARTITION_BY (dt, "hour"), OVERWRITE_OR_IGNORE, FILENAME_PATTERN 'invocations-{uuid}')
-`, bucket)
+`
 
 	if _, err := db.ExecContext(context.Background(), exportSQL); err != nil {
 		return fmt.Errorf("export to S3: %w", err)

@@ -391,8 +391,9 @@ minioIAM:
   enabled: false
   # -- MinIO Client image
   image: docker.io/minio/mc:latest
-  # -- MinIO endpoint (with scheme)
-  endpoint: http://minio:9000
+  # -- MinIO endpoint (with scheme). Set to your MinIO service URL.
+  # Use https:// for production; http:// only for in-cluster without TLS.
+  endpoint: ""
   # -- Existing Secret with MinIO root credentials
   rootSecret: minio-credentials
   # -- Key in rootSecret for access key
