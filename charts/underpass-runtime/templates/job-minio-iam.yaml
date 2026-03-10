@@ -37,8 +37,7 @@ spec:
           env:
             - name: MC_CONFIG_DIR
               value: /tmp/.mc
-            {{- /* MC_HOST_minio avoids passing credentials as CLI arguments */}}
-            - name: MC_HOST_minio
+            - name: MINIO_ENDPOINT
               value: {{ .Values.minioIAM.endpoint | quote }}
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -76,8 +75,7 @@ spec:
             - /bin/sh
             - -ce
             - |
-              # Configure mc alias using credentials from env vars (not CLI args)
-              mc alias set minio "${MC_HOST_minio}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
+              mc alias set minio "${MINIO_ENDPOINT}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
 
               # Create buckets (idempotent)
               mc mb --ignore-existing minio/{{ .Values.minioIAM.buckets.artifacts }}
