@@ -97,3 +97,31 @@ func TestNewPublisherFromURL(t *testing.T) {
 		t.Errorf("schedule = %q, want daily", pub.schedule)
 	}
 }
+
+func TestPublisherClose(t *testing.T) {
+	srv := startTestNATS(t)
+
+	conn, err := gonats.Connect(srv.ClientURL())
+	if err != nil {
+		t.Fatalf("nats connect: %v", err)
+	}
+
+	pub := NewPublisher(conn, "hourly")
+	pub.Close()
+
+	if !conn.IsDraining() && !conn.IsClosed() {
+		t.Error("expected connection to be draining or closed after Close()")
+	}
+}
+
+func TestPublisherCloseNilConn(t *testing.T) {
+	pub := &Publisher{conn: nil, schedule: "hourly"}
+	pub.Close() // should not panic
+}
+
+func TestNewPublisherFromURLInvalid(t *testing.T) {
+	_, _, err := NewPublisherFromURL("nats://invalid:9999", "daily")
+	if err == nil {
+		t.Fatal("expected error connecting to invalid NATS URL")
+	}
+}

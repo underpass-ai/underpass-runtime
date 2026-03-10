@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -12,14 +13,21 @@ import (
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/domain"
 )
 
+// ObjectClient abstracts the MinIO/S3 operations used by AuditStore.
+type ObjectClient interface {
+	PutObject(ctx context.Context, bucket, key string, reader io.Reader, size int64, opts minio.PutObjectOptions) (minio.UploadInfo, error)
+	BucketExists(ctx context.Context, bucket string) (bool, error)
+	MakeBucket(ctx context.Context, bucket string, opts minio.MakeBucketOptions) error
+}
+
 // AuditStore implements app.PolicyAuditStore writing JSON snapshots to S3/MinIO.
 type AuditStore struct {
-	client *minio.Client
+	client ObjectClient
 	bucket string
 }
 
-// NewAuditStore creates an audit store from an existing MinIO client.
-func NewAuditStore(client *minio.Client, bucket string) *AuditStore {
+// NewAuditStore creates an audit store from an existing ObjectClient.
+func NewAuditStore(client ObjectClient, bucket string) *AuditStore {
 	return &AuditStore{client: client, bucket: bucket}
 }
 

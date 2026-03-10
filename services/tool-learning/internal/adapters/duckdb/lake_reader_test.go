@@ -145,6 +145,39 @@ func TestQueryAggregatesTimeFilter(t *testing.T) {
 	}
 }
 
+func TestNewLakeReaderFromS3(t *testing.T) {
+	// DuckDB can configure S3 settings without a real endpoint.
+	// The connection and SET commands succeed in-memory.
+	reader, err := NewLakeReaderFromS3("localhost:9000", "access", "secret", "test-bucket", "us-east-1", false)
+	if err != nil {
+		t.Fatalf("NewLakeReaderFromS3: %v", err)
+	}
+	defer reader.Close()
+
+	if reader.source == "" {
+		t.Error("expected non-empty source")
+	}
+}
+
+func TestNewLakeReaderFromS3WithSSL(t *testing.T) {
+	reader, err := NewLakeReaderFromS3("s3.amazonaws.com", "access", "secret", "bucket", "us-west-2", true)
+	if err != nil {
+		t.Fatalf("NewLakeReaderFromS3 with SSL: %v", err)
+	}
+	defer reader.Close()
+}
+
+func TestLakeReaderClose(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		t.Fatalf("duckdb open: %v", err)
+	}
+	reader := NewLakeReader(db, "invocations")
+	if err := reader.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
 func TestQueryAggregatesP95(t *testing.T) {
 	db := openTestDB(t)
 
