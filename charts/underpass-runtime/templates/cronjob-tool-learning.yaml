@@ -47,7 +47,11 @@ spec:
           containers:
             - name: tool-learning
               securityContext:
-                {{- toYaml $.Values.securityContext | nindent 16 }}
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                capabilities:
+                  drop:
+                    - ALL
               image: "{{ $.Values.toolLearning.image.repository }}:{{ $.Values.toolLearning.image.tag | default $.Chart.AppVersion }}"
               imagePullPolicy: {{ $.Values.toolLearning.image.pullPolicy }}
               args:
