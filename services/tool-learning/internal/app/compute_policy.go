@@ -53,10 +53,10 @@ func NewComputePolicyUseCase(cfg ComputePolicyConfig) *ComputePolicyUseCase {
 
 // ComputeResult holds the output metrics of a policy computation run.
 type ComputeResult struct {
-	AggregatesRead int
-	PoliciesWritten int
+	AggregatesRead   int
+	PoliciesWritten  int
 	PoliciesFiltered int
-	Duration        time.Duration
+	Duration         time.Duration
 }
 
 // RunHourly computes policies from the last hour of telemetry.

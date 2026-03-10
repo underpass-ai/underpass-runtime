@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
@@ -12,6 +13,13 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	schedule := flag.String("schedule", "hourly", "Computation schedule: hourly, daily")
 	maxLatency := flag.Int64("max-p95-latency-ms", 0, "Hard constraint: max p95 latency (0 = disabled)")
 	maxErrorRate := flag.Float64("max-error-rate", 0, "Hard constraint: max error rate (0 = disabled)")
@@ -35,8 +43,7 @@ func main() {
 
 	lake, store, publisher, audit, cleanup, err := buildAdapters(logger)
 	if err != nil {
-		logger.Error("failed to build adapters", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("build adapters: %w", err)
 	}
 	defer cleanup()
 
@@ -59,13 +66,11 @@ func main() {
 	case "daily":
 		result, err = uc.RunDaily(ctx)
 	default:
-		logger.Error("unknown schedule", "schedule", *schedule)
-		os.Exit(1)
+		return fmt.Errorf("unknown schedule: %s", *schedule)
 	}
 
 	if err != nil {
-		logger.Error("policy computation failed", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("policy computation: %w", err)
 	}
 
 	logger.Info("policy computation succeeded",
@@ -74,6 +79,7 @@ func main() {
 		"policies_filtered", result.PoliciesFiltered,
 		"duration_ms", result.Duration.Milliseconds(),
 	)
+	return nil
 }
 
 func parseLogLevel(raw string) slog.Level {
