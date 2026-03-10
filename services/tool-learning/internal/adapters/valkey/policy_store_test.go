@@ -83,7 +83,8 @@ func TestPolicyStoreWithMiniredis(t *testing.T) {
 		FreshnessTs: now, Confidence: 0.892,
 	}
 
-	if err := store.WritePolicy(ctx, policy); err != nil {
+	err = store.WritePolicy(ctx, policy)
+	if err != nil {
 		t.Fatalf("WritePolicy: %v", err)
 	}
 

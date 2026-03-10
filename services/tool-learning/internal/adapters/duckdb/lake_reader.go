@@ -48,7 +48,7 @@ func NewLakeReaderFromS3(endpoint, accessKey, secretKey, bucket, region string, 
 
 	for _, cfg := range configs {
 		if _, err := db.ExecContext(context.Background(), cfg[0]); err != nil {
-			db.Close()
+			_ = db.Close()
 			return nil, fmt.Errorf("duckdb %s: %w", cfg[1], err)
 		}
 	}
@@ -83,7 +83,7 @@ func (r *LakeReader) QueryAggregates(ctx context.Context, from, to time.Time) ([
 	if err != nil {
 		return nil, fmt.Errorf("duckdb query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []domain.AggregateStats
 	for rows.Next() {

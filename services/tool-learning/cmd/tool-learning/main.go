@@ -133,7 +133,7 @@ func buildAdapters(logger *slog.Logger, schedule string) (
 
 	store, err := valkey.NewPolicyStoreFromAddress(context.Background(), valkeyAddr, valkeyPassword, valkeyDB, valkeyPrefix, valkeyTTL)
 	if err != nil {
-		lake.Close()
+		_ = lake.Close()
 		return nil, nil, nil, nil, nil, fmt.Errorf("valkey policy store: %w", err)
 	}
 	logger.Info("adapter ready", "adapter", "valkey-policy-store", "addr", valkeyAddr)
@@ -143,7 +143,7 @@ func buildAdapters(logger *slog.Logger, schedule string) (
 
 	pub, natsConn, err := natspub.NewPublisherFromURL(natsURL, schedule)
 	if err != nil {
-		lake.Close()
+		_ = lake.Close()
 		return nil, nil, nil, nil, nil, fmt.Errorf("nats publisher: %w", err)
 	}
 	logger.Info("adapter ready", "adapter", "nats-publisher", "url", natsURL)
@@ -153,14 +153,14 @@ func buildAdapters(logger *slog.Logger, schedule string) (
 
 	audit, err := s3.NewAuditStoreFromConfig(s3Endpoint, s3AccessKey, s3SecretKey, auditBucket, s3UseSSL)
 	if err != nil {
-		lake.Close()
+		_ = lake.Close()
 		natsConn.Close()
 		return nil, nil, nil, nil, nil, fmt.Errorf("s3 audit store: %w", err)
 	}
 	logger.Info("adapter ready", "adapter", "s3-audit-store", "bucket", auditBucket)
 
 	cleanup := func() {
-		lake.Close()
+		_ = lake.Close()
 		pub.Close()
 		natsConn.Close()
 	}

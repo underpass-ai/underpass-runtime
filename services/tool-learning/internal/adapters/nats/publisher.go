@@ -63,6 +63,6 @@ func (p *Publisher) PublishPolicyUpdated(_ context.Context, policies []domain.To
 // Close drains and closes the NATS connection.
 func (p *Publisher) Close() {
 	if p.conn != nil {
-		p.conn.Drain()
+		_ = p.conn.Drain()
 	}
 }
