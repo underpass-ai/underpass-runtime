@@ -101,6 +101,20 @@ spec:
               mc admin user add minio "${TL_ACCESS_KEY}" "${TL_SECRET_KEY}" 2>/dev/null || true
               mc admin policy attach minio tool-learning --user "${TL_ACCESS_KEY}"
 
+              # Lifecycle rules — idempotent via mc ilm rule import (replaces all rules)
+              {{- if gt (int .Values.minioIAM.lifecycle.artifactsDays) 0 }}
+              printf '%s\n' '{"Rules":[{"ID":"expire-all","Status":"Enabled","Expiration":{"Days":{{ .Values.minioIAM.lifecycle.artifactsDays }}}}]}' | mc ilm rule import minio/{{ .Values.minioIAM.buckets.artifacts }}
+              echo "Lifecycle: {{ .Values.minioIAM.buckets.artifacts }} expire={{ .Values.minioIAM.lifecycle.artifactsDays }}d"
+              {{- end }}
+              {{- if gt (int .Values.minioIAM.lifecycle.telemetryLakeDays) 0 }}
+              printf '%s\n' '{"Rules":[{"ID":"expire-all","Status":"Enabled","Expiration":{"Days":{{ .Values.minioIAM.lifecycle.telemetryLakeDays }}}}]}' | mc ilm rule import minio/{{ .Values.minioIAM.buckets.telemetryLake }}
+              echo "Lifecycle: {{ .Values.minioIAM.buckets.telemetryLake }} expire={{ .Values.minioIAM.lifecycle.telemetryLakeDays }}d"
+              {{- end }}
+              {{- if gt (int .Values.minioIAM.lifecycle.policyAuditDays) 0 }}
+              printf '%s\n' '{"Rules":[{"ID":"expire-all","Status":"Enabled","Expiration":{"Days":{{ .Values.minioIAM.lifecycle.policyAuditDays }}}}]}' | mc ilm rule import minio/{{ .Values.minioIAM.buckets.policyAudit }}
+              echo "Lifecycle: {{ .Values.minioIAM.buckets.policyAudit }} expire={{ .Values.minioIAM.lifecycle.policyAuditDays }}d"
+              {{- end }}
+
               echo "MinIO IAM setup complete"
               mc admin user list minio
           volumeMounts:

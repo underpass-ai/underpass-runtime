@@ -414,3 +414,12 @@ minioIAM:
     telemetryLake: telemetry-lake
     # -- Policy audit snapshots (tool-learning R/W)
     policyAudit: policy-audit
+
+  # -- Bucket lifecycle rules (object expiration)
+  lifecycle:
+    # -- Expire workspace artifacts after N days (0 = disabled)
+    artifactsDays: 7
+    # -- Expire telemetry Parquet partitions after N days (0 = disabled)
+    telemetryLakeDays: 30
+    # -- Expire policy audit snapshots after N days (0 = disabled)
+    policyAuditDays: 90
