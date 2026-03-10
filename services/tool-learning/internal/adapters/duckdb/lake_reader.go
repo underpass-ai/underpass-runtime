@@ -20,8 +20,8 @@ var safeSource = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$|^read_parquet\('.+
 // LakeReader implements app.TelemetryLakeReader using DuckDB
 // to query Parquet files from an S3-compatible object store (MinIO).
 type LakeReader struct {
-	db     *sql.DB
-	source string // table name (test) or read_parquet(...) expression (production)
+	db    *sql.DB
+	query string // pre-built aggregate query (source baked in at construction)
 }
 
 // NewLakeReader creates a reader with a pre-configured DuckDB database.
@@ -30,7 +30,7 @@ func NewLakeReader(db *sql.DB, source string) *LakeReader {
 	if !safeSource.MatchString(source) {
 		panic(fmt.Sprintf("duckdb: unsafe source expression: %q", source))
 	}
-	return &LakeReader{db: db, source: source}
+	return &LakeReader{db: db, query: fmt.Sprintf(aggregateQuery, source)}
 }
 
 // NewLakeReaderFromS3 creates a reader configured for MinIO/S3.
@@ -67,7 +67,7 @@ func NewLakeReaderFromS3(endpoint, accessKey, secretKey, bucket, region string, 
 		"read_parquet('s3://%s/dt=*/hour=*/*.parquet', hive_partitioning=true)",
 		bucket,
 	)
-	return &LakeReader{db: db, source: source}, nil
+	return &LakeReader{db: db, query: fmt.Sprintf(aggregateQuery, source)}, nil
 }
 
 const aggregateQuery = `
@@ -87,9 +87,7 @@ GROUP BY context_signature, tool_id
 
 // QueryAggregates scans invocations in [from, to) and returns per-(context, tool) aggregates.
 func (r *LakeReader) QueryAggregates(ctx context.Context, from, to time.Time) ([]domain.AggregateStats, error) {
-	query := fmt.Sprintf(aggregateQuery, r.source)
-
-	rows, err := r.db.QueryContext(ctx, query, from, to)
+	rows, err := r.db.QueryContext(ctx, r.query, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("duckdb query: %w", err)
 	}

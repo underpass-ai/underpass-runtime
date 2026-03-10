@@ -154,8 +154,8 @@ func TestNewLakeReaderFromS3(t *testing.T) {
 	}
 	defer reader.Close()
 
-	if reader.source == "" {
-		t.Error("expected non-empty source")
+	if reader.query == "" {
+		t.Error("expected non-empty query")
 	}
 }
 
