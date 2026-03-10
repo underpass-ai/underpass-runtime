@@ -95,7 +95,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Build
-        run: CGO_ENABLED=0 go build -o bin/tool-learning ./cmd/tool-learning
+        run: go build -o bin/tool-learning ./cmd/tool-learning
 
       - name: Upload binary
         uses: actions/upload-artifact@v4

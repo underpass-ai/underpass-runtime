@@ -6,8 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
+	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/duckdb"
+	natspub "github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/nats"
+	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/s3"
+	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/valkey"
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/app"
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/domain"
 )
@@ -41,7 +46,7 @@ func run() error {
 		MaxP95Cost:      *maxCost,
 	}
 
-	lake, store, publisher, audit, cleanup, err := buildAdapters(logger)
+	lake, store, publisher, audit, cleanup, err := buildAdapters(logger, *schedule)
 	if err != nil {
 		return fmt.Errorf("build adapters: %w", err)
 	}
@@ -97,7 +102,7 @@ func parseLogLevel(raw string) slog.Level {
 
 // buildAdapters wires real adapters from environment variables.
 // Returns a cleanup function for deferred shutdown.
-func buildAdapters(logger *slog.Logger) (
+func buildAdapters(logger *slog.Logger, schedule string) (
 	app.TelemetryLakeReader,
 	app.PolicyStore,
 	app.PolicyEventPublisher,
@@ -105,38 +110,67 @@ func buildAdapters(logger *slog.Logger) (
 	func(),
 	error,
 ) {
-	// TODO(TL-003): DuckDB + MinIO lake reader
-	// TODO(TL-004): Valkey policy store
-	// TODO(TL-005): NATS event publisher
-	// TODO(TL-006): S3 audit store
+	// TL-003: DuckDB lake reader
+	s3Endpoint := envOrDefault("S3_ENDPOINT", "localhost:9000")
+	s3AccessKey := envOrDefault("S3_ACCESS_KEY", "minioadmin")
+	s3SecretKey := envOrDefault("S3_SECRET_KEY", "minioadmin")
+	s3Region := envOrDefault("S3_REGION", "us-east-1")
+	s3UseSSL := envOrDefault("S3_USE_SSL", "false") == "true"
+	lakeBucket := envOrDefault("LAKE_BUCKET", "telemetry-lake")
 
-	logger.Warn("adapters not yet implemented, using stubs")
+	lake, err := duckdb.NewLakeReaderFromS3(s3Endpoint, s3AccessKey, s3SecretKey, lakeBucket, s3Region, s3UseSSL)
+	if err != nil {
+		return nil, nil, nil, nil, nil, fmt.Errorf("duckdb lake reader: %w", err)
+	}
+	logger.Info("adapter ready", "adapter", "duckdb-lake-reader", "bucket", lakeBucket)
 
-	// Temporary stubs until adapters are implemented.
-	// These will be replaced in TL-003 through TL-006.
-	stub := &stubAdapters{}
-	return stub, stub, stub, stub, func() {}, nil
+	// TL-004: Valkey policy store
+	valkeyAddr := envOrDefault("VALKEY_ADDR", "localhost:6379")
+	valkeyPassword := os.Getenv("VALKEY_PASSWORD")
+	valkeyDB, _ := strconv.Atoi(envOrDefault("VALKEY_DB", "0"))
+	valkeyPrefix := envOrDefault("VALKEY_KEY_PREFIX", "tool_policy")
+	valkeyTTL, _ := time.ParseDuration(envOrDefault("VALKEY_TTL", "2h"))
+
+	store, err := valkey.NewPolicyStoreFromAddress(context.Background(), valkeyAddr, valkeyPassword, valkeyDB, valkeyPrefix, valkeyTTL)
+	if err != nil {
+		lake.Close()
+		return nil, nil, nil, nil, nil, fmt.Errorf("valkey policy store: %w", err)
+	}
+	logger.Info("adapter ready", "adapter", "valkey-policy-store", "addr", valkeyAddr)
+
+	// TL-005: NATS event publisher
+	natsURL := envOrDefault("NATS_URL", "nats://localhost:4222")
+
+	pub, natsConn, err := natspub.NewPublisherFromURL(natsURL, schedule)
+	if err != nil {
+		lake.Close()
+		return nil, nil, nil, nil, nil, fmt.Errorf("nats publisher: %w", err)
+	}
+	logger.Info("adapter ready", "adapter", "nats-publisher", "url", natsURL)
+
+	// TL-006: S3 audit store
+	auditBucket := envOrDefault("AUDIT_BUCKET", "policy-audit")
+
+	audit, err := s3.NewAuditStoreFromConfig(s3Endpoint, s3AccessKey, s3SecretKey, auditBucket, s3UseSSL)
+	if err != nil {
+		lake.Close()
+		natsConn.Close()
+		return nil, nil, nil, nil, nil, fmt.Errorf("s3 audit store: %w", err)
+	}
+	logger.Info("adapter ready", "adapter", "s3-audit-store", "bucket", auditBucket)
+
+	cleanup := func() {
+		lake.Close()
+		pub.Close()
+		natsConn.Close()
+	}
+
+	return lake, store, pub, audit, cleanup, nil
 }
 
-// stubAdapters implements all ports as no-ops for initial wiring.
-type stubAdapters struct{}
-
-func (s *stubAdapters) QueryAggregates(_ context.Context, _, _ time.Time) ([]domain.AggregateStats, error) {
-	return nil, nil
-}
-
-func (s *stubAdapters) WritePolicy(_ context.Context, _ domain.ToolPolicy) error { return nil }
-
-func (s *stubAdapters) WritePolicies(_ context.Context, _ []domain.ToolPolicy) error { return nil }
-
-func (s *stubAdapters) ReadPolicy(_ context.Context, _, _ string) (domain.ToolPolicy, bool, error) {
-	return domain.ToolPolicy{}, false, nil
-}
-
-func (s *stubAdapters) PublishPolicyUpdated(_ context.Context, _ []domain.ToolPolicy) error {
-	return nil
-}
-
-func (s *stubAdapters) WriteSnapshot(_ context.Context, _ time.Time, _ []domain.ToolPolicy) error {
-	return nil
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
