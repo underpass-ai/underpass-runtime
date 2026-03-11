@@ -45,9 +45,13 @@ func NewLakeReaderFromS3(endpoint, accessKey, secretKey, bucket, region string, 
 		sslFlag = "true"
 	}
 
+	// Install httpfs with retry — extension download can be flaky in CI.
+	if err := installHTTPFS(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
 	configs := [][2]string{
-		{"INSTALL httpfs", "install httpfs"},
-		{"LOAD httpfs", "load httpfs"},
 		{"SET s3_endpoint='" + endpoint + "'", "set s3_endpoint"},
 		{"SET s3_access_key_id='" + accessKey + "'", "set s3_access_key_id"},
 		{"SET s3_secret_access_key='" + secretKey + "'", "set s3_secret_access_key"},
@@ -116,4 +120,26 @@ func (r *LakeReader) QueryAggregates(ctx context.Context, from, to time.Time) ([
 // Close releases the DuckDB database connection.
 func (r *LakeReader) Close() error {
 	return r.db.Close()
+}
+
+// installHTTPFS installs and loads the httpfs extension with a single retry.
+// DuckDB extension downloads can be flaky in CI environments.
+func installHTTPFS(db *sql.DB) error {
+	ctx := context.Background()
+	for attempt := 0; attempt < 2; attempt++ {
+		if _, err := db.ExecContext(ctx, "INSTALL httpfs"); err != nil {
+			if attempt == 1 {
+				return fmt.Errorf("duckdb install httpfs: %w", err)
+			}
+			continue
+		}
+		if _, err := db.ExecContext(ctx, "LOAD httpfs"); err != nil {
+			if attempt == 1 {
+				return fmt.Errorf("duckdb load httpfs: %w", err)
+			}
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("duckdb httpfs: exhausted retries")
 }

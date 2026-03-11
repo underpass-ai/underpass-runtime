@@ -1,0 +1,132 @@
+{{- if .Values.minioIAM.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "underpass-runtime.fullname" . }}-minio-iam
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio-iam
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "underpass-runtime.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: minio-iam
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: minio-iam
+          image: {{ .Values.minioIAM.image | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: MC_CONFIG_DIR
+              value: /tmp/.mc
+            - name: MINIO_ENDPOINT
+              value: {{ .Values.minioIAM.endpoint | quote }}
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minioIAM.rootSecret }}
+                  key: {{ .Values.minioIAM.rootAccessKeyKey | default "accessKey" }}
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minioIAM.rootSecret }}
+                  key: {{ .Values.minioIAM.rootSecretKeyKey | default "secretKey" }}
+            {{- /* workspace-svc credentials */}}
+            - name: WS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minioIAM.workspaceSecret }}
+                  key: accessKey
+            - name: WS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minioIAM.workspaceSecret }}
+                  key: secretKey
+            {{- /* tool-learning credentials */}}
+            - name: TL_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minioIAM.toolLearningSecret }}
+                  key: accessKey
+            - name: TL_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.minioIAM.toolLearningSecret }}
+                  key: secretKey
+          command:
+            - /bin/sh
+            - -ce
+            - |
+              mc alias set minio "${MINIO_ENDPOINT}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
+
+              # Create buckets (idempotent)
+              mc mb --ignore-existing minio/{{ .Values.minioIAM.buckets.artifacts }}
+              mc mb --ignore-existing minio/{{ .Values.minioIAM.buckets.telemetryLake }}
+              mc mb --ignore-existing minio/{{ .Values.minioIAM.buckets.policyAudit }}
+
+              # workspace-svc: R/W to artifacts bucket ONLY
+              printf '%s\n' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:DeleteObject","s3:ListBucket"],"Resource":["arn:aws:s3:::{{ .Values.minioIAM.buckets.artifacts }}","arn:aws:s3:::{{ .Values.minioIAM.buckets.artifacts }}/*"]}]}' > /tmp/policy-workspace.json
+
+              # tool-learning: R on telemetry-lake, R/W on policy-audit
+              printf '%s\n' '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject","s3:ListBucket"],"Resource":["arn:aws:s3:::{{ .Values.minioIAM.buckets.telemetryLake }}","arn:aws:s3:::{{ .Values.minioIAM.buckets.telemetryLake }}/*"]},{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject","s3:ListBucket"],"Resource":["arn:aws:s3:::{{ .Values.minioIAM.buckets.policyAudit }}","arn:aws:s3:::{{ .Values.minioIAM.buckets.policyAudit }}/*"]}]}' > /tmp/policy-tool-learning.json
+
+              # Apply policies
+              mc admin policy create minio workspace-svc /tmp/policy-workspace.json || mc admin policy info minio workspace-svc
+              mc admin policy create minio tool-learning /tmp/policy-tool-learning.json || mc admin policy info minio tool-learning
+
+              # Create or update users and attach policies
+              mc admin user add minio "${WS_ACCESS_KEY}" "${WS_SECRET_KEY}" 2>/dev/null || true
+              mc admin policy attach minio workspace-svc --user "${WS_ACCESS_KEY}"
+
+              mc admin user add minio "${TL_ACCESS_KEY}" "${TL_SECRET_KEY}" 2>/dev/null || true
+              mc admin policy attach minio tool-learning --user "${TL_ACCESS_KEY}"
+
+              # Lifecycle rules — idempotent via mc ilm rule import (replaces all rules)
+              {{- if gt (int .Values.minioIAM.lifecycle.artifactsDays) 0 }}
+              printf '%s\n' '{"Rules":[{"ID":"expire-all","Status":"Enabled","Expiration":{"Days":{{ .Values.minioIAM.lifecycle.artifactsDays }}}}]}' | mc ilm rule import minio/{{ .Values.minioIAM.buckets.artifacts }}
+              echo "Lifecycle: {{ .Values.minioIAM.buckets.artifacts }} expire={{ .Values.minioIAM.lifecycle.artifactsDays }}d"
+              {{- end }}
+              {{- if gt (int .Values.minioIAM.lifecycle.telemetryLakeDays) 0 }}
+              printf '%s\n' '{"Rules":[{"ID":"expire-all","Status":"Enabled","Expiration":{"Days":{{ .Values.minioIAM.lifecycle.telemetryLakeDays }}}}]}' | mc ilm rule import minio/{{ .Values.minioIAM.buckets.telemetryLake }}
+              echo "Lifecycle: {{ .Values.minioIAM.buckets.telemetryLake }} expire={{ .Values.minioIAM.lifecycle.telemetryLakeDays }}d"
+              {{- end }}
+              {{- if gt (int .Values.minioIAM.lifecycle.policyAuditDays) 0 }}
+              printf '%s\n' '{"Rules":[{"ID":"expire-all","Status":"Enabled","Expiration":{"Days":{{ .Values.minioIAM.lifecycle.policyAuditDays }}}}]}' | mc ilm rule import minio/{{ .Values.minioIAM.buckets.policyAudit }}
+              echo "Lifecycle: {{ .Values.minioIAM.buckets.policyAudit }} expire={{ .Values.minioIAM.lifecycle.policyAuditDays }}d"
+              {{- end }}
+
+              echo "MinIO IAM setup complete"
+              mc admin user list minio
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}

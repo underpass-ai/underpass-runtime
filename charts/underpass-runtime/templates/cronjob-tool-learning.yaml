@@ -1,0 +1,139 @@
+{{- if .Values.toolLearning.enabled }}
+{{- $fullName := include "underpass-runtime.fullname" . -}}
+{{- range .Values.toolLearning.schedules }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-tool-learning-{{ .name }}
+  labels:
+    {{- include "underpass-runtime.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: tool-learning
+spec:
+  schedule: {{ .cron | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ $.Values.toolLearning.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $.Values.toolLearning.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ $.Values.toolLearning.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "underpass-runtime.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: tool-learning
+        tool-learning/schedule: {{ .name }}
+    spec:
+      activeDeadlineSeconds: {{ $.Values.toolLearning.activeDeadlineSeconds }}
+      backoffLimit: {{ $.Values.toolLearning.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "underpass-runtime.selectorLabels" $ | nindent 12 }}
+            app.kubernetes.io/component: tool-learning
+            tool-learning/schedule: {{ .name }}
+          {{- with $.Values.toolLearning.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          {{- with $.Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "underpass-runtime.serviceAccountName" $ }}
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            {{- toYaml $.Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: tool-learning
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              image: "{{ $.Values.toolLearning.image.repository }}:{{ $.Values.toolLearning.image.tag | default $.Chart.AppVersion }}"
+              imagePullPolicy: {{ $.Values.toolLearning.image.pullPolicy }}
+              args:
+                - --schedule={{ .name }}
+                {{- with $.Values.toolLearning.constraints }}
+                {{- if .maxP95LatencyMs }}
+                - --max-p95-latency-ms={{ .maxP95LatencyMs }}
+                {{- end }}
+                {{- if .maxErrorRate }}
+                - --max-error-rate={{ .maxErrorRate }}
+                {{- end }}
+                {{- if .maxP95Cost }}
+                - --max-p95-cost={{ .maxP95Cost }}
+                {{- end }}
+                {{- end }}
+              env:
+                - name: HOME
+                  value: /tmp
+                - name: LOG_LEVEL
+                  value: {{ $.Values.toolLearning.logLevel | quote }}
+                {{- /* S3 / MinIO */}}
+                - name: S3_ENDPOINT
+                  value: {{ $.Values.toolLearning.s3.endpoint | quote }}
+                - name: S3_REGION
+                  value: {{ $.Values.toolLearning.s3.region | quote }}
+                - name: S3_USE_SSL
+                  value: {{ $.Values.toolLearning.s3.useSSL | quote }}
+                - name: LAKE_BUCKET
+                  value: {{ $.Values.toolLearning.s3.lakeBucket | quote }}
+                - name: AUDIT_BUCKET
+                  value: {{ $.Values.toolLearning.s3.auditBucket | quote }}
+                {{- if $.Values.toolLearning.s3.existingSecret }}
+                - name: S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $.Values.toolLearning.s3.existingSecret }}
+                      key: {{ $.Values.toolLearning.s3.accessKeyKey }}
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $.Values.toolLearning.s3.existingSecret }}
+                      key: {{ $.Values.toolLearning.s3.secretKeyKey }}
+                {{- end }}
+                {{- /* Valkey */}}
+                - name: VALKEY_ADDR
+                  value: "{{ $.Values.toolLearning.valkey.host }}:{{ $.Values.toolLearning.valkey.port }}"
+                - name: VALKEY_DB
+                  value: {{ $.Values.toolLearning.valkey.db | quote }}
+                - name: VALKEY_KEY_PREFIX
+                  value: {{ $.Values.toolLearning.valkey.keyPrefix | quote }}
+                - name: VALKEY_TTL
+                  value: {{ $.Values.toolLearning.valkey.ttl | quote }}
+                {{- if $.Values.toolLearning.valkey.existingSecret }}
+                - name: VALKEY_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $.Values.toolLearning.valkey.existingSecret }}
+                      key: {{ $.Values.toolLearning.valkey.passwordKey | default "password" }}
+                {{- end }}
+                {{- /* NATS */}}
+                - name: NATS_URL
+                  value: {{ $.Values.toolLearning.nats.url | quote }}
+              resources:
+                {{- toYaml $.Values.toolLearning.resources | nindent 16 }}
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi
+          {{- with $.Values.toolLearning.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.toolLearning.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.toolLearning.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
+{{- end }}
