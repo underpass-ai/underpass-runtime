@@ -70,3 +70,11 @@ workspace_tests:
     kind: "llm"
     timeout_override: 600
     tags: ["llm", "agent-loop", "discovery", "invoke", "claude", "openai", "vllm"]
+
+  - id: "11"
+    name: "11-tool-learning-pipeline"
+    job_name: "e2e-tool-learning-pipeline"
+    tier: "core"
+    kind: "tool-learning"
+    timeout_override: 600
+    tags: ["tool-learning", "pipeline", "minio", "valkey", "duckdb", "e2e"]

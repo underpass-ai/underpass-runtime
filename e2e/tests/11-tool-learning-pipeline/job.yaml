@@ -1,0 +1,100 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-tool-learning-pipeline
+  namespace: underpass-runtime
+  labels:
+    app: e2e-tool-learning-pipeline
+    test-type: e2e
+    test-suite: tool-learning
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  activeDeadlineSeconds: 600
+
+  template:
+    metadata:
+      labels:
+        app: e2e-tool-learning-pipeline
+        test-type: e2e
+        test-suite: tool-learning
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+
+      containers:
+        - name: test-runner
+          image: registry.underpassai.com/e2e-tool-learning-pipeline:latest
+          imagePullPolicy: Always
+          env:
+            - name: S3_ENDPOINT
+              value: "minio:9000"
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tool-learning
+                  key: accessKey
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-tool-learning
+                  key: secretKey
+            # Root credentials for seeding (write to telemetry-lake)
+            - name: SEED_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: accessKey
+            - name: SEED_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: secretKey
+            - name: S3_USE_SSL
+              value: "false"
+            - name: S3_REGION
+              value: "us-east-1"
+            - name: LAKE_BUCKET
+              value: "telemetry-lake"
+            - name: AUDIT_BUCKET
+              value: "policy-audit"
+            - name: VALKEY_ADDR
+              value: "valkey:6379"
+            - name: VALKEY_KEY_PREFIX
+              value: "e2e_tl_11"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+            - name: SEED_HOURS
+              value: "2"
+            - name: SEED_PER_HOUR
+              value: "50"
+            - name: HOME
+              value: "/tmp"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+      dnsPolicy: ClusterFirst
