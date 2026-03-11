@@ -36,14 +36,34 @@ func run() error {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	endpoint := envOrDefault("S3_ENDPOINT", "localhost:9000")
-	accessKey := envOrDefault("S3_ACCESS_KEY", "minioadmin")
-	secretKey := envOrDefault("S3_SECRET_KEY", "minioadmin")
-	region := envOrDefault("S3_REGION", "us-east-1")
-	useSSL := envOrDefault("S3_USE_SSL", "false")
-	bucket := envOrDefault("LAKE_BUCKET", "telemetry-lake")
-	if !safeBucket.MatchString(bucket) {
-		return fmt.Errorf("invalid bucket name: %q", bucket)
+	return seedLake(seedConfig{
+		Hours:     *hours,
+		PerHour:   *perHour,
+		Endpoint:  envOrDefault("S3_ENDPOINT", "localhost:9000"),
+		AccessKey: envOrDefault("S3_ACCESS_KEY", "minioadmin"),
+		SecretKey: envOrDefault("S3_SECRET_KEY", "minioadmin"),
+		Region:    envOrDefault("S3_REGION", "us-east-1"),
+		UseSSL:    envOrDefault("S3_USE_SSL", "false"),
+		Bucket:    envOrDefault("LAKE_BUCKET", "telemetry-lake"),
+	}, logger)
+}
+
+// seedConfig holds all parameters for data generation.
+type seedConfig struct {
+	Hours     int
+	PerHour   int
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Region    string
+	UseSSL    string
+	Bucket    string
+}
+
+// seedLake generates synthetic telemetry and exports to S3.
+func seedLake(cfg seedConfig, logger *slog.Logger) error {
+	if !safeBucket.MatchString(cfg.Bucket) {
+		return fmt.Errorf("invalid bucket name: %q", cfg.Bucket)
 	}
 
 	db, err := sql.Open("duckdb", "")
@@ -56,26 +76,52 @@ func run() error {
 	s3Configs := [][2]string{
 		{"INSTALL httpfs", "install httpfs"},
 		{"LOAD httpfs", "load httpfs"},
-		{fmt.Sprintf("SET s3_endpoint='%s'", endpoint), "set s3_endpoint"},
-		{fmt.Sprintf("SET s3_access_key_id='%s'", accessKey), "set s3_access_key_id"},
-		{fmt.Sprintf("SET s3_secret_access_key='%s'", secretKey), "set s3_secret_access_key"},
-		{fmt.Sprintf("SET s3_region='%s'", region), "set s3_region"},
-		{fmt.Sprintf("SET s3_use_ssl=%s", useSSL), "set s3_use_ssl"},
+		{fmt.Sprintf("SET s3_endpoint='%s'", cfg.Endpoint), "set s3_endpoint"},
+		{fmt.Sprintf("SET s3_access_key_id='%s'", cfg.AccessKey), "set s3_access_key_id"},
+		{fmt.Sprintf("SET s3_secret_access_key='%s'", cfg.SecretKey), "set s3_secret_access_key"},
+		{fmt.Sprintf("SET s3_region='%s'", cfg.Region), "set s3_region"},
+		{fmt.Sprintf("SET s3_use_ssl=%s", cfg.UseSSL), "set s3_use_ssl"},
 		{"SET s3_url_style='path'", "set s3_url_style"},
 	}
 
-	for _, cfg := range s3Configs {
-		if _, err := db.ExecContext(context.Background(), cfg[0]); err != nil {
-			return fmt.Errorf("duckdb %s: %w", cfg[1], err)
+	for _, c := range s3Configs {
+		if _, err := db.ExecContext(context.Background(), c[0]); err != nil {
+			return fmt.Errorf("duckdb %s: %w", c[1], err)
 		}
 	}
 
-	logger.Info("S3 configured", "endpoint", endpoint, "bucket", bucket)
+	logger.Info("S3 configured", "endpoint", cfg.Endpoint, "bucket", cfg.Bucket)
 
-	// Generate synthetic invocations in-memory.
-	// Integer params are safe; built via strconv to avoid fmt.Sprintf SQL patterns.
-	minuteSpan := strconv.Itoa(*hours * 60)
-	totalRows := strconv.Itoa(*hours * *perHour)
+	count, err := generateData(db, cfg.Hours, cfg.PerHour)
+	if err != nil {
+		return err
+	}
+	logger.Info("generated synthetic invocations", "count", count, "hours", cfg.Hours)
+
+	if err := exportToS3(db, cfg.Bucket); err != nil {
+		return err
+	}
+
+	// Verify partitions written
+	var partitions int64
+	verifySQL := `SELECT COUNT(DISTINCT dt || '/' || "hour") FROM invocations`
+	if err := db.QueryRowContext(context.Background(), verifySQL).Scan(&partitions); err != nil {
+		return fmt.Errorf("verify: %w", err)
+	}
+
+	logger.Info("seed complete",
+		"invocations", count,
+		"partitions", partitions,
+		"bucket", cfg.Bucket,
+	)
+
+	return nil
+}
+
+// generateData creates the in-memory invocations table using DuckDB.
+func generateData(db *sql.DB, hours, perHour int) (int64, error) {
+	minuteSpan := strconv.Itoa(hours * 60)
+	totalRows := strconv.Itoa(hours * perHour)
 	genSQL := `
 CREATE TABLE invocations AS
 SELECT
@@ -133,17 +179,18 @@ FROM (
 `
 
 	if _, err := db.ExecContext(context.Background(), genSQL); err != nil {
-		return fmt.Errorf("generate data: %w", err)
+		return 0, fmt.Errorf("generate data: %w", err)
 	}
 
 	var count int64
 	if err := db.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM invocations").Scan(&count); err != nil {
-		return fmt.Errorf("count: %w", err)
+		return 0, fmt.Errorf("count: %w", err)
 	}
-	logger.Info("generated synthetic invocations", "count", count, "hours", *hours)
+	return count, nil
+}
 
-	// Write as Hive-partitioned Parquet to S3.
-	// Bucket name is regex-validated above; built via concatenation to avoid dynamic SQL.
+// exportToS3 writes the invocations table as Hive-partitioned Parquet to S3.
+func exportToS3(db *sql.DB, bucket string) error {
 	exportSQL := `
 COPY (
     SELECT
@@ -156,24 +203,9 @@ COPY (
 TO 's3://` + bucket + `'
 (FORMAT PARQUET, PARTITION_BY (dt, "hour"), OVERWRITE_OR_IGNORE, FILENAME_PATTERN 'invocations-{uuid}')
 `
-
 	if _, err := db.ExecContext(context.Background(), exportSQL); err != nil {
 		return fmt.Errorf("export to S3: %w", err)
 	}
-
-	// Verify partitions written
-	var partitions int64
-	verifySQL := `SELECT COUNT(DISTINCT dt || '/' || "hour") FROM invocations`
-	if err := db.QueryRowContext(context.Background(), verifySQL).Scan(&partitions); err != nil {
-		return fmt.Errorf("verify: %w", err)
-	}
-
-	logger.Info("seed complete",
-		"invocations", count,
-		"partitions", partitions,
-		"bucket", bucket,
-	)
-
 	return nil
 }
 

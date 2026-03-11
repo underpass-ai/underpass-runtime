@@ -110,6 +110,13 @@ func TestPolicyStoreWithMiniredis(t *testing.T) {
 	}
 }
 
+func TestNewPolicyStoreFromAddressFailure(t *testing.T) {
+	_, err := NewPolicyStoreFromAddress(context.Background(), "localhost:1", "", 0, "tp", time.Minute)
+	if err == nil {
+		t.Fatal("expected error from invalid address")
+	}
+}
+
 func TestPolicyStoreWriteBatch(t *testing.T) {
 	srv := startMiniredis(t)
 	store, err := NewPolicyStoreFromAddress(context.Background(), srv.Addr(), "", 0, "tool_policy", 10*time.Minute)
