@@ -190,7 +190,10 @@ func TestExecuteHourly(t *testing.T) {
 	defer cleanup()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	err := execute(context.Background(), lake, store, pub, audit, domain.PolicyConstraints{}, "hourly", logger)
+	err := execute(context.Background(), executeParams{
+		Lake: lake, Store: store, Publisher: pub, Audit: audit,
+		Constraints: domain.PolicyConstraints{}, Schedule: "hourly", Logger: logger,
+	})
 	if err != nil {
 		t.Fatalf("execute hourly: %v", err)
 	}
@@ -201,7 +204,10 @@ func TestExecuteDaily(t *testing.T) {
 	defer cleanup()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	err := execute(context.Background(), lake, store, pub, audit, domain.PolicyConstraints{}, "daily", logger)
+	err := execute(context.Background(), executeParams{
+		Lake: lake, Store: store, Publisher: pub, Audit: audit,
+		Constraints: domain.PolicyConstraints{}, Schedule: "daily", Logger: logger,
+	})
 	if err != nil {
 		t.Fatalf("execute daily: %v", err)
 	}
@@ -212,7 +218,10 @@ func TestExecuteUnknownSchedule(t *testing.T) {
 	defer cleanup()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	err := execute(context.Background(), lake, store, pub, audit, domain.PolicyConstraints{}, "weekly", logger)
+	err := execute(context.Background(), executeParams{
+		Lake: lake, Store: store, Publisher: pub, Audit: audit,
+		Constraints: domain.PolicyConstraints{}, Schedule: "weekly", Logger: logger,
+	})
 	if err == nil {
 		t.Fatal("expected error for unknown schedule")
 	}

@@ -16,7 +16,7 @@ import (
 	"regexp"
 	"strconv"
 
-	_ "github.com/marcboeker/go-duckdb"
+	_ "github.com/marcboeker/go-duckdb" // register DuckDB SQL driver
 )
 
 // safeBucket validates that a bucket name contains only alphanumeric, hyphens and dots.

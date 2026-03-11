@@ -48,29 +48,39 @@ func run() error {
 	}
 	defer cleanup()
 
-	return execute(context.Background(), lake, store, publisher, audit, constraints, *schedule, logger)
-}
-
-// execute runs the policy computation pipeline. Extracted for testability.
-func execute(
-	parent context.Context,
-	lake app.TelemetryLakeReader,
-	store app.PolicyStore,
-	publisher app.PolicyEventPublisher,
-	audit app.PolicyAuditStore,
-	constraints domain.PolicyConstraints,
-	schedule string,
-	logger *slog.Logger,
-) error {
-	logger.Info("tool-learning service starting", "schedule", schedule, "version", "0.1.0")
-
-	uc := app.NewComputePolicyUseCase(app.ComputePolicyConfig{
+	return execute(context.Background(), executeParams{
 		Lake:        lake,
 		Store:       store,
 		Publisher:   publisher,
 		Audit:       audit,
 		Constraints: constraints,
+		Schedule:    *schedule,
 		Logger:      logger,
+	})
+}
+
+// executeParams groups all parameters for execute(), avoiding long parameter lists.
+type executeParams struct {
+	Lake        app.TelemetryLakeReader
+	Store       app.PolicyStore
+	Publisher   app.PolicyEventPublisher
+	Audit       app.PolicyAuditStore
+	Constraints domain.PolicyConstraints
+	Schedule    string
+	Logger      *slog.Logger
+}
+
+// execute runs the policy computation pipeline. Extracted for testability.
+func execute(parent context.Context, p executeParams) error {
+	p.Logger.Info("tool-learning service starting", "schedule", p.Schedule, "version", "0.1.0")
+
+	uc := app.NewComputePolicyUseCase(app.ComputePolicyConfig{
+		Lake:        p.Lake,
+		Store:       p.Store,
+		Publisher:   p.Publisher,
+		Audit:       p.Audit,
+		Constraints: p.Constraints,
+		Logger:      p.Logger,
 	})
 
 	ctx, cancel := context.WithTimeout(parent, 10*time.Minute)
@@ -78,20 +88,20 @@ func execute(
 
 	var result app.ComputeResult
 	var err error
-	switch schedule {
+	switch p.Schedule {
 	case "hourly":
 		result, err = uc.RunHourly(ctx)
 	case "daily":
 		result, err = uc.RunDaily(ctx)
 	default:
-		return fmt.Errorf("unknown schedule: %s", schedule)
+		return fmt.Errorf("unknown schedule: %s", p.Schedule)
 	}
 
 	if err != nil {
 		return fmt.Errorf("policy computation: %w", err)
 	}
 
-	logger.Info("policy computation succeeded",
+	p.Logger.Info("policy computation succeeded",
 		"aggregates_read", result.AggregatesRead,
 		"policies_written", result.PoliciesWritten,
 		"policies_filtered", result.PoliciesFiltered,
@@ -112,6 +122,8 @@ func parseLogLevel(raw string) slog.Level {
 		return slog.LevelInfo
 	}
 }
+
+const logAdapterReady = "adapter ready"
 
 // adapterConfig holds all configuration for building adapters.
 type adapterConfig struct {
@@ -167,21 +179,21 @@ func buildAdapters(cfg adapterConfig, logger *slog.Logger) (
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("duckdb lake reader: %w", err)
 	}
-	logger.Info("adapter ready", "adapter", "duckdb-lake-reader", "bucket", cfg.LakeBucket)
+	logger.Info(logAdapterReady, "adapter", "duckdb-lake-reader", "bucket", cfg.LakeBucket)
 
 	store, err := valkey.NewPolicyStoreFromAddress(context.Background(), cfg.ValkeyAddr, cfg.ValkeyPass, cfg.ValkeyDB, cfg.ValkeyPfx, cfg.ValkeyTTL)
 	if err != nil {
 		_ = lake.Close()
 		return nil, nil, nil, nil, nil, fmt.Errorf("valkey policy store: %w", err)
 	}
-	logger.Info("adapter ready", "adapter", "valkey-policy-store", "addr", cfg.ValkeyAddr)
+	logger.Info(logAdapterReady, "adapter", "valkey-policy-store", "addr", cfg.ValkeyAddr)
 
 	pub, natsConn, err := natspub.NewPublisherFromURL(cfg.NATSURL, cfg.Schedule)
 	if err != nil {
 		_ = lake.Close()
 		return nil, nil, nil, nil, nil, fmt.Errorf("nats publisher: %w", err)
 	}
-	logger.Info("adapter ready", "adapter", "nats-publisher", "url", cfg.NATSURL)
+	logger.Info(logAdapterReady, "adapter", "nats-publisher", "url", cfg.NATSURL)
 
 	audit, err := s3.NewAuditStoreFromConfig(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.AuditBucket, cfg.S3UseSSL)
 	if err != nil {
@@ -189,7 +201,7 @@ func buildAdapters(cfg adapterConfig, logger *slog.Logger) (
 		natsConn.Close()
 		return nil, nil, nil, nil, nil, fmt.Errorf("s3 audit store: %w", err)
 	}
-	logger.Info("adapter ready", "adapter", "s3-audit-store", "bucket", cfg.AuditBucket)
+	logger.Info(logAdapterReady, "adapter", "s3-audit-store", "bucket", cfg.AuditBucket)
 
 	cleanup := func() {
 		_ = lake.Close()
