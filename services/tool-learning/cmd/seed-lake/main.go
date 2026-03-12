@@ -15,12 +15,22 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 
 	_ "github.com/marcboeker/go-duckdb" // register DuckDB SQL driver
 )
 
 // safeBucket validates that a bucket name contains only alphanumeric, hyphens and dots.
 var safeBucket = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.\-]{1,61}[a-zA-Z0-9]$`)
+
+// safePath validates that an export destination contains only safe characters
+// (alphanumeric, slashes, hyphens, dots, underscores, colons for s3://).
+var safePath = regexp.MustCompile(`^[a-zA-Z0-9/:._\-]+$`)
+
+// escapeSQLLiteral escapes single quotes in a string for use in DuckDB SET commands.
+func escapeSQLLiteral(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -73,15 +83,15 @@ func seedLake(cfg seedConfig, logger *slog.Logger) error {
 	}
 	defer func() { _ = db.Close() }()
 
-	// Configure S3
+	// Configure S3 — escape all user-supplied values to prevent SQL injection.
 	s3Configs := [][2]string{
 		{"INSTALL httpfs", "install httpfs"},
 		{"LOAD httpfs", "load httpfs"},
-		{fmt.Sprintf("SET s3_endpoint='%s'", cfg.Endpoint), "set s3_endpoint"},
-		{fmt.Sprintf("SET s3_access_key_id='%s'", cfg.AccessKey), "set s3_access_key_id"},
-		{fmt.Sprintf("SET s3_secret_access_key='%s'", cfg.SecretKey), "set s3_secret_access_key"},
-		{fmt.Sprintf("SET s3_region='%s'", cfg.Region), "set s3_region"},
-		{fmt.Sprintf("SET s3_use_ssl=%s", cfg.UseSSL), "set s3_use_ssl"},
+		{fmt.Sprintf("SET s3_endpoint='%s'", escapeSQLLiteral(cfg.Endpoint)), "set s3_endpoint"},
+		{fmt.Sprintf("SET s3_access_key_id='%s'", escapeSQLLiteral(cfg.AccessKey)), "set s3_access_key_id"},
+		{fmt.Sprintf("SET s3_secret_access_key='%s'", escapeSQLLiteral(cfg.SecretKey)), "set s3_secret_access_key"},
+		{fmt.Sprintf("SET s3_region='%s'", escapeSQLLiteral(cfg.Region)), "set s3_region"},
+		{fmt.Sprintf("SET s3_use_ssl=%s", escapeSQLLiteral(cfg.UseSSL)), "set s3_use_ssl"},
 		{"SET s3_url_style='path'", "set s3_url_style"},
 	}
 
@@ -204,7 +214,11 @@ FROM (
 
 // exportParquet writes the invocations table as Hive-partitioned Parquet.
 // dest is the target path (e.g. "s3://bucket" or a local directory).
+// The destination is validated against safePath to prevent SQL injection.
 func exportParquet(db *sql.DB, dest string) error {
+	if !safePath.MatchString(dest) {
+		return fmt.Errorf("unsafe export destination: %q", dest)
+	}
 	exportSQL := `
 COPY (
     SELECT

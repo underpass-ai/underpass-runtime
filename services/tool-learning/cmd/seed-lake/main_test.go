@@ -37,6 +37,79 @@ func TestSafeBucketRegex(t *testing.T) {
 	}
 }
 
+func TestSafePathRegex(t *testing.T) {
+	valid := []string{
+		"s3://telemetry-lake",
+		"/tmp/test-dir/output",
+		"/home/user/data_export",
+		"s3://my.bucket.name",
+	}
+	for _, p := range valid {
+		if !safePath.MatchString(p) {
+			t.Errorf("safePath should match %q", p)
+		}
+	}
+
+	invalid := []string{
+		"",
+		"path with spaces",
+		"s3://bucket'; DROP TABLE x--",
+		"/tmp/dir'injection",
+		"/tmp/$VAR",
+		"/tmp/`cmd`",
+	}
+	for _, p := range invalid {
+		if safePath.MatchString(p) {
+			t.Errorf("safePath should NOT match %q", p)
+		}
+	}
+}
+
+func TestEscapeSQLLiteral(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"normal", "normal"},
+		{"it's", "it''s"},
+		{"a'b'c", "a''b''c"},
+		{"no quotes", "no quotes"},
+		{"", ""},
+		{"single'", "single''"},
+		{"''already''", "''''already''''"},
+	}
+	for _, tc := range tests {
+		got := escapeSQLLiteral(tc.input)
+		if got != tc.want {
+			t.Errorf("escapeSQLLiteral(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestExportParquetUnsafeDest(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		t.Fatalf("duckdb open: %v", err)
+	}
+	defer db.Close()
+
+	if _, genErr := generateData(db, 1, 5); genErr != nil {
+		t.Fatalf("generateData: %v", genErr)
+	}
+
+	unsafePaths := []string{
+		"s3://bucket'; DROP TABLE x--",
+		"/tmp/dir'injection",
+		"/tmp/$VAR",
+		"/tmp/`cmd`",
+	}
+	for _, p := range unsafePaths {
+		if err := exportParquet(db, p); err == nil {
+			t.Errorf("exportParquet(%q) should fail for unsafe path", p)
+		}
+	}
+}
+
 func TestSeedLakeInvalidBucket(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	err := seedLake(seedConfig{Bucket: "../bad"}, logger)
@@ -190,6 +263,28 @@ func TestSeedLakeS3ConfigError(t *testing.T) {
 	}, logger)
 	if err == nil {
 		t.Fatal("expected S3 export error")
+	}
+}
+
+func TestSeedLakeQuotesInCredentials(t *testing.T) {
+	// Credentials containing single quotes must not cause SQL injection.
+	// DuckDB SET with escaped quotes should succeed without breaking SQL parsing.
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	err := seedLake(seedConfig{
+		Hours:          1,
+		PerHour:        2,
+		Endpoint:       "localhost:19999",
+		AccessKey:      "user'key",
+		SecretKey:      "pass'word",
+		Region:         "us-east-1",
+		UseSSL:         "false",
+		Bucket:         "test-bucket",
+		LocalExportDir: t.TempDir(),
+	}, logger)
+	// Should succeed — S3 config accepts any escaped string.
+	// It will fail only at export if S3 is unreachable, but the SET commands must not break.
+	if err != nil {
+		t.Fatalf("seedLake with quoted credentials: %v", err)
 	}
 }
 
