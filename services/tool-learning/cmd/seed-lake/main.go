@@ -98,8 +98,8 @@ func seedLake(cfg seedConfig, logger *slog.Logger) error {
 	}
 	logger.Info("generated synthetic invocations", "count", count, "hours", cfg.Hours)
 
-	if err := exportToS3(db, cfg.Bucket); err != nil {
-		return err
+	if exportErr := exportToS3(db, cfg.Bucket); exportErr != nil {
+		return exportErr
 	}
 
 	partitions, err := countPartitions(db)
