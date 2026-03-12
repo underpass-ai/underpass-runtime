@@ -159,6 +159,15 @@ func TestNewLakeReaderFromS3(t *testing.T) {
 	}
 }
 
+func TestNewLakeReaderFromS3QuotesInCredentials(t *testing.T) {
+	// Credentials containing single quotes must not break SQL parsing.
+	reader, err := NewLakeReaderFromS3("localhost:9000", "user'key", "pass'word", "test-bucket", "us-east-1", false)
+	if err != nil {
+		t.Fatalf("NewLakeReaderFromS3 with quotes: %v", err)
+	}
+	defer reader.Close()
+}
+
 func TestNewLakeReaderFromS3WithSSL(t *testing.T) {
 	reader, err := NewLakeReaderFromS3("s3.amazonaws.com", "access", "secret", "bucket", "us-west-2", true)
 	if err != nil {
@@ -191,6 +200,34 @@ func TestLakeReaderClose(t *testing.T) {
 	reader := NewLakeReader(db, "invocations")
 	if err := reader.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
+	}
+}
+
+func TestQueryAggregatesQueryError(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		t.Fatalf("duckdb open: %v", err)
+	}
+	defer db.Close()
+
+	// No invocations table — query should fail.
+	reader := &LakeReader{db: db, query: "SELECT 1 FROM nonexistent_table WHERE 1 = ?"}
+	_, err = reader.QueryAggregates(context.Background(), time.Now(), time.Now())
+	if err == nil {
+		t.Fatal("expected error from missing table")
+	}
+}
+
+func TestInstallHTTPFS(t *testing.T) {
+	// installHTTPFS should succeed on a fresh DuckDB instance.
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		t.Fatalf("duckdb open: %v", err)
+	}
+	defer db.Close()
+
+	if err := installHTTPFS(db); err != nil {
+		t.Fatalf("installHTTPFS: %v", err)
 	}
 }
 

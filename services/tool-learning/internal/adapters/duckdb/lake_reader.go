@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	_ "github.com/marcboeker/go-duckdb" // register DuckDB SQL driver
@@ -51,11 +52,12 @@ func NewLakeReaderFromS3(endpoint, accessKey, secretKey, bucket, region string, 
 		return nil, err
 	}
 
+	esc := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
 	configs := [][2]string{
-		{"SET s3_endpoint='" + endpoint + "'", "set s3_endpoint"},
-		{"SET s3_access_key_id='" + accessKey + "'", "set s3_access_key_id"},
-		{"SET s3_secret_access_key='" + secretKey + "'", "set s3_secret_access_key"},
-		{"SET s3_region='" + region + "'", "set s3_region"},
+		{"SET s3_endpoint='" + esc(endpoint) + "'", "set s3_endpoint"},
+		{"SET s3_access_key_id='" + esc(accessKey) + "'", "set s3_access_key_id"},
+		{"SET s3_secret_access_key='" + esc(secretKey) + "'", "set s3_secret_access_key"},
+		{"SET s3_region='" + esc(region) + "'", "set s3_region"},
 		{"SET s3_use_ssl=" + sslFlag, "set s3_use_ssl"},
 		{"SET s3_url_style='path'", "set s3_url_style"},
 	}

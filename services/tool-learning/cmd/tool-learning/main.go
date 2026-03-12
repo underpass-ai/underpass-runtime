@@ -41,7 +41,10 @@ func run() error {
 		MaxP95Cost:      *maxCost,
 	}
 
-	cfg := loadConfig(*schedule)
+	cfg, err := loadConfig(*schedule)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
 	lake, store, publisher, audit, cleanup, err := buildAdapters(cfg, logger)
 	if err != nil {
 		return fmt.Errorf("build adapters: %w", err)
@@ -144,9 +147,15 @@ type adapterConfig struct {
 }
 
 // loadConfig reads adapter configuration from environment variables.
-func loadConfig(schedule string) adapterConfig {
-	valkeyDB, _ := strconv.Atoi(envOrDefault("VALKEY_DB", "0"))
-	valkeyTTL, _ := time.ParseDuration(envOrDefault("VALKEY_TTL", "2h"))
+func loadConfig(schedule string) (adapterConfig, error) {
+	valkeyDB, err := strconv.Atoi(envOrDefault("VALKEY_DB", "0"))
+	if err != nil {
+		return adapterConfig{}, fmt.Errorf("invalid VALKEY_DB: %w", err)
+	}
+	valkeyTTL, err := time.ParseDuration(envOrDefault("VALKEY_TTL", "2h"))
+	if err != nil {
+		return adapterConfig{}, fmt.Errorf("invalid VALKEY_TTL: %w", err)
+	}
 	return adapterConfig{
 		S3Endpoint:  envOrDefault("S3_ENDPOINT", "localhost:9000"),
 		S3AccessKey: envOrDefault("S3_ACCESS_KEY", ""),
@@ -162,7 +171,7 @@ func loadConfig(schedule string) adapterConfig {
 		ValkeyTTL:   valkeyTTL,
 		NATSURL:     envOrDefault("NATS_URL", "nats://localhost:4222"),
 		Schedule:    schedule,
-	}
+	}, nil
 }
 
 // buildAdapters wires real adapters from configuration.
