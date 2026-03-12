@@ -27,11 +27,12 @@ type LakeReader struct {
 
 // NewLakeReader creates a reader with a pre-configured DuckDB database.
 // source must be a table identifier or a read_parquet(...) expression.
-func NewLakeReader(db *sql.DB, source string) *LakeReader {
+// Returns an error if the source expression is unsafe.
+func NewLakeReader(db *sql.DB, source string) (*LakeReader, error) {
 	if !safeSource.MatchString(source) {
-		panic(fmt.Sprintf("duckdb: unsafe source expression: %q", source))
+		return nil, fmt.Errorf("duckdb: unsafe source expression: %q", source)
 	}
-	return &LakeReader{db: db, query: fmt.Sprintf(aggregateQuery, source)}
+	return &LakeReader{db: db, query: fmt.Sprintf(aggregateQuery, source)}, nil
 }
 
 // NewLakeReaderFromS3 creates a reader configured for MinIO/S3.

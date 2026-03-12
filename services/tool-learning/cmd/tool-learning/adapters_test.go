@@ -63,7 +63,10 @@ func buildTestAdapters(t *testing.T) (
 	if err != nil {
 		t.Fatalf("create table: %v", err)
 	}
-	lake := duckdb.NewLakeReader(db, "invocations")
+	lake, err := duckdb.NewLakeReader(db, "invocations")
+	if err != nil {
+		t.Fatalf("NewLakeReader: %v", err)
+	}
 
 	// Valkey via miniredis
 	redisSrv := startMiniredis(t)

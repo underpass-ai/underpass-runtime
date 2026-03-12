@@ -59,4 +59,32 @@ spec:
           annotations:
             summary: "{{ include "underpass-runtime.fullname" . }} p95 invocation latency is high"
             description: "P95 tool invocation latency is above 2000ms for 10 minutes."
+        {{- if .Values.toolLearning.enabled }}
+        - alert: ToolLearningCronJobFailed
+          expr: |
+            kube_job_status_failed{
+              namespace="{{ .Release.Namespace }}",
+              job_name=~"{{ include "underpass-runtime.fullname" . }}-tool-learning-.*"
+            } > 0
+          for: 5m
+          labels:
+            severity: warning
+            service: {{ include "underpass-runtime.fullname" . }}-tool-learning
+          annotations:
+            summary: "tool-learning CronJob has failed jobs"
+            description: "One or more tool-learning CronJob executions have failed in the last 5 minutes."
+        - alert: ToolLearningCronJobMissed
+          expr: |
+            time() - max(kube_job_status_completion_time{
+              namespace="{{ .Release.Namespace }}",
+              job_name=~"{{ include "underpass-runtime.fullname" . }}-tool-learning-hourly-.*"
+            }) > 7200
+          for: 10m
+          labels:
+            severity: warning
+            service: {{ include "underpass-runtime.fullname" . }}-tool-learning
+          annotations:
+            summary: "tool-learning hourly CronJob has not run recently"
+            description: "No successful tool-learning hourly job completion in the last 2 hours."
+        {{- end }}
 {{- end }}

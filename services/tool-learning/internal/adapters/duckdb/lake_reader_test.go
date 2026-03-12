@@ -8,6 +8,15 @@ import (
 	"time"
 )
 
+func mustNewLakeReader(t *testing.T, db *sql.DB, source string) *LakeReader {
+	t.Helper()
+	r, err := NewLakeReader(db, source)
+	if err != nil {
+		t.Fatalf("NewLakeReader(%q): %v", source, err)
+	}
+	return r
+}
+
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("duckdb", "")
@@ -33,7 +42,7 @@ func openTestDB(t *testing.T) *sql.DB {
 
 func TestQueryAggregatesEmpty(t *testing.T) {
 	db := openTestDB(t)
-	reader := NewLakeReader(db, "invocations")
+	reader := mustNewLakeReader(t, db, "invocations")
 
 	from := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC)
@@ -62,7 +71,7 @@ func TestQueryAggregates(t *testing.T) {
 		t.Fatalf("insert: %v", err)
 	}
 
-	reader := NewLakeReader(db, "invocations")
+	reader := mustNewLakeReader(t, db, "invocations")
 	from := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC)
 
@@ -127,7 +136,7 @@ func TestQueryAggregatesTimeFilter(t *testing.T) {
 		t.Fatalf("insert: %v", err)
 	}
 
-	reader := NewLakeReader(db, "invocations")
+	reader := mustNewLakeReader(t, db, "invocations")
 
 	// Only query 12:00-13:00 window — should get 1 record
 	from := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
@@ -183,13 +192,10 @@ func TestNewLakeReaderUnsafeSource(t *testing.T) {
 	}
 	defer db.Close()
 
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic for unsafe source")
-		}
-	}()
-
-	NewLakeReader(db, "invocations; DROP TABLE users --")
+	_, err = NewLakeReader(db, "invocations; DROP TABLE users --")
+	if err == nil {
+		t.Fatal("expected error for unsafe source")
+	}
 }
 
 func TestLakeReaderClose(t *testing.T) {
@@ -197,7 +203,7 @@ func TestLakeReaderClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("duckdb open: %v", err)
 	}
-	reader := NewLakeReader(db, "invocations")
+	reader := mustNewLakeReader(t, db, "invocations")
 	if err := reader.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -250,7 +256,7 @@ func TestQueryAggregatesP95(t *testing.T) {
 		t.Fatalf("insert: %v", err)
 	}
 
-	reader := NewLakeReader(db, "invocations")
+	reader := mustNewLakeReader(t, db, "invocations")
 	from := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
 	to := time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC)
 
