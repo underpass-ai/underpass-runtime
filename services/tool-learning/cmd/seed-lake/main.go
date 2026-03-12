@@ -85,8 +85,8 @@ func seedLake(cfg seedConfig, logger *slog.Logger) error {
 	}
 
 	for _, c := range s3Configs {
-		if _, err := db.ExecContext(context.Background(), c[0]); err != nil {
-			return fmt.Errorf("duckdb %s: %w", c[1], err)
+		if _, execErr := db.ExecContext(context.Background(), c[0]); execErr != nil {
+			return fmt.Errorf("duckdb %s: %w", c[1], execErr)
 		}
 	}
 

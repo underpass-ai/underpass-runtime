@@ -70,8 +70,8 @@ func TestExportToS3Fails(t *testing.T) {
 	defer db.Close()
 
 	// Generate data first
-	if _, err := generateData(db, 1, 5); err != nil {
-		t.Fatalf("generateData: %v", err)
+	if _, genErr := generateData(db, 1, 5); genErr != nil {
+		t.Fatalf("generateData: %v", genErr)
 	}
 
 	// Export will fail — no S3 endpoint. This covers the error path.
