@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"time"
 
-	_ "github.com/marcboeker/go-duckdb"
+	_ "github.com/marcboeker/go-duckdb" // register DuckDB SQL driver
 
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/domain"
 )

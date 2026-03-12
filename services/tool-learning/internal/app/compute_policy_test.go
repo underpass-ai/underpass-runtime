@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -64,6 +65,30 @@ type fakeAudit struct {
 func (f *fakeAudit) WriteSnapshot(_ context.Context, _ time.Time, _ []domain.ToolPolicy) error {
 	f.snapshots++
 	return nil
+}
+
+type failingPolicyStore struct{}
+
+func (f *failingPolicyStore) WritePolicy(_ context.Context, _ domain.ToolPolicy) error {
+	return fmt.Errorf("store unavailable")
+}
+func (f *failingPolicyStore) WritePolicies(_ context.Context, _ []domain.ToolPolicy) error {
+	return fmt.Errorf("store unavailable")
+}
+func (f *failingPolicyStore) ReadPolicy(_ context.Context, _, _ string) (domain.ToolPolicy, bool, error) {
+	return domain.ToolPolicy{}, false, fmt.Errorf("store unavailable")
+}
+
+type failingAudit struct{}
+
+func (f *failingAudit) WriteSnapshot(_ context.Context, _ time.Time, _ []domain.ToolPolicy) error {
+	return fmt.Errorf("audit unavailable")
+}
+
+type failingPublisher struct{}
+
+func (f *failingPublisher) PublishPolicyUpdated(_ context.Context, _ []domain.ToolPolicy) error {
+	return fmt.Errorf("nats unavailable")
 }
 
 // --- Tests ---
@@ -162,6 +187,97 @@ func TestComputePolicyEmptyLake(t *testing.T) {
 	}
 	if result.PoliciesWritten != 0 {
 		t.Errorf("PoliciesWritten = %d, want 0", result.PoliciesWritten)
+	}
+}
+
+func TestRealClock(t *testing.T) {
+	c := RealClock{}
+	now := c.Now()
+	if time.Since(now) > time.Second {
+		t.Errorf("RealClock.Now() returned stale time: %v", now)
+	}
+}
+
+func TestNewComputePolicyUseCaseDefaultClock(t *testing.T) {
+	uc := NewComputePolicyUseCase(ComputePolicyConfig{
+		Lake:   &fakeLakeReader{},
+		Store:  &fakePolicyStore{},
+		Logger: slog.Default(),
+	})
+	// clock should default to RealClock when not provided
+	now := uc.clock.Now()
+	if time.Since(now) > time.Second {
+		t.Error("default clock should use RealClock")
+	}
+}
+
+func TestComputePolicyLakeError(t *testing.T) {
+	now := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	lake := &fakeLakeReader{err: fmt.Errorf("connection refused")}
+	store := &fakePolicyStore{}
+
+	uc := NewComputePolicyUseCase(ComputePolicyConfig{
+		Lake:   lake,
+		Store:  store,
+		Clock:  fakeClock{now: now},
+		Logger: slog.Default(),
+	})
+
+	_, err := uc.RunHourly(context.Background())
+	if err == nil {
+		t.Fatal("expected error from lake failure")
+	}
+}
+
+func TestComputePolicyStoreError(t *testing.T) {
+	now := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	lake := &fakeLakeReader{
+		aggregates: []domain.AggregateStats{
+			{ContextSignature: "gen:go:std", ToolID: "fs.write", Total: 50, Successes: 45, Failures: 5, P95LatencyMs: 200, P95Cost: 0.1, ErrorRate: 0.1},
+		},
+	}
+	store := &failingPolicyStore{}
+
+	uc := NewComputePolicyUseCase(ComputePolicyConfig{
+		Lake:   lake,
+		Store:  store,
+		Clock:  fakeClock{now: now},
+		Logger: slog.Default(),
+	})
+
+	_, err := uc.RunHourly(context.Background())
+	if err == nil {
+		t.Fatal("expected error from store failure")
+	}
+}
+
+func TestComputePolicyAuditAndPublishErrors(t *testing.T) {
+	now := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	lake := &fakeLakeReader{
+		aggregates: []domain.AggregateStats{
+			{ContextSignature: "gen:go:std", ToolID: "fs.write", Total: 50, Successes: 45, Failures: 5, P95LatencyMs: 200, P95Cost: 0.1, ErrorRate: 0.1},
+		},
+	}
+	store := &fakePolicyStore{}
+	audit := &failingAudit{}
+	pub := &failingPublisher{}
+
+	uc := NewComputePolicyUseCase(ComputePolicyConfig{
+		Lake:      lake,
+		Store:     store,
+		Audit:     audit,
+		Publisher: pub,
+		Clock:     fakeClock{now: now},
+		Logger:    slog.Default(),
+	})
+
+	// Should succeed — audit/publish errors are logged but don't fail the run.
+	result, err := uc.RunHourly(context.Background())
+	if err != nil {
+		t.Fatalf("RunHourly() error: %v", err)
+	}
+	if result.PoliciesWritten != 1 {
+		t.Errorf("PoliciesWritten = %d, want 1", result.PoliciesWritten)
 	}
 }
 

@@ -29,16 +29,22 @@ type PolicyEventPublisher interface {
 	PublishPolicyUpdated(ctx context.Context, policies []domain.ToolPolicy) error
 }
 
-// PolicyAuditStore writes policy snapshots for audit trail.
-type PolicyAuditStore interface {
+// SnapshotWriter writes policy snapshots for audit trail.
+type SnapshotWriter interface {
 	// WriteSnapshot persists a timestamped batch of policies for audit.
 	WriteSnapshot(ctx context.Context, ts time.Time, policies []domain.ToolPolicy) error
 }
 
-// Clock abstracts time for testability.
-type Clock interface {
+// PolicyAuditStore is an alias retained for readability in adapter wiring.
+type PolicyAuditStore = SnapshotWriter
+
+// Nower abstracts time for testability.
+type Nower interface {
 	Now() time.Time
 }
+
+// Clock is an alias retained for readability.
+type Clock = Nower
 
 // RealClock returns the actual system time.
 type RealClock struct{}

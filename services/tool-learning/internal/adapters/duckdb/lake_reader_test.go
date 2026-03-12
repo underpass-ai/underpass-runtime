@@ -175,7 +175,7 @@ func TestNewLakeReaderUnsafeSource(t *testing.T) {
 	defer db.Close()
 
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Fatal("expected panic for unsafe source")
 		}
 	}()
