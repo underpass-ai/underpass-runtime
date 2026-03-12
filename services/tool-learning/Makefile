@@ -8,7 +8,7 @@ GOLANGCI_LINT_VERSION ?= v2.11
 
 CORE_PKGS := ./internal/domain ./internal/app ./internal/adapters/...
 
-.PHONY: help build test integration-test lint vet coverage coverage-core clean docker-build docker-push
+.PHONY: help build test integration-test lint vet coverage coverage-core clean docker-build docker-push demo
 
 help:
 	@echo "Tool Learning Service commands"
@@ -20,6 +20,7 @@ help:
 	@echo "  make vet               # Run go vet"
 	@echo "  make coverage          # Full coverage report (for SonarCloud)"
 	@echo "  make coverage-core     # Core coverage gate (80% — domain + app + adapters)"
+	@echo "  make demo              # Run zero-infra demo (Thompson Sampling live)"
 	@echo "  make docker-build      # Build container image"
 	@echo "  make docker-push       # Push container image"
 
@@ -51,6 +52,9 @@ coverage-core:
 	else \
 		echo "Coverage gate FAILED: $${COVERAGE}% < 80%"; exit 1; \
 	fi
+
+demo:
+	@go run ./cmd/demo --hours=24 --per-hour=200 --max-error-rate=0.10 --max-p95-latency-ms=3000
 
 clean:
 	rm -rf bin coverage.out coverage-full.out coverage-core.out
