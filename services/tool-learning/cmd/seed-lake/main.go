@@ -50,13 +50,13 @@ func run() error {
 
 // seedConfig holds all parameters for data generation.
 type seedConfig struct {
-	Hours     int
-	PerHour   int
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Region    string
-	UseSSL    string
+	Hours          int
+	PerHour        int
+	Endpoint       string
+	AccessKey      string
+	SecretKey      string
+	Region         string
+	UseSSL         string
 	Bucket         string
 	LocalExportDir string // if set, export to local dir instead of S3 (for testing)
 }
