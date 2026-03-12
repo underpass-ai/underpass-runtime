@@ -118,7 +118,7 @@ func (uc *ComputePolicyUseCase) run(ctx context.Context, from, to time.Time, sch
 	}
 
 	if uc.publisher != nil && len(policies) > 0 {
-		if err := uc.publisher.PublishPolicyUpdated(ctx, policies); err != nil {
+		if err := uc.publisher.PublishPolicyUpdated(ctx, policies, filtered); err != nil {
 			uc.logger.Warn("publish policy update failed", "error", err)
 		}
 	}

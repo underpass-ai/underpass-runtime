@@ -26,7 +26,7 @@ type PolicyStore interface {
 // PolicyEventPublisher publishes policy update events.
 type PolicyEventPublisher interface {
 	// PublishPolicyUpdated notifies downstream consumers that policies have been recomputed.
-	PublishPolicyUpdated(ctx context.Context, policies []domain.ToolPolicy) error
+	PublishPolicyUpdated(ctx context.Context, policies []domain.ToolPolicy, filtered int) error
 }
 
 // SnapshotWriter writes policy snapshots for audit trail.

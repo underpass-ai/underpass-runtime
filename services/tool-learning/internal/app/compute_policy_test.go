@@ -53,7 +53,7 @@ type fakePublisher struct {
 	published []domain.ToolPolicy
 }
 
-func (f *fakePublisher) PublishPolicyUpdated(_ context.Context, policies []domain.ToolPolicy) error {
+func (f *fakePublisher) PublishPolicyUpdated(_ context.Context, policies []domain.ToolPolicy, _ int) error {
 	f.published = append(f.published, policies...)
 	return nil
 }
@@ -87,7 +87,7 @@ func (f *failingAudit) WriteSnapshot(_ context.Context, _ time.Time, _ []domain.
 
 type failingPublisher struct{}
 
-func (f *failingPublisher) PublishPolicyUpdated(_ context.Context, _ []domain.ToolPolicy) error {
+func (f *failingPublisher) PublishPolicyUpdated(_ context.Context, _ []domain.ToolPolicy, _ int) error {
 	return fmt.Errorf("nats unavailable")
 }
 
