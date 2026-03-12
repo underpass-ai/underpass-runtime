@@ -62,20 +62,36 @@ func TestGenerateData(t *testing.T) {
 	}
 }
 
-func TestExportToS3Fails(t *testing.T) {
+func TestExportParquetLocal(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
 	if err != nil {
 		t.Fatalf("duckdb open: %v", err)
 	}
 	defer db.Close()
 
-	// Generate data first
 	if _, genErr := generateData(db, 1, 5); genErr != nil {
 		t.Fatalf("generateData: %v", genErr)
 	}
 
-	// Export will fail — no S3 endpoint. This covers the error path.
-	err = exportToS3(db, "nonexistent-bucket")
+	// Export to local temp dir — covers the success path.
+	tmpDir := t.TempDir()
+	if err := exportParquet(db, tmpDir); err != nil {
+		t.Fatalf("exportParquet: %v", err)
+	}
+}
+
+func TestExportParquetFails(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		t.Fatalf("duckdb open: %v", err)
+	}
+	defer db.Close()
+
+	if _, genErr := generateData(db, 1, 5); genErr != nil {
+		t.Fatalf("generateData: %v", genErr)
+	}
+
+	err = exportParquet(db, "s3://nonexistent-bucket")
 	if err == nil {
 		t.Fatal("expected error exporting to non-existent S3")
 	}
@@ -137,6 +153,24 @@ func TestCountPartitionsNoTable(t *testing.T) {
 	_, err = countPartitions(db)
 	if err == nil {
 		t.Fatal("expected error for missing table")
+	}
+}
+
+func TestSeedLakeLocalExportSuccess(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	err := seedLake(seedConfig{
+		Hours:          1,
+		PerHour:        2,
+		Endpoint:       "localhost:19999",
+		AccessKey:      "test",
+		SecretKey:      "test",
+		Region:         "us-east-1",
+		UseSSL:         "false",
+		Bucket:         "test-bucket",
+		LocalExportDir: t.TempDir(),
+	}, logger)
+	if err != nil {
+		t.Fatalf("seedLake with local export: %v", err)
 	}
 }
 

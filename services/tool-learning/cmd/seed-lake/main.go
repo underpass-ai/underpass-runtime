@@ -57,7 +57,8 @@ type seedConfig struct {
 	SecretKey string
 	Region    string
 	UseSSL    string
-	Bucket    string
+	Bucket         string
+	LocalExportDir string // if set, export to local dir instead of S3 (for testing)
 }
 
 // seedLake generates synthetic telemetry and exports to S3.
@@ -98,7 +99,11 @@ func seedLake(cfg seedConfig, logger *slog.Logger) error {
 	}
 	logger.Info("generated synthetic invocations", "count", count, "hours", cfg.Hours)
 
-	if exportErr := exportToS3(db, cfg.Bucket); exportErr != nil {
+	dest := "s3://" + cfg.Bucket
+	if cfg.LocalExportDir != "" {
+		dest = cfg.LocalExportDir
+	}
+	if exportErr := exportParquet(db, dest); exportErr != nil {
 		return exportErr
 	}
 
@@ -197,8 +202,9 @@ FROM (
 	return count, nil
 }
 
-// exportToS3 writes the invocations table as Hive-partitioned Parquet to S3.
-func exportToS3(db *sql.DB, bucket string) error {
+// exportParquet writes the invocations table as Hive-partitioned Parquet.
+// dest is the target path (e.g. "s3://bucket" or a local directory).
+func exportParquet(db *sql.DB, dest string) error {
 	exportSQL := `
 COPY (
     SELECT
@@ -208,11 +214,11 @@ COPY (
         dt, "hour"
     FROM invocations
 )
-TO 's3://` + bucket + `'
+TO '` + dest + `'
 (FORMAT PARQUET, PARTITION_BY (dt, "hour"), OVERWRITE_OR_IGNORE, FILENAME_PATTERN 'invocations-{uuid}')
 `
 	if _, err := db.ExecContext(context.Background(), exportSQL); err != nil {
-		return fmt.Errorf("export to S3: %w", err)
+		return fmt.Errorf("export parquet: %w", err)
 	}
 	return nil
 }
