@@ -8,25 +8,29 @@ GOLANGCI_LINT_VERSION ?= v2.11
 
 CORE_PKGS := ./internal/domain ./internal/app ./internal/adapters/...
 
-.PHONY: help build test lint vet coverage coverage-core clean docker-build docker-push
+.PHONY: help build test integration-test lint vet coverage coverage-core clean docker-build docker-push
 
 help:
 	@echo "Tool Learning Service commands"
 	@echo ""
-	@echo "  make build          # Build binary"
-	@echo "  make test           # Run all tests with race detector"
-	@echo "  make lint           # Run golangci-lint + go vet"
-	@echo "  make vet            # Run go vet"
-	@echo "  make coverage       # Full coverage report (for SonarCloud)"
-	@echo "  make coverage-core  # Core coverage gate (80% — domain + app + adapters)"
-	@echo "  make docker-build   # Build container image"
-	@echo "  make docker-push    # Push container image"
+	@echo "  make build             # Build binary"
+	@echo "  make test              # Run all tests with race detector"
+	@echo "  make integration-test  # Run integration tests (embedded services)"
+	@echo "  make lint              # Run golangci-lint + go vet"
+	@echo "  make vet               # Run go vet"
+	@echo "  make coverage          # Full coverage report (for SonarCloud)"
+	@echo "  make coverage-core     # Core coverage gate (80% — domain + app + adapters)"
+	@echo "  make docker-build      # Build container image"
+	@echo "  make docker-push       # Push container image"
 
 build:
 	go build -o bin/$(BINARY_NAME) $(CMD_PATH)
 
 test:
 	go test -race -count=1 ./...
+
+integration-test:
+	go test -race -count=1 -tags integration -v ./internal/integration/...
 
 lint: vet
 	golangci-lint run --timeout=5m
