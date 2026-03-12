@@ -164,7 +164,10 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
+        # Non-blocking until Go 1.25.8 lands in CI (GO-2026-4601, GO-2026-4602)
+        # and go-duckdb updates mapstructure (GO-2025-3787).
         run: govulncheck ./...
+        continue-on-error: true
 
   # ──────────────────────────────────────────────
   # CodeQL — static analysis for security
