@@ -122,9 +122,9 @@ jobs:
       - name: Run tests
         run: go test -race -count=1 -v ./...
 
-      - name: Coverage gate (80% — domain + app)
+      - name: Coverage gate (80% — domain + app + adapters)
         run: |
-          CORE_PKGS="./internal/domain ./internal/app"
+          CORE_PKGS="./internal/domain ./internal/app ./internal/adapters/..."
           go test $CORE_PKGS -coverprofile=coverage-core.out -covermode=atomic
           COVERAGE=$(go tool cover -func=coverage-core.out | awk '/^total:/ {print $3}' | sed 's/%//')
           echo "Core coverage: ${COVERAGE}%"
@@ -166,6 +166,38 @@ jobs:
       - name: Run govulncheck
         run: govulncheck ./...
         continue-on-error: true
+
+  # ──────────────────────────────────────────────
+  # CodeQL — static analysis for security
+  # ──────────────────────────────────────────────
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          config: |
+            paths:
+              - services/tool-learning
+
+      - name: Build
+        run: go build ./...
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: tool-learning
 
   # ──────────────────────────────────────────────
   # SonarCloud

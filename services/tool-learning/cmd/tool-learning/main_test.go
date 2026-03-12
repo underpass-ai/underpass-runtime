@@ -54,7 +54,10 @@ func TestLoadConfigDefaults(t *testing.T) {
 		os.Unsetenv(key)
 	}
 
-	cfg := loadConfig("hourly")
+	cfg, err := loadConfig("hourly")
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
 
 	if cfg.S3Endpoint != "localhost:9000" {
 		t.Errorf("S3Endpoint = %q, want localhost:9000", cfg.S3Endpoint)
@@ -113,7 +116,10 @@ func TestLoadConfigCustom(t *testing.T) {
 		}
 	}()
 
-	cfg := loadConfig("daily")
+	cfg, err := loadConfig("daily")
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
 
 	if cfg.S3Endpoint != "minio:9000" {
 		t.Errorf("S3Endpoint = %q, want minio:9000", cfg.S3Endpoint)
@@ -138,5 +144,21 @@ func TestLoadConfigCustom(t *testing.T) {
 	}
 	if cfg.Schedule != "daily" {
 		t.Errorf("Schedule = %q, want daily", cfg.Schedule)
+	}
+}
+
+func TestLoadConfigInvalidValkeyDB(t *testing.T) {
+	t.Setenv("VALKEY_DB", "not-a-number")
+	_, err := loadConfig("hourly")
+	if err == nil {
+		t.Fatal("expected error for invalid VALKEY_DB")
+	}
+}
+
+func TestLoadConfigInvalidValkeyTTL(t *testing.T) {
+	t.Setenv("VALKEY_TTL", "not-a-duration")
+	_, err := loadConfig("hourly")
+	if err == nil {
+		t.Fatal("expected error for invalid VALKEY_TTL")
 	}
 }
