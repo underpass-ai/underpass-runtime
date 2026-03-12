@@ -56,7 +56,7 @@ func TestPublishPolicyUpdated(t *testing.T) {
 		{ContextSignature: "gen:go:std", ToolID: "fs.read", Alpha: 50, Beta: 1},
 	}
 
-	if err := pub.PublishPolicyUpdated(context.Background(), policies); err != nil {
+	if err := pub.PublishPolicyUpdated(context.Background(), policies, 1); err != nil {
 		t.Fatalf("PublishPolicyUpdated: %v", err)
 	}
 
@@ -81,6 +81,9 @@ func TestPublishPolicyUpdated(t *testing.T) {
 	}
 	if event.PoliciesWritten != 2 {
 		t.Errorf("policies_written = %d, want 2", event.PoliciesWritten)
+	}
+	if event.PoliciesFiltered != 1 {
+		t.Errorf("policies_filtered = %d, want 1", event.PoliciesFiltered)
 	}
 }
 

@@ -44,12 +44,13 @@ func NewPublisherFromURL(url, schedule string) (*Publisher, *nats.Conn, error) {
 }
 
 // PublishPolicyUpdated publishes a policy update summary event.
-func (p *Publisher) PublishPolicyUpdated(_ context.Context, policies []domain.ToolPolicy) error {
+func (p *Publisher) PublishPolicyUpdated(_ context.Context, policies []domain.ToolPolicy, filtered int) error {
 	event := policyUpdatedEvent{
-		Event:           subjectPolicyUpdated,
-		Ts:              time.Now().UTC().Format(time.RFC3339),
-		Schedule:        p.schedule,
-		PoliciesWritten: len(policies),
+		Event:            subjectPolicyUpdated,
+		Ts:               time.Now().UTC().Format(time.RFC3339),
+		Schedule:         p.schedule,
+		PoliciesWritten:  len(policies),
+		PoliciesFiltered: filtered,
 	}
 
 	data, err := json.Marshal(event)
