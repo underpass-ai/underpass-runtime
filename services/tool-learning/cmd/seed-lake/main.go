@@ -102,11 +102,9 @@ func seedLake(cfg seedConfig, logger *slog.Logger) error {
 		return err
 	}
 
-	// Verify partitions written
-	var partitions int64
-	verifySQL := `SELECT COUNT(DISTINCT dt || '/' || "hour") FROM invocations`
-	if err := db.QueryRowContext(context.Background(), verifySQL).Scan(&partitions); err != nil {
-		return fmt.Errorf("verify: %w", err)
+	partitions, err := countPartitions(db)
+	if err != nil {
+		return err
 	}
 
 	logger.Info("seed complete",
@@ -116,6 +114,16 @@ func seedLake(cfg seedConfig, logger *slog.Logger) error {
 	)
 
 	return nil
+}
+
+// countPartitions returns the number of distinct date/hour partitions in the invocations table.
+func countPartitions(db *sql.DB) (int64, error) {
+	var partitions int64
+	verifySQL := `SELECT COUNT(DISTINCT dt || '/' || "hour") FROM invocations`
+	if err := db.QueryRowContext(context.Background(), verifySQL).Scan(&partitions); err != nil {
+		return 0, fmt.Errorf("verify: %w", err)
+	}
+	return partitions, nil
 }
 
 // generateData creates the in-memory invocations table using DuckDB.

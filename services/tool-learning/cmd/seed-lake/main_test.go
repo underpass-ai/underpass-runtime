@@ -107,6 +107,58 @@ func TestRunInvalidBucket(t *testing.T) {
 	}
 }
 
+func TestCountPartitions(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		t.Fatalf("duckdb open: %v", err)
+	}
+	defer db.Close()
+
+	if _, genErr := generateData(db, 2, 10); genErr != nil {
+		t.Fatalf("generateData: %v", genErr)
+	}
+
+	partitions, err := countPartitions(db)
+	if err != nil {
+		t.Fatalf("countPartitions: %v", err)
+	}
+	if partitions == 0 {
+		t.Error("expected at least 1 partition")
+	}
+}
+
+func TestCountPartitionsNoTable(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		t.Fatalf("duckdb open: %v", err)
+	}
+	defer db.Close()
+
+	_, err = countPartitions(db)
+	if err == nil {
+		t.Fatal("expected error for missing table")
+	}
+}
+
+func TestSeedLakeS3ConfigError(t *testing.T) {
+	// Use an endpoint that will cause S3 config to succeed but export to fail.
+	// This exercises the full seedLake path: bucket validation → DuckDB open → S3 config → generate → export fail.
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	err := seedLake(seedConfig{
+		Hours:     1,
+		PerHour:   2,
+		Endpoint:  "localhost:19999",
+		AccessKey: "test",
+		SecretKey: "test",
+		Region:    "us-east-1",
+		UseSSL:    "false",
+		Bucket:    "test-bucket",
+	}, logger)
+	if err == nil {
+		t.Fatal("expected S3 export error")
+	}
+}
+
 func TestSeedLakeS3Failure(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	// Valid bucket but unreachable S3 — covers the full flow up to export failure.
