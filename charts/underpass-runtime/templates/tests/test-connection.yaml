@@ -1,3 +1,5 @@
+{{- $tlsMode := include "underpass-runtime.tlsMode" . -}}
+{{- $tls := default (dict) .Values.tls -}}
 apiVersion: v1
 kind: Pod
 metadata:
@@ -15,10 +17,36 @@ spec:
     seccompProfile:
       type: RuntimeDefault
   containers:
-    - name: wget
+    - name: probe
+      {{- if eq $tlsMode "disabled" }}
       image: docker.io/busybox:1.36
       command: ['wget']
-      args: ['--spider', '--timeout=5', '{{ include "underpass-runtime.fullname" . }}:{{ .Values.service.port }}/healthz']
+      args: ['--spider', '--timeout=5', 'http://{{ include "underpass-runtime.fullname" . }}:{{ .Values.service.port }}/healthz']
+      {{- else if eq $tlsMode "server" }}
+      {{- /* Server TLS: use curl with mounted CA to verify the certificate chain */}}
+      image: docker.io/curlimages/curl:8.12.1
+      command: ['curl']
+      args:
+        - '--fail'
+        - '--silent'
+        - '--show-error'
+        - '--max-time'
+        - '5'
+        - '--cacert'
+        - '{{ $tls.mountPath }}/{{ (default (dict) $tls.keys).clientCa | default "ca.crt" }}'
+        - 'https://{{ include "underpass-runtime.fullname" . }}:{{ .Values.service.port }}/healthz'
+      volumeMounts:
+        - name: tls
+          mountPath: {{ $tls.mountPath }}
+          readOnly: true
+      {{- else }}
+      {{- /* Mutual TLS: curl cannot present a client cert from busybox/curl easily.
+             Use nc (netcat) to verify the port is open — same strategy as tcpSocket probes. */}}
+      image: docker.io/busybox:1.36
+      command: ['sh', '-c']
+      args:
+        - 'nc -z -w5 {{ include "underpass-runtime.fullname" . }} {{ .Values.service.port }}'
+      {{- end }}
       securityContext:
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true
@@ -34,4 +62,10 @@ spec:
           cpu: 50m
           memory: 32Mi
           ephemeral-storage: 8Mi
+  {{- if eq $tlsMode "server" }}
+  volumes:
+    - name: tls
+      secret:
+        secretName: {{ $tls.existingSecret }}
+  {{- end }}
   restartPolicy: Never
