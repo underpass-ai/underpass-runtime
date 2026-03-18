@@ -3,9 +3,11 @@ package s3
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -32,11 +34,15 @@ func NewAuditStore(client ObjectClient, bucket string) *AuditStore {
 }
 
 // NewAuditStoreFromConfig creates an audit store connecting to MinIO/S3.
-func NewAuditStoreFromConfig(endpoint, accessKey, secretKey, bucket string, useSSL bool) (*AuditStore, error) {
-	client, err := minio.New(endpoint, &minio.Options{
+func NewAuditStoreFromConfig(endpoint, accessKey, secretKey, bucket string, useSSL bool, tlsCfg *tls.Config) (*AuditStore, error) {
+	opts := &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: useSSL,
-	})
+	}
+	if tlsCfg != nil {
+		opts.Transport = &http.Transport{TLSClientConfig: tlsCfg}
+	}
+	client, err := minio.New(endpoint, opts)
 	if err != nil {
 		return nil, fmt.Errorf("minio client: %w", err)
 	}

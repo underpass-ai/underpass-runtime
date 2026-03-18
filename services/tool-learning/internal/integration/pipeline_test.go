@@ -159,7 +159,7 @@ func TestFullPipelineHourly(t *testing.T) {
 	// --- Valkey (miniredis) ---
 	redisSrv := startMiniredis(t)
 	store, err := valkey.NewPolicyStoreFromAddress(
-		context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 10*time.Minute,
+		context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 10*time.Minute, nil,
 	)
 	if err != nil {
 		t.Fatalf("valkey store: %v", err)
@@ -320,7 +320,7 @@ func TestPipelineWithConstraints(t *testing.T) {
 
 	redisSrv := startMiniredis(t)
 	store, err := valkey.NewPolicyStoreFromAddress(
-		context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 10*time.Minute,
+		context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 10*time.Minute, nil,
 	)
 	if err != nil {
 		t.Fatalf("valkey store: %v", err)
@@ -414,7 +414,7 @@ func setupPipeline(t *testing.T, now time.Time, seed bool) *pipelineEnv {
 
 	redisSrv := startMiniredis(t)
 	store, err := valkey.NewPolicyStoreFromAddress(
-		context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 10*time.Minute,
+		context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 10*time.Minute, nil,
 	)
 	if err != nil {
 		t.Fatalf("valkey store: %v", err)

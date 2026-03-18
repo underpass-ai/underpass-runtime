@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/duckdb"
@@ -135,6 +138,7 @@ type adapterConfig struct {
 	S3SecretKey string
 	S3Region    string
 	S3UseSSL    bool
+	S3TLS       *tls.Config
 	LakeBucket  string
 	AuditBucket string
 	ValkeyAddr  string
@@ -142,7 +146,9 @@ type adapterConfig struct {
 	ValkeyDB    int
 	ValkeyPfx   string
 	ValkeyTTL   time.Duration
+	ValkeyTLS   *tls.Config
 	NATSURL     string
+	NATSTLS     *tls.Config
 	Schedule    string
 }
 
@@ -156,12 +162,42 @@ func loadConfig(schedule string) (adapterConfig, error) {
 	if err != nil {
 		return adapterConfig{}, fmt.Errorf("invalid VALKEY_TTL: %w", err)
 	}
+	valkeyTLS, err := buildClientTLS(
+		os.Getenv("VALKEY_TLS_ENABLED") == "true",
+		os.Getenv("VALKEY_TLS_CA_PATH"),
+		os.Getenv("VALKEY_TLS_CERT_PATH"),
+		os.Getenv("VALKEY_TLS_KEY_PATH"),
+	)
+	if err != nil {
+		return adapterConfig{}, fmt.Errorf("valkey TLS: %w", err)
+	}
+
+	natsTLS, err := buildClientTLS(
+		strings.TrimSpace(os.Getenv("NATS_TLS_MODE")) != "" && strings.TrimSpace(os.Getenv("NATS_TLS_MODE")) != "disabled",
+		os.Getenv("NATS_TLS_CA_PATH"),
+		os.Getenv("NATS_TLS_CERT_PATH"),
+		os.Getenv("NATS_TLS_KEY_PATH"),
+	)
+	if err != nil {
+		return adapterConfig{}, fmt.Errorf("nats TLS: %w", err)
+	}
+
+	s3TLS, err := buildClientTLS(
+		envOrDefault("S3_USE_SSL", "false") == "true",
+		os.Getenv("S3_CA_PATH"),
+		"", "",
+	)
+	if err != nil {
+		return adapterConfig{}, fmt.Errorf("s3 TLS: %w", err)
+	}
+
 	return adapterConfig{
 		S3Endpoint:  envOrDefault("S3_ENDPOINT", "localhost:9000"),
 		S3AccessKey: envOrDefault("S3_ACCESS_KEY", ""),
 		S3SecretKey: envOrDefault("S3_SECRET_KEY", ""),
 		S3Region:    envOrDefault("S3_REGION", "us-east-1"),
 		S3UseSSL:    envOrDefault("S3_USE_SSL", "false") == "true",
+		S3TLS:       s3TLS,
 		LakeBucket:  envOrDefault("LAKE_BUCKET", "telemetry-lake"),
 		AuditBucket: envOrDefault("AUDIT_BUCKET", "policy-audit"),
 		ValkeyAddr:  envOrDefault("VALKEY_ADDR", "localhost:6379"),
@@ -169,7 +205,9 @@ func loadConfig(schedule string) (adapterConfig, error) {
 		ValkeyDB:    valkeyDB,
 		ValkeyPfx:   envOrDefault("VALKEY_KEY_PREFIX", "tool_policy"),
 		ValkeyTTL:   valkeyTTL,
+		ValkeyTLS:   valkeyTLS,
 		NATSURL:     envOrDefault("NATS_URL", "nats://localhost:4222"),
+		NATSTLS:     natsTLS,
 		Schedule:    schedule,
 	}, nil
 }
@@ -190,21 +228,21 @@ func buildAdapters(cfg adapterConfig, logger *slog.Logger) (
 	}
 	logger.Info(logAdapterReady, "adapter", "duckdb-lake-reader", "bucket", cfg.LakeBucket)
 
-	store, err := valkey.NewPolicyStoreFromAddress(context.Background(), cfg.ValkeyAddr, cfg.ValkeyPass, cfg.ValkeyDB, cfg.ValkeyPfx, cfg.ValkeyTTL)
+	store, err := valkey.NewPolicyStoreFromAddress(context.Background(), cfg.ValkeyAddr, cfg.ValkeyPass, cfg.ValkeyDB, cfg.ValkeyPfx, cfg.ValkeyTTL, cfg.ValkeyTLS)
 	if err != nil {
 		_ = lake.Close()
 		return nil, nil, nil, nil, nil, fmt.Errorf("valkey policy store: %w", err)
 	}
 	logger.Info(logAdapterReady, "adapter", "valkey-policy-store", "addr", cfg.ValkeyAddr)
 
-	pub, natsConn, err := natspub.NewPublisherFromURL(cfg.NATSURL, cfg.Schedule)
+	pub, natsConn, err := natspub.NewPublisherFromURL(cfg.NATSURL, cfg.Schedule, cfg.NATSTLS)
 	if err != nil {
 		_ = lake.Close()
 		return nil, nil, nil, nil, nil, fmt.Errorf("nats publisher: %w", err)
 	}
 	logger.Info(logAdapterReady, "adapter", "nats-publisher", "url", cfg.NATSURL)
 
-	audit, err := s3.NewAuditStoreFromConfig(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.AuditBucket, cfg.S3UseSSL)
+	audit, err := s3.NewAuditStoreFromConfig(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.AuditBucket, cfg.S3UseSSL, cfg.S3TLS)
 	if err != nil {
 		_ = lake.Close()
 		natsConn.Close()
@@ -219,6 +257,34 @@ func buildAdapters(cfg adapterConfig, logger *slog.Logger) (
 	}
 
 	return lake, store, pub, audit, cleanup, nil
+}
+
+// buildClientTLS builds a *tls.Config for outgoing connections.
+// Returns nil when enabled is false (TLS disabled).
+func buildClientTLS(enabled bool, caPath, certPath, keyPath string) (*tls.Config, error) {
+	if !enabled {
+		return nil, nil
+	}
+	cfg := &tls.Config{MinVersion: tls.VersionTLS13}
+	if caPath != "" {
+		data, err := os.ReadFile(caPath)
+		if err != nil {
+			return nil, fmt.Errorf("read CA %s: %w", caPath, err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(data) {
+			return nil, fmt.Errorf("no valid certs in %s", caPath)
+		}
+		cfg.RootCAs = pool
+	}
+	if certPath != "" && keyPath != "" {
+		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			return nil, fmt.Errorf("load cert/key: %w", err)
+		}
+		cfg.Certificates = []tls.Certificate{cert}
+	}
+	return cfg, nil
 }
 
 func envOrDefault(key, fallback string) string {
