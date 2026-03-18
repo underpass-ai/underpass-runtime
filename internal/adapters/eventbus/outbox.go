@@ -2,6 +2,7 @@ package eventbus
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -39,11 +40,12 @@ func NewOutboxPublisher(client outboxClient, keyPrefix string) *OutboxPublisher 
 
 // NewOutboxPublisherFromAddress creates an OutboxPublisher connected to a
 // Valkey instance at the given address.
-func NewOutboxPublisherFromAddress(ctx context.Context, address, password string, db int, keyPrefix string) (*OutboxPublisher, error) {
+func NewOutboxPublisherFromAddress(ctx context.Context, address, password string, db int, keyPrefix string, tlsCfg *tls.Config) (*OutboxPublisher, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     strings.TrimSpace(address),
-		Password: password,
-		DB:       db,
+		Addr:      strings.TrimSpace(address),
+		Password:  password,
+		DB:        db,
+		TLSConfig: tlsCfg,
 	})
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("outbox valkey ping failed: %w", err)

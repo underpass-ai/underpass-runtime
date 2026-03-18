@@ -23,6 +23,45 @@ data:
   {{- if .Values.disabledBundles }}
   WORKSPACE_DISABLED_BUNDLES: {{ .Values.disabledBundles | quote }}
   {{- end }}
+  {{- /* HTTP server TLS */}}
+  {{- $tls := default (dict) .Values.tls -}}
+  {{- $tlsKeys := default (dict) $tls.keys -}}
+  {{- $tlsMode := default "disabled" $tls.mode -}}
+  {{- if ne $tlsMode "disabled" }}
+  WORKSPACE_TLS_MODE: {{ $tlsMode | quote }}
+  WORKSPACE_TLS_CERT_PATH: {{ printf "%s/%s" $tls.mountPath $tlsKeys.cert | quote }}
+  WORKSPACE_TLS_KEY_PATH: {{ printf "%s/%s" $tls.mountPath $tlsKeys.key | quote }}
+  {{- if eq $tlsMode "mutual" }}
+  WORKSPACE_TLS_CLIENT_CA_PATH: {{ printf "%s/%s" $tls.mountPath $tlsKeys.clientCa | quote }}
+  {{- end }}
+  {{- end }}
+  {{- /* NATS TLS */}}
+  {{- $natsTls := default (dict) .Values.natsTls -}}
+  {{- $natsTlsKeys := default (dict) $natsTls.keys -}}
+  {{- $natsTlsMode := default "disabled" $natsTls.mode -}}
+  {{- if ne $natsTlsMode "disabled" }}
+  NATS_TLS_MODE: {{ $natsTlsMode | quote }}
+  {{- if and $natsTls.existingSecret $natsTlsKeys.ca }}
+  NATS_TLS_CA_PATH: {{ printf "%s/%s" $natsTls.mountPath $natsTlsKeys.ca | quote }}
+  {{- end }}
+  {{- if and $natsTlsKeys.cert $natsTlsKeys.key }}
+  NATS_TLS_CERT_PATH: {{ printf "%s/%s" $natsTls.mountPath $natsTlsKeys.cert | quote }}
+  NATS_TLS_KEY_PATH: {{ printf "%s/%s" $natsTls.mountPath $natsTlsKeys.key | quote }}
+  {{- end }}
+  {{- end }}
+  {{- /* Valkey TLS */}}
+  {{- $valkeyTls := default (dict) .Values.valkeyTls -}}
+  {{- $valkeyTlsKeys := default (dict) $valkeyTls.keys -}}
+  {{- if $valkeyTls.enabled }}
+  VALKEY_TLS_ENABLED: "true"
+  {{- if and $valkeyTls.existingSecret $valkeyTlsKeys.ca }}
+  VALKEY_TLS_CA_PATH: {{ printf "%s/%s" $valkeyTls.mountPath $valkeyTlsKeys.ca | quote }}
+  {{- end }}
+  {{- if and $valkeyTlsKeys.cert $valkeyTlsKeys.key }}
+  VALKEY_TLS_CERT_PATH: {{ printf "%s/%s" $valkeyTls.mountPath $valkeyTlsKeys.cert | quote }}
+  VALKEY_TLS_KEY_PATH: {{ printf "%s/%s" $valkeyTls.mountPath $valkeyTlsKeys.key | quote }}
+  {{- end }}
+  {{- end }}
   {{- /* Valkey */}}
   {{- if .Values.valkey.enabled }}
   VALKEY_HOST: {{ .Values.valkey.host | quote }}
@@ -50,6 +89,12 @@ data:
   {{- if .Values.artifacts.s3.endpoint }}
   ARTIFACT_S3_ENDPOINT: {{ .Values.artifacts.s3.endpoint | quote }}
   {{- end }}
+  {{- if .Values.artifacts.s3.useSSL }}
+  ARTIFACT_S3_USE_SSL: "true"
+  {{- end }}
+  {{- if .Values.artifacts.s3.caPath }}
+  ARTIFACT_S3_CA_PATH: {{ .Values.artifacts.s3.caPath | quote }}
+  {{- end }}
   {{- end }}
   {{- /* Telemetry */}}
   {{- if ne .Values.telemetry.backend "none" }}
@@ -63,6 +108,9 @@ data:
   {{- end }}
   {{- if .Values.telemetry.otel.insecure }}
   WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE: "true"
+  {{- end }}
+  {{- if .Values.telemetry.otel.caPath }}
+  WORKSPACE_OTEL_TLS_CA_PATH: {{ .Values.telemetry.otel.caPath | quote }}
   {{- end }}
   {{- end }}
   {{- /* Kubernetes backend */}}

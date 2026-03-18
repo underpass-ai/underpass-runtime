@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -46,11 +47,12 @@ func NewValkeyRecorder(client valkeyClient, keyPrefix string, ttl time.Duration)
 
 // NewValkeyRecorderFromAddress creates a ValkeyRecorder by connecting to a Valkey
 // instance. Returns an error if the connection cannot be established.
-func NewValkeyRecorderFromAddress(ctx context.Context, address, password string, db int, keyPrefix string, ttl time.Duration) (*ValkeyRecorder, error) {
+func NewValkeyRecorderFromAddress(ctx context.Context, address, password string, db int, keyPrefix string, ttl time.Duration, tlsCfg *tls.Config) (*ValkeyRecorder, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     strings.TrimSpace(address),
-		Password: password,
-		DB:       db,
+		Addr:      strings.TrimSpace(address),
+		Password:  password,
+		DB:        db,
+		TLSConfig: tlsCfg,
 	})
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("telemetry valkey ping: %w", err)

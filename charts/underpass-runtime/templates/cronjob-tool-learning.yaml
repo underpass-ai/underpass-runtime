@@ -114,15 +114,55 @@ spec:
                 {{- /* NATS */}}
                 - name: NATS_URL
                   value: {{ $.Values.toolLearning.nats.url | quote }}
+                {{- /* Valkey TLS — env vars for future Go-level support */}}
+                {{- if $.Values.valkeyTls.enabled }}
+                - name: VALKEY_TLS_ENABLED
+                  value: "true"
+                {{- if and $.Values.valkeyTls.existingSecret $.Values.valkeyTls.keys.ca }}
+                - name: VALKEY_TLS_CA_PATH
+                  value: {{ printf "%s/%s" $.Values.valkeyTls.mountPath $.Values.valkeyTls.keys.ca | quote }}
+                {{- end }}
+                {{- if and $.Values.valkeyTls.keys.cert $.Values.valkeyTls.keys.key }}
+                - name: VALKEY_TLS_CERT_PATH
+                  value: {{ printf "%s/%s" $.Values.valkeyTls.mountPath $.Values.valkeyTls.keys.cert | quote }}
+                - name: VALKEY_TLS_KEY_PATH
+                  value: {{ printf "%s/%s" $.Values.valkeyTls.mountPath $.Values.valkeyTls.keys.key | quote }}
+                {{- end }}
+                {{- end }}
+                {{- /* DuckDB/libcurl custom CA: set SSL_CERT_FILE for S3 TLS with custom CA */}}
+                {{- if and $.Values.valkeyTls.enabled $.Values.valkeyTls.existingSecret $.Values.valkeyTls.keys.ca }}
+                - name: SSL_CERT_FILE
+                  value: {{ printf "%s/%s" $.Values.valkeyTls.mountPath $.Values.valkeyTls.keys.ca | quote }}
+                {{- end }}
               resources:
                 {{- toYaml $.Values.toolLearning.resources | nindent 16 }}
               volumeMounts:
                 - name: tmp
                   mountPath: /tmp
+                {{- if and $.Values.valkeyTls.enabled $.Values.valkeyTls.existingSecret }}
+                - name: valkey-tls
+                  mountPath: {{ $.Values.valkeyTls.mountPath }}
+                  readOnly: true
+                {{- end }}
+                {{- if and (ne (default "disabled" $.Values.natsTls.mode) "disabled") $.Values.natsTls.existingSecret }}
+                - name: nats-tls
+                  mountPath: {{ $.Values.natsTls.mountPath }}
+                  readOnly: true
+                {{- end }}
           volumes:
             - name: tmp
               emptyDir:
                 sizeLimit: 256Mi
+            {{- if and $.Values.valkeyTls.enabled $.Values.valkeyTls.existingSecret }}
+            - name: valkey-tls
+              secret:
+                secretName: {{ $.Values.valkeyTls.existingSecret }}
+            {{- end }}
+            {{- if and (ne (default "disabled" $.Values.natsTls.mode) "disabled") $.Values.natsTls.existingSecret }}
+            - name: nats-tls
+              secret:
+                secretName: {{ $.Values.natsTls.existingSecret }}
+            {{- end }}
           {{- with $.Values.toolLearning.nodeSelector }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}

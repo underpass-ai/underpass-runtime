@@ -172,7 +172,7 @@ func TestValkeyStore_ExpiredSessionEvicted(t *testing.T) {
 }
 
 func TestNewValkeyStoreFromAddress_InvalidAddress(t *testing.T) {
-	_, err := NewValkeyStoreFromAddress(context.Background(), "127.0.0.1:0", "", 0, "", time.Second)
+	_, err := NewValkeyStoreFromAddress(context.Background(), "127.0.0.1:0", "", 0, "", time.Second, nil)
 	if err == nil {
 		t.Fatal("expected valkey connection error")
 	}

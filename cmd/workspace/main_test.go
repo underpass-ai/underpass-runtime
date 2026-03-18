@@ -87,7 +87,7 @@ func TestBuildInvocationStoreMemoryAndUnsupported(t *testing.T) {
 
 	const backendKey = "INVOCATION_STORE_BACKEND"
 	_ = os.Unsetenv(backendKey)
-	store, err := buildInvocationStore(logger)
+	store, err := buildInvocationStore(logger, nil)
 	if err != nil {
 		t.Fatalf("unexpected memory store error: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestBuildInvocationStoreMemoryAndUnsupported(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Unsetenv(backendKey) })
 
-	_, err = buildInvocationStore(logger)
+	_, err = buildInvocationStore(logger, nil)
 	if err == nil {
 		t.Fatal("expected unsupported backend error")
 	}
@@ -154,7 +154,7 @@ func TestBuildSessionStoreMemoryAndUnsupported(t *testing.T) {
 
 	const backendKey = "SESSION_STORE_BACKEND"
 	_ = os.Unsetenv(backendKey)
-	store, err := buildSessionStore(logger)
+	store, err := buildSessionStore(logger, nil)
 	if err != nil {
 		t.Fatalf("unexpected memory session store error: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestBuildSessionStoreMemoryAndUnsupported(t *testing.T) {
 	}
 
 	t.Setenv(backendKey, "unknown-backend")
-	_, err = buildSessionStore(logger)
+	_, err = buildSessionStore(logger, nil)
 	if err == nil {
 		t.Fatal("expected unsupported session store backend error")
 	}
@@ -171,7 +171,7 @@ func TestBuildSessionStoreMemoryAndUnsupported(t *testing.T) {
 
 func TestBuildWorkspaceManagerLocalAndErrors(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-	memStore, err := buildSessionStore(logger)
+	memStore, err := buildSessionStore(logger, nil)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestBuildEventBus_None(t *testing.T) {
 	t.Setenv("EVENT_BUS", "none")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	pub, nc, stop := buildEventBus(context.Background(), logger)
+	pub, nc, stop := buildEventBus(context.Background(), logger, nil, nil)
 	if pub == nil {
 		t.Fatal("expected non-nil publisher")
 	}
@@ -273,7 +273,7 @@ func TestBuildEventBus_Default(t *testing.T) {
 	_ = os.Unsetenv("EVENT_BUS")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	pub, nc, stop := buildEventBus(context.Background(), logger)
+	pub, nc, stop := buildEventBus(context.Background(), logger, nil, nil)
 	if pub == nil {
 		t.Fatal("expected non-nil publisher")
 	}
@@ -291,7 +291,7 @@ func TestBuildEventBus_NATSFallbackToNoop(t *testing.T) {
 	t.Setenv("EVENT_BUS_NATS_URL", "nats://127.0.0.1:14222") // unreachable port
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	pub, nc, stop := buildEventBus(context.Background(), logger)
+	pub, nc, stop := buildEventBus(context.Background(), logger, nil, nil)
 	if pub == nil {
 		t.Fatal("expected non-nil publisher (noop fallback)")
 	}
@@ -307,7 +307,7 @@ func TestBuildOutboxRelay_Disabled(t *testing.T) {
 	t.Setenv("EVENT_BUS_OUTBOX", "false")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	pub, stop := buildOutboxRelay(context.Background(), logger, nil)
+	pub, stop := buildOutboxRelay(context.Background(), logger, nil, nil)
 	if pub != nil {
 		t.Fatal("expected nil publisher when outbox disabled")
 	}
@@ -320,7 +320,7 @@ func TestBuildOutboxRelay_DefaultDisabled(t *testing.T) {
 	_ = os.Unsetenv("EVENT_BUS_OUTBOX")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	pub, stop := buildOutboxRelay(context.Background(), logger, nil)
+	pub, stop := buildOutboxRelay(context.Background(), logger, nil, nil)
 	if pub != nil {
 		t.Fatal("expected nil publisher when outbox not set")
 	}
@@ -334,7 +334,7 @@ func TestBuildOutboxRelay_EnabledNoValkey(t *testing.T) {
 	t.Setenv("VALKEY_ADDR", "127.0.0.1:16379") // unreachable
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	pub, stop := buildOutboxRelay(context.Background(), logger, nil)
+	pub, stop := buildOutboxRelay(context.Background(), logger, nil, nil)
 	if pub != nil {
 		t.Fatal("expected nil publisher when valkey unreachable")
 	}
@@ -351,7 +351,7 @@ func TestBuildOutboxRelay_EnabledHostPort(t *testing.T) {
 	t.Setenv("EVENT_BUS_OUTBOX_KEY_PREFIX", "test:outbox")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	pub, stop := buildOutboxRelay(context.Background(), logger, nil)
+	pub, stop := buildOutboxRelay(context.Background(), logger, nil, nil)
 	if pub != nil {
 		t.Fatal("expected nil publisher when valkey unreachable via host:port")
 	}
@@ -364,7 +364,7 @@ func TestBuildEventBus_UnknownValue(t *testing.T) {
 	t.Setenv("EVENT_BUS", "kafka") // unsupported, falls to default
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	pub, nc, stop := buildEventBus(context.Background(), logger)
+	pub, nc, stop := buildEventBus(context.Background(), logger, nil, nil)
 	if pub == nil {
 		t.Fatal("expected non-nil publisher for unknown bus type")
 	}
@@ -430,7 +430,7 @@ func TestBuildTelemetry_Default(t *testing.T) {
 	_ = os.Unsetenv("TELEMETRY_BACKEND")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	rec, q, stop := buildTelemetry(context.Background(), logger)
+	rec, q, stop := buildTelemetry(context.Background(), logger, nil)
 	if rec == nil {
 		t.Fatal("expected non-nil recorder")
 	}
@@ -446,7 +446,7 @@ func TestBuildTelemetry_Memory(t *testing.T) {
 	t.Setenv("TELEMETRY_BACKEND", "memory")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	rec, q, stop := buildTelemetry(context.Background(), logger)
+	rec, q, stop := buildTelemetry(context.Background(), logger, nil)
 	if rec == nil {
 		t.Fatal("expected non-nil recorder")
 	}
@@ -463,7 +463,7 @@ func TestBuildTelemetry_ValkeyFallback(t *testing.T) {
 	t.Setenv("VALKEY_ADDR", "127.0.0.1:16379") // unreachable
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
-	rec, q, stop := buildTelemetry(context.Background(), logger)
+	rec, q, stop := buildTelemetry(context.Background(), logger, nil)
 	if rec == nil {
 		t.Fatal("expected non-nil recorder (fallback)")
 	}
@@ -472,5 +472,59 @@ func TestBuildTelemetry_ValkeyFallback(t *testing.T) {
 	}
 	if stop != nil {
 		t.Fatal("expected nil stop func on valkey fallback")
+	}
+}
+
+func TestBuildServerTLS_Disabled(t *testing.T) {
+	_ = os.Unsetenv("WORKSPACE_TLS_MODE")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	cfg, err := buildServerTLS(logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg != nil {
+		t.Fatal("expected nil config for disabled TLS")
+	}
+}
+
+func TestBuildValkeyTLS_Disabled(t *testing.T) {
+	_ = os.Unsetenv("VALKEY_TLS_ENABLED")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	cfg, err := buildValkeyTLS(logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg != nil {
+		t.Fatal("expected nil config for disabled Valkey TLS")
+	}
+}
+
+func TestBuildNATSTLS_Disabled(t *testing.T) {
+	_ = os.Unsetenv("NATS_TLS_MODE")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	cfg, err := buildNATSTLS(logger)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg != nil {
+		t.Fatal("expected nil config for disabled NATS TLS")
+	}
+}
+
+func TestBuildNATSTLS_InvalidMode(t *testing.T) {
+	t.Setenv("NATS_TLS_MODE", "invalid")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	_, err := buildNATSTLS(logger)
+	if err == nil {
+		t.Fatal("expected error for invalid NATS TLS mode")
+	}
+}
+
+func TestBuildServerTLS_InvalidMode(t *testing.T) {
+	t.Setenv("WORKSPACE_TLS_MODE", "bad-mode")
+	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
+	_, err := buildServerTLS(logger)
+	if err == nil {
+		t.Fatal("expected error for invalid TLS mode")
 	}
 }
