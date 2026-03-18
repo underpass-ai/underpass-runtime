@@ -94,3 +94,11 @@ workspace_tests:
     kind: "agent"
     timeout_override: 300
     tags: ["agent", "pipeline", "multi-agent", "nats", "tls", "architect", "developer", "tester", "reviewer", "qa"]
+
+  - id: "14"
+    name: "14-full-infra-stack"
+    job_name: "e2e-full-infra-stack"
+    tier: "full"
+    kind: "infra"
+    timeout_override: 120
+    tags: ["infra", "tls", "valkey", "nats", "outbox", "s3", "telemetry", "persistence"]
