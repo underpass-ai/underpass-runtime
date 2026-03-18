@@ -65,7 +65,7 @@ func TestPolicyRoundTripJSON(t *testing.T) {
 
 func TestPolicyStoreWithMiniredis(t *testing.T) {
 	srv := startMiniredis(t)
-	store, err := NewPolicyStoreFromAddress(context.Background(), srv.Addr(), "", 0, "tool_policy", 10*time.Minute)
+	store, err := NewPolicyStoreFromAddress(context.Background(), srv.Addr(), "", 0, "tool_policy", 10*time.Minute, nil)
 	if err != nil {
 		t.Fatalf("NewPolicyStoreFromAddress: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestPolicyStoreWithMiniredis(t *testing.T) {
 }
 
 func TestNewPolicyStoreFromAddressFailure(t *testing.T) {
-	_, err := NewPolicyStoreFromAddress(context.Background(), "localhost:1", "", 0, "tp", time.Minute)
+	_, err := NewPolicyStoreFromAddress(context.Background(), "localhost:1", "", 0, "tp", time.Minute, nil)
 	if err == nil {
 		t.Fatal("expected error from invalid address")
 	}
@@ -119,7 +119,7 @@ func TestNewPolicyStoreFromAddressFailure(t *testing.T) {
 
 func TestPolicyStoreWriteBatch(t *testing.T) {
 	srv := startMiniredis(t)
-	store, err := NewPolicyStoreFromAddress(context.Background(), srv.Addr(), "", 0, "tool_policy", 10*time.Minute)
+	store, err := NewPolicyStoreFromAddress(context.Background(), srv.Addr(), "", 0, "tool_policy", 10*time.Minute, nil)
 	if err != nil {
 		t.Fatalf("NewPolicyStoreFromAddress: %v", err)
 	}

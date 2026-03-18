@@ -2,6 +2,7 @@ package nats
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -35,8 +36,12 @@ func NewPublisher(conn *nats.Conn, schedule string) *Publisher {
 }
 
 // NewPublisherFromURL connects to NATS and returns a publisher.
-func NewPublisherFromURL(url, schedule string) (*Publisher, *nats.Conn, error) {
-	conn, err := nats.Connect(url)
+func NewPublisherFromURL(url, schedule string, tlsCfg *tls.Config) (*Publisher, *nats.Conn, error) {
+	var opts []nats.Option
+	if tlsCfg != nil {
+		opts = append(opts, nats.Secure(tlsCfg))
+	}
+	conn, err := nats.Connect(url, opts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("nats connect: %w", err)
 	}

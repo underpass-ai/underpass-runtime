@@ -186,7 +186,7 @@ func TestEnsureBucketCheckError(t *testing.T) {
 }
 
 func TestNewAuditStoreFromConfig(t *testing.T) {
-	store, err := NewAuditStoreFromConfig("localhost:9000", "access", "secret", "bucket", false)
+	store, err := NewAuditStoreFromConfig("localhost:9000", "access", "secret", "bucket", false, nil)
 	if err != nil {
 		t.Fatalf("NewAuditStoreFromConfig: %v", err)
 	}

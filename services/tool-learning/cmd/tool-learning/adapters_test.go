@@ -70,7 +70,7 @@ func buildTestAdapters(t *testing.T) (
 
 	// Valkey via miniredis
 	redisSrv := startMiniredis(t)
-	store, err := valkey.NewPolicyStoreFromAddress(context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 10*time.Minute)
+	store, err := valkey.NewPolicyStoreFromAddress(context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 10*time.Minute, nil)
 	if err != nil {
 		t.Fatalf("valkey: %v", err)
 	}
@@ -84,7 +84,7 @@ func buildTestAdapters(t *testing.T) (
 	pub := natspub.NewPublisher(conn, "hourly")
 
 	// S3 audit store (client creation doesn't connect)
-	audit, err := s3store.NewAuditStoreFromConfig("localhost:9000", "test", "test", "test-audit", false)
+	audit, err := s3store.NewAuditStoreFromConfig("localhost:9000", "test", "test", "test-audit", false, nil)
 	if err != nil {
 		t.Fatalf("audit store: %v", err)
 	}

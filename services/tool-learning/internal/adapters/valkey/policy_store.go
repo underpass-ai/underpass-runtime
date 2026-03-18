@@ -2,6 +2,7 @@ package valkey
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -28,11 +29,12 @@ func NewPolicyStore(client redis.Cmdable, keyPrefix string, ttl time.Duration) *
 }
 
 // NewPolicyStoreFromAddress creates a PolicyStore connecting to a Valkey address.
-func NewPolicyStoreFromAddress(ctx context.Context, addr, password string, db int, keyPrefix string, ttl time.Duration) (*PolicyStore, error) {
+func NewPolicyStoreFromAddress(ctx context.Context, addr, password string, db int, keyPrefix string, ttl time.Duration, tlsCfg *tls.Config) (*PolicyStore, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: password,
-		DB:       db,
+		Addr:      addr,
+		Password:  password,
+		DB:        db,
+		TLSConfig: tlsCfg,
 	})
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("valkey ping: %w", err)

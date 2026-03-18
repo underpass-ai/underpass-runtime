@@ -90,7 +90,7 @@ func TestPublishPolicyUpdated(t *testing.T) {
 func TestNewPublisherFromURL(t *testing.T) {
 	srv := startTestNATS(t)
 
-	pub, conn, err := NewPublisherFromURL(srv.ClientURL(), "daily")
+	pub, conn, err := NewPublisherFromURL(srv.ClientURL(), "daily", nil)
 	if err != nil {
 		t.Fatalf("NewPublisherFromURL: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestPublisherCloseNilConn(t *testing.T) {
 }
 
 func TestNewPublisherFromURLInvalid(t *testing.T) {
-	_, _, err := NewPublisherFromURL("nats://invalid:9999", "daily")
+	_, _, err := NewPublisherFromURL("nats://invalid:9999", "daily", nil)
 	if err == nil {
 		t.Fatal("expected error connecting to invalid NATS URL")
 	}

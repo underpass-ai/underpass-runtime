@@ -322,7 +322,7 @@ func startServices(db *sql.DB) (
 	}
 
 	store, err := valkey.NewPolicyStoreFromAddress(
-		context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 2*time.Hour,
+		context.Background(), redisSrv.Addr(), "", 0, "tool_policy", 2*time.Hour, nil,
 	)
 	if err != nil {
 		redisSrv.Close()
