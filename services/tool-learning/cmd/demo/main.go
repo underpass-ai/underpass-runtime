@@ -87,7 +87,7 @@ func runDemo(cfg demoConfig) error {
 	if err != nil {
 		return fmt.Errorf("seed lake: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	fmt.Printf("  DuckDB in-memory    %s(no infrastructure needed)%s\n", dim, reset)
 	fmt.Printf("  Hours generated     %s%d%s\n", bold, cfg.hours, reset)

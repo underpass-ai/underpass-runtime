@@ -39,12 +39,12 @@ type S3ArtifactStore struct {
 type S3Config struct {
 	Bucket    string
 	Prefix    string
-	Endpoint  string     // MinIO or custom S3-compatible endpoint
+	Endpoint  string // MinIO or custom S3-compatible endpoint
 	Region    string
 	AccessKey string
 	SecretKey string
-	PathStyle bool       // Required for MinIO
-	UseSSL    bool       // Use HTTPS for S3 connections
+	PathStyle bool        // Required for MinIO
+	UseSSL    bool        // Use HTTPS for S3 connections
 	TLSConfig *tls.Config // Custom TLS config (e.g. custom CA)
 }
 
