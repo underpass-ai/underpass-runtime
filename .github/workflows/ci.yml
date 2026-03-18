@@ -190,6 +190,39 @@ jobs:
         continue-on-error: true
 
   # ──────────────────────────────────────────────
+  # CodeQL — static analysis for security
+  # ──────────────────────────────────────────────
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          config: |
+            paths-ignore:
+              - services
+              - e2e
+
+      - name: Build
+        run: CGO_ENABLED=0 go build -tags k8s ./...
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: workspace
+
+  # ──────────────────────────────────────────────
   # Docker — image build
   # ──────────────────────────────────────────────
   docker:
