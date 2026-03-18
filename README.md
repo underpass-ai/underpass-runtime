@@ -1,194 +1,135 @@
-# UnderPass Runtime
-### Execution plane for tool-driven agents
+# Underpass Runtime
 
-UnderPass Runtime provides isolated workspaces, governed tool execution, artifacts, and policy-controlled runtimes for LLM-powered agents.
+[![CI](https://github.com/underpass-ai/underpass-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/underpass-ai/underpass-runtime/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/underpass-ai/underpass-runtime/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/underpass-ai/underpass-runtime/security/code-scanning)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
 
-Run standalone with Docker. Scale with Kubernetes. Integrate with swe-ai-fleet or use it independently.
+**Governed execution plane for event-driven AI agents.**
 
----
+We don't build models. We build the infrastructure that makes them actually work. A 7B model with 394 tokens of surgical context outperforms a frontier model drowning in 6,000 tokens of noise.
 
-## Why UnderPass Runtime
+## What it does
 
-Most agent systems focus on reasoning, planning, and tool calling.
+Underpass Runtime gives AI agents **isolated workspaces** with **96+ governed tools** — filesystem, git, build, test, security scans, containers, Kubernetes — all under policy enforcement with full telemetry.
 
-UnderPass Runtime focuses on the missing layer: the execution plane.
+When an event fires (task assigned, PR opened, build broken), a specialized agent activates, gets only the context it needs, selects the best tools via Thompson Sampling, and executes them in a governed workspace. The telemetry feeds back into the learning loop. No polling. No orchestrator.
 
-It gives agents:
-- isolated workspaces
-- governed tools with policy enforcement
-- artifacts and logs as first-class outputs
-- portable runtime backends
-- optional event-driven integration for observability, rehydration, and future learning
-
----
-
-## What it is
-
-UnderPass Runtime is a service for executing tools inside controlled workspaces.
-
-It is designed for tool-driven agents that need:
-- filesystem access
-- repository operations
-- command execution
-- artifacts and logs
-- policy enforcement
-- runtime portability
-
-## What it is not
-
-UnderPass Runtime is not:
-- a chat interface
-- an LLM orchestration framework
-- a prompt management system
-- a generic unrestricted shell for agents
-
-It is the execution layer that agent systems can rely on.
-
----
-
-## Core capabilities
-
-- **Isolated workspaces** for agent sessions
-- **Governed tool execution** with policy and approvals
-- **Artifacts and logs** persisted per invocation
-- **Multiple runtime modes** for different deployment environments
-- **Structured tool catalog** with rich metadata
-- **Optional event-driven integration**
-- **Portable architecture** for Docker-first and Kubernetes-ready deployments
-
----
+```
+NATS event → agent activates → session created →
+  tools selected (Thompson Sampling) → executed in isolated workspace →
+    telemetry recorded → policies improve → next event, better decisions
+```
 
 ## Architecture
 
-```text
-Agent / Orchestrator
-        |
-        v
-+---------------------+
-| UnderPass Runtime   |
-|---------------------|
-| Sessions            |
-| Tool Catalog        |
-| Policy Enforcement  |
-| Invocation Engine   |
-| Artifacts & Logs    |
-+---------------------+
-        |
-        +-------------------+
-        |                   |
-        v                   v
- Docker Runner         Kubernetes Runner
-        |
-        v
- Isolated Workspace
-
-Optional integrations:
-- NATS event bus
-- Context / rehydration service
-- S3-compatible artifact storage
+```
+                    ┌─────────────────────────────────┐
+  NATS event ──────>│         Agent (specialized)      │
+                    └──────────────┬──────────────────┘
+                                   │ HTTPS/TLS
+                    ┌──────────────▼──────────────────┐
+                    │      Underpass Runtime           │
+                    │                                  │
+                    │  Sessions ──── Tool Catalog      │
+                    │  Policy ────── Invocation Engine  │
+                    │  Artifacts ─── Telemetry          │
+                    └──┬────────┬────────┬────────┬───┘
+                       │        │        │        │
+                    Valkey    NATS    S3/MinIO   OTLP
+                  (state)  (events) (artifacts) (traces)
 ```
 
----
+Full TLS across all 5 transports. Helm chart with mTLS support and fail-fast validation.
 
-## Quick Start
+## Proven in production-style E2E
+
+14 E2E tests run as Kubernetes Jobs against a live cluster with TLS enabled:
+
+| Test | What it proves |
+|------|---------------|
+| **Multi-agent pipeline** | 5 agents (architect → developer → test → review → QA) implement an HTTP retry middleware in Go. 14 tool invocations, 10 NATS events, 6 real artifacts |
+| **Event-driven agent** | NATS event triggers code-review agent. Writes Go code with a known bug, analyzes it, produces review with 3 findings. Full NATS round-trip |
+| **Full infra stack** | TLS + Valkey persistence + NATS events + outbox relay + S3 artifacts — all working together |
+| **LLM agent loop** | OpenAI gpt-4o-mini drives tool discovery + invocation over HTTPS. Creates a Go project in 5 iterations |
+
+See [e2e/README.md](e2e/README.md) for full evidence.
+
+## Quick start
 
 ```bash
-# Run locally
+# Run locally (memory backends, no infra needed)
 go run ./cmd/workspace
 
-# Or with Docker Compose (runtime + Valkey)
-docker compose up
+# Health check
+curl http://localhost:50053/healthz
+
+# Create a session and invoke a tool
+curl -X POST http://localhost:50053/v1/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"principal":{"tenant_id":"dev","actor_id":"me","roles":["developer"]}}'
+
+# Deploy with Helm (TLS + Valkey + NATS)
+helm install underpass-runtime charts/underpass-runtime \
+  --set stores.backend=valkey \
+  --set valkey.enabled=true \
+  --set eventBus.type=nats \
+  --set tls.mode=server \
+  --set tls.existingSecret=my-tls-secret
 ```
 
-## API
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /healthz` | Health check |
-| `GET /metrics` | Prometheus metrics |
-| `POST /v1/sessions` | Create workspace session |
-| `DELETE /v1/sessions/{session_id}` | Close session |
-| `GET /v1/sessions/{session_id}/tools` | List available tools |
-| `POST /v1/sessions/{session_id}/tools/{tool_name}/invoke` | Invoke a tool |
-| `GET /v1/invocations/{invocation_id}` | Get invocation result |
-| `GET /v1/invocations/{invocation_id}/logs` | Get invocation logs |
-| `GET /v1/invocations/{invocation_id}/artifacts` | List invocation artifacts |
-
-## Tool Families
+## Tool catalog
 
 96 capabilities across 15+ families:
 
-- `fs.*` — file operations (read, write, search, patch, stat)
-- `git.*` — version control (status, diff, commit, push, branch)
-- `repo.*` — project analysis (detect, build, test, coverage, symbols)
-- `conn.*` — connection profile discovery
-- `nats.*`, `kafka.*`, `rabbit.*` — governed messaging
-- `redis.*`, `mongo.*` — governed data access
-- `security.*`, `sbom.*`, `license.*`, `deps.*`, `secrets.*` — supply chain
-- `image.*` — container image build/push/inspect
-- `k8s.*` — Kubernetes read + optional delivery tools
-- `artifact.*` — artifact upload/download
-- `api.benchmark` — HTTP load testing
+| Family | Tools | Examples |
+|--------|-------|---------|
+| `fs.*` | File operations | read, write, search, patch, stat, tree |
+| `git.*` | Version control | status, diff, commit, push, branch, log |
+| `repo.*` | Project analysis | detect, build, test, coverage, symbols |
+| `security.*` | Supply chain | scan, sbom, license audit, secret detection |
+| `k8s.*` | Kubernetes | get, apply, rollout, logs, describe |
+| `image.*` | Containers | build, push, inspect |
+| `conn.*` | Connections | profile discovery |
+| `nats.*` `kafka.*` `rabbit.*` | Messaging | governed publish/subscribe |
+| `redis.*` `mongo.*` | Data | governed queries |
+| `artifact.*` | Storage | upload, download |
 
-Each tool carries metadata: scope, side_effects, risk_level, requires_approval, idempotency, constraints, observability.
+Each tool carries metadata: scope, side_effects, risk_level, requires_approval, idempotency, cost_hint.
 
-Full catalog: `docs/CAPABILITY_CATALOG.md` (regenerate with `make catalog-docs`).
+## API
 
-## Configuration
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/healthz` | Health check |
+| `GET` | `/metrics` | Prometheus metrics |
+| `POST` | `/v1/sessions` | Create workspace session |
+| `DELETE` | `/v1/sessions/{id}` | Close session |
+| `GET` | `/v1/sessions/{id}/tools` | List tools |
+| `GET` | `/v1/sessions/{id}/tools/discovery` | Discover tools (filtered) |
+| `GET` | `/v1/sessions/{id}/tools/recommendations` | Tool recommendations |
+| `POST` | `/v1/sessions/{id}/tools/{name}/invoke` | Invoke tool |
+| `GET` | `/v1/invocations/{id}` | Get invocation |
+| `GET` | `/v1/invocations/{id}/logs` | Get logs |
+| `GET` | `/v1/invocations/{id}/artifacts` | List artifacts |
 
-### Core
+## Part of Underpass AI
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `50053` | HTTP listen port |
-| `WORKSPACE_ROOT` | `/tmp/workspaces` | Workspace filesystem root |
-| `ARTIFACT_ROOT` | `/tmp/artifacts` | Artifact storage root |
-| `WORKSPACE_BACKEND` | `local` | Runtime backend: `local`, `kubernetes` |
-| `LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| Repository | What it does |
+|-----------|-------------|
+| **underpass-runtime** (this) | Governed tool execution + telemetry + tool-learning |
+| [rehydration-kernel](https://github.com/underpass-ai/rehydration-kernel) | Surgical context materialization from knowledge graphs |
+| [swe-ai-fleet](https://github.com/underpass-ai/swe-ai-fleet) | Multi-agent SWE platform — planning, deliberation, execution |
+| [underpass-demo](https://github.com/underpass-ai/underpass-demo) | See it all working together |
 
-### Persistence
+## Documentation
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SESSION_STORE_BACKEND` | `memory` | `memory` or `valkey` |
-| `INVOCATION_STORE_BACKEND` | `memory` | `memory` or `valkey` |
-| `VALKEY_HOST` | `localhost` | Valkey/Redis host |
-| `VALKEY_PORT` | `6379` | Valkey/Redis port |
-
-### Kubernetes Backend
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WORKSPACE_K8S_NAMESPACE` | `underpass-runtime` | K8s namespace |
-| `WORKSPACE_K8S_RUNNER_IMAGE` | `alpine:3.20` | Runner container image |
-| `WORKSPACE_ENABLE_K8S_DELIVERY_TOOLS` | `false` | Enable apply/rollout/restart |
-
-See `docs/` for the full environment variable reference.
-
-## Development
-
-```bash
-make build          # Build binary
-make test           # Run all tests
-make coverage-core  # Core coverage gate (80%)
-make coverage-full  # Full coverage (SonarCloud)
-make docker-build   # Container image
-```
-
-## Deployment
-
-```bash
-# Standalone with Valkey
-docker compose up
-
-# With NATS event bus
-docker compose -f docker-compose.yml -f docker-compose.full.yml up
-```
-
-## Author
-
-Created by [Tirso Garcia](https://github.com/underpass-ai) — UnderPass AI
+- [Configuration Reference](docs/CONFIGURATION.md) — 80+ environment variables
+- [TLS Deployment Guide](docs/DEPLOYMENT-TLS.md) — step-by-step for all 5 transports
+- [E2E Test Evidence](e2e/README.md) — cluster validation with logs and evidence JSON
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE) for details.
+Apache License 2.0 — see [LICENSE](LICENSE).
+
+Created by [Tirso Garcia](https://github.com/tgarciai) · [LinkedIn](https://www.linkedin.com/in/tirsogarcia/) · [Underpass AI](https://github.com/underpass-ai)
