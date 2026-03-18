@@ -28,12 +28,25 @@ type KPIMetrics struct {
 
 	// workspace_context_bytes_saved: bytes saved by compact discovery
 	contextBytesSaved int64
+
+	// workspace_sessions_created_total: sessions successfully created (HTTP 201)
+	sessionsCreated uint64
+
+	// workspace_sessions_closed_total: sessions successfully closed (HTTP 200)
+	sessionsClosed uint64
+
+	// workspace_discovery_requests_total: discovery endpoint served
+	discoveryRequests uint64
+
+	// workspace_invocations_denied_total{reason}: denied invocations by reason
+	invocationsDenied map[string]uint64
 }
 
 // NewKPIMetrics creates a new KPI metrics tracker.
 func NewKPIMetrics() *KPIMetrics {
 	return &KPIMetrics{
-		toolCallsPerTask: map[string]uint64{},
+		toolCallsPerTask:  map[string]uint64{},
+		invocationsDenied: map[string]uint64{},
 	}
 }
 
@@ -85,6 +98,37 @@ func (k *KPIMetrics) ObserveContextBytesSaved(bytes int64) {
 	k.contextBytesSaved += bytes
 }
 
+// ObserveSessionCreated increments the sessions-created counter.
+func (k *KPIMetrics) ObserveSessionCreated() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.sessionsCreated++
+}
+
+// ObserveSessionClosed increments the sessions-closed counter.
+func (k *KPIMetrics) ObserveSessionClosed() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.sessionsClosed++
+}
+
+// ObserveDiscoveryRequest increments the discovery-requests counter.
+func (k *KPIMetrics) ObserveDiscoveryRequest() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.discoveryRequests++
+}
+
+// ObserveInvocationDenied increments the denied-invocations counter for the given reason.
+func (k *KPIMetrics) ObserveInvocationDenied(reason string) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if reason == "" {
+		reason = "unspecified"
+	}
+	k.invocationsDenied[reason]++
+}
+
 // PrometheusText returns Prometheus exposition format text for all KPI metrics.
 func (k *KPIMetrics) PrometheusText() string {
 	k.mu.RLock()
@@ -131,6 +175,27 @@ func (k *KPIMetrics) PrometheusText() string {
 	b.WriteString("# HELP workspace_context_bytes_saved Total bytes saved by compact discovery.\n")
 	b.WriteString("# TYPE workspace_context_bytes_saved counter\n")
 	fmt.Fprintf(&b, "workspace_context_bytes_saved %d\n", k.contextBytesSaved)
+
+	b.WriteString("# HELP workspace_sessions_created_total Total sessions successfully created.\n")
+	b.WriteString("# TYPE workspace_sessions_created_total counter\n")
+	fmt.Fprintf(&b, "workspace_sessions_created_total %d\n", k.sessionsCreated)
+
+	b.WriteString("# HELP workspace_sessions_closed_total Total sessions successfully closed.\n")
+	b.WriteString("# TYPE workspace_sessions_closed_total counter\n")
+	fmt.Fprintf(&b, "workspace_sessions_closed_total %d\n", k.sessionsClosed)
+
+	b.WriteString("# HELP workspace_discovery_requests_total Total tool discovery requests served.\n")
+	b.WriteString("# TYPE workspace_discovery_requests_total counter\n")
+	fmt.Fprintf(&b, "workspace_discovery_requests_total %d\n", k.discoveryRequests)
+
+	b.WriteString("# HELP workspace_invocations_denied_total Total denied invocations by denial reason.\n")
+	b.WriteString("# TYPE workspace_invocations_denied_total counter\n")
+	for _, reason := range sortedInnerKeys(k.invocationsDenied) {
+		fmt.Fprintf(&b, "workspace_invocations_denied_total{reason=\"%s\"} %d\n",
+			escapePrometheusLabelValue(reason),
+			k.invocationsDenied[reason],
+		)
+	}
 
 	return b.String()
 }

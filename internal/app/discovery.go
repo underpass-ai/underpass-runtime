@@ -83,6 +83,10 @@ func (s *Service) DiscoverTools(ctx context.Context, sessionID string, detail Di
 
 	total := len(s.catalog.List())
 
+	if s.kpiMetrics != nil {
+		s.kpiMetrics.ObserveDiscoveryRequest()
+	}
+
 	if detail == DiscoveryDetailFull {
 		return s.discoverFull(tools, total, filter), nil
 	}

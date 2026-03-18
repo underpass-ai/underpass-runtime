@@ -113,10 +113,14 @@ func (noopTelemetryQuerier) AllToolStats(context.Context) (map[string]ToolStats,
 }
 
 func (s *Service) PrometheusMetrics() string {
-	if s.metrics == nil {
-		return ""
+	var b strings.Builder
+	if s.metrics != nil {
+		b.WriteString(s.metrics.PrometheusText())
 	}
-	return s.metrics.PrometheusText()
+	if s.kpiMetrics != nil {
+		b.WriteString(s.kpiMetrics.PrometheusText())
+	}
+	return b.String()
 }
 
 func (s *Service) CreateSession(ctx context.Context, req CreateSessionRequest) (domain.Session, *ServiceError) {
@@ -141,6 +145,9 @@ func (s *Service) CreateSession(ctx context.Context, req CreateSessionRequest) (
 		ExpiresAt:    session.ExpiresAt,
 		WorkspaceDir: session.WorkspacePath,
 	})
+	if s.kpiMetrics != nil {
+		s.kpiMetrics.ObserveSessionCreated()
+	}
 	return session, nil
 }
 
@@ -158,6 +165,9 @@ func (s *Service) CloseSession(ctx context.Context, sessionID string) *ServiceEr
 			RuntimeKind: session.Runtime.Kind,
 			DurationSec: durationSec,
 		})
+	}
+	if s.kpiMetrics != nil {
+		s.kpiMetrics.ObserveSessionClosed()
 	}
 	return nil
 }
@@ -465,6 +475,13 @@ func (s *Service) denyInvocation(ctx context.Context, invocation domain.Invocati
 		CorrelationID: invocation.CorrelationID,
 		Reason:        domErr.Message,
 	})
+	if s.kpiMetrics != nil {
+		reason := domErr.Code
+		if reason == "" {
+			reason = domErr.Message
+		}
+		s.kpiMetrics.ObserveInvocationDenied(reason)
+	}
 	return invocation
 }
 

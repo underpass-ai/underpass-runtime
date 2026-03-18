@@ -93,6 +93,88 @@ func TestKPIMetrics_ContextBytesSaved(t *testing.T) {
 	}
 }
 
+func TestKPIMetrics_SessionsCreated(t *testing.T) {
+	kpi := NewKPIMetrics()
+	kpi.ObserveSessionCreated()
+	kpi.ObserveSessionCreated()
+	kpi.ObserveSessionCreated()
+
+	text := kpi.PrometheusText()
+	if !strings.Contains(text, "workspace_sessions_created_total 3") {
+		t.Fatalf("expected sessions_created=3 in output:\n%s", text)
+	}
+}
+
+func TestKPIMetrics_SessionsClosed(t *testing.T) {
+	kpi := NewKPIMetrics()
+	kpi.ObserveSessionClosed()
+	kpi.ObserveSessionClosed()
+
+	text := kpi.PrometheusText()
+	if !strings.Contains(text, "workspace_sessions_closed_total 2") {
+		t.Fatalf("expected sessions_closed=2 in output:\n%s", text)
+	}
+}
+
+func TestKPIMetrics_DiscoveryRequests(t *testing.T) {
+	kpi := NewKPIMetrics()
+	kpi.ObserveDiscoveryRequest()
+	kpi.ObserveDiscoveryRequest()
+	kpi.ObserveDiscoveryRequest()
+	kpi.ObserveDiscoveryRequest()
+
+	text := kpi.PrometheusText()
+	if !strings.Contains(text, "workspace_discovery_requests_total 4") {
+		t.Fatalf("expected discovery_requests=4 in output:\n%s", text)
+	}
+}
+
+func TestKPIMetrics_InvocationsDenied(t *testing.T) {
+	kpi := NewKPIMetrics()
+	kpi.ObserveInvocationDenied("policy_denied")
+	kpi.ObserveInvocationDenied("policy_denied")
+	kpi.ObserveInvocationDenied("approval_required")
+	kpi.ObserveInvocationDenied("") // defaults to "unspecified"
+
+	text := kpi.PrometheusText()
+	if !strings.Contains(text, `workspace_invocations_denied_total{reason="policy_denied"} 2`) {
+		t.Fatalf("expected policy_denied=2 in output:\n%s", text)
+	}
+	if !strings.Contains(text, `workspace_invocations_denied_total{reason="approval_required"} 1`) {
+		t.Fatalf("expected approval_required=1 in output:\n%s", text)
+	}
+	if !strings.Contains(text, `workspace_invocations_denied_total{reason="unspecified"} 1`) {
+		t.Fatalf("expected unspecified=1 in output:\n%s", text)
+	}
+}
+
+func TestKPIMetrics_InvocationsDenied_Empty(t *testing.T) {
+	kpi := NewKPIMetrics()
+	text := kpi.PrometheusText()
+	// No denied_total lines should appear when there are no denials.
+	if strings.Contains(text, "workspace_invocations_denied_total{") {
+		t.Fatalf("expected no denied lines when empty:\n%s", text)
+	}
+	// But the HELP/TYPE header should still be present.
+	if !strings.Contains(text, "# HELP workspace_invocations_denied_total") {
+		t.Fatalf("expected HELP header for denied_total:\n%s", text)
+	}
+}
+
+func TestKPIMetrics_SessionCounters_ZeroDefault(t *testing.T) {
+	kpi := NewKPIMetrics()
+	text := kpi.PrometheusText()
+	if !strings.Contains(text, "workspace_sessions_created_total 0") {
+		t.Fatalf("expected sessions_created=0 by default:\n%s", text)
+	}
+	if !strings.Contains(text, "workspace_sessions_closed_total 0") {
+		t.Fatalf("expected sessions_closed=0 by default:\n%s", text)
+	}
+	if !strings.Contains(text, "workspace_discovery_requests_total 0") {
+		t.Fatalf("expected discovery_requests=0 by default:\n%s", text)
+	}
+}
+
 func TestKPIMetrics_PrometheusText_AllSections(t *testing.T) {
 	kpi := NewKPIMetrics()
 	kpi.ObserveToolCall("build")
@@ -100,6 +182,10 @@ func TestKPIMetrics_PrometheusText_AllSections(t *testing.T) {
 	kpi.ObserveRecommendationUsed(true)
 	kpi.ObservePolicyDenialAfterRecommendation(false)
 	kpi.ObserveContextBytesSaved(512)
+	kpi.ObserveSessionCreated()
+	kpi.ObserveSessionClosed()
+	kpi.ObserveDiscoveryRequest()
+	kpi.ObserveInvocationDenied("policy_denied")
 
 	text := kpi.PrometheusText()
 
@@ -109,6 +195,10 @@ func TestKPIMetrics_PrometheusText_AllSections(t *testing.T) {
 		"workspace_recommendation_acceptance_rate",
 		"workspace_policy_denial_rate_bad_recommendation",
 		"workspace_context_bytes_saved",
+		"workspace_sessions_created_total",
+		"workspace_sessions_closed_total",
+		"workspace_discovery_requests_total",
+		"workspace_invocations_denied_total",
 	}
 	for _, section := range expectedSections {
 		if !strings.Contains(text, section) {
@@ -130,6 +220,10 @@ func TestKPIMetrics_ConcurrentAccess(t *testing.T) {
 				kpi.ObserveRecommendationUsed(true)
 				kpi.ObservePolicyDenialAfterRecommendation(false)
 				kpi.ObserveContextBytesSaved(10)
+				kpi.ObserveSessionCreated()
+				kpi.ObserveSessionClosed()
+				kpi.ObserveDiscoveryRequest()
+				kpi.ObserveInvocationDenied("policy_denied")
 				_ = kpi.PrometheusText()
 			}
 		}()
