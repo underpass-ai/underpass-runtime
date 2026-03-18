@@ -79,6 +79,60 @@ tolerations: []
 affinity: {}
 
 # ---------------------------------------------------------------------------
+# TLS — HTTP server
+# ---------------------------------------------------------------------------
+tls:
+  # -- TLS mode: disabled, server, mutual
+  mode: disabled
+  # -- Existing Secret containing cert, key, and (for mutual) client CA
+  existingSecret: ""
+  # -- Mount path for TLS secrets
+  mountPath: /var/run/underpass-runtime/tls
+  keys:
+    # -- Key in the secret for the TLS certificate
+    cert: tls.crt
+    # -- Key in the secret for the TLS private key
+    key: tls.key
+    # -- Key in the secret for the client CA (required for mutual)
+    clientCa: ca.crt
+
+# ---------------------------------------------------------------------------
+# TLS — NATS client
+# ---------------------------------------------------------------------------
+natsTls:
+  # -- NATS TLS mode: disabled, server, mutual
+  mode: disabled
+  # -- Existing Secret containing NATS TLS certificates
+  existingSecret: ""
+  # -- Mount path for NATS TLS secrets
+  mountPath: /var/run/underpass-runtime/nats-tls
+  keys:
+    # -- Key in the secret for the CA certificate
+    ca: ca.crt
+    # -- Key in the secret for the client certificate (mutual only)
+    cert: ""
+    # -- Key in the secret for the client private key (mutual only)
+    key: ""
+
+# ---------------------------------------------------------------------------
+# TLS — Valkey client
+# ---------------------------------------------------------------------------
+valkeyTls:
+  # -- Enable TLS for Valkey connections
+  enabled: false
+  # -- Existing Secret containing Valkey TLS certificates
+  existingSecret: ""
+  # -- Mount path for Valkey TLS secrets
+  mountPath: /var/run/underpass-runtime/valkey-tls
+  keys:
+    # -- Key in the secret for the CA certificate
+    ca: ca.crt
+    # -- Key in the secret for the client certificate (mTLS only)
+    cert: ""
+    # -- Key in the secret for the client private key (mTLS only)
+    key: ""
+
+# ---------------------------------------------------------------------------
 # Runtime configuration
 # ---------------------------------------------------------------------------
 
@@ -118,6 +172,10 @@ artifacts:
     region: us-east-1
     # -- Use path-style URLs (required for MinIO)
     pathStyle: true
+    # -- Use HTTPS for S3 connections
+    useSSL: false
+    # -- Path to CA certificate for S3 TLS (mounted via existingSecret or external)
+    caPath: ""
     # -- Reference to an existing Secret with accessKey and secretKey
     existingSecret: ""
     # -- Key in the secret for access key
@@ -176,6 +234,8 @@ telemetry:
     endpoint: ""
     # -- Allow insecure HTTP for OTLP
     insecure: false
+    # -- Path to CA certificate for OTLP TLS
+    caPath: ""
 
 # -- Authentication configuration
 auth:

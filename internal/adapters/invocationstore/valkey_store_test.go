@@ -182,6 +182,7 @@ func TestNewValkeyStoreFromAddress_InvalidAddress(t *testing.T) {
 		0,
 		"",
 		time.Second,
+		nil,
 	)
 	if err == nil {
 		t.Fatalf("expected connection error")

@@ -2,6 +2,7 @@ package invocationstore
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -62,11 +63,13 @@ func NewValkeyStoreFromAddress(
 	db int,
 	keyPrefix string,
 	ttl time.Duration,
+	tlsCfg *tls.Config,
 ) (*ValkeyStore, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr:     strings.TrimSpace(address),
-		Password: password,
-		DB:       db,
+		Addr:      strings.TrimSpace(address),
+		Password:  password,
+		DB:        db,
+		TLSConfig: tlsCfg,
 	})
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("valkey ping failed: %w", err)

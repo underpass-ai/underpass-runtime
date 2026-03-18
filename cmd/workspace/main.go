@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -28,6 +29,7 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/app"
 	"github.com/underpass-ai/underpass-runtime/internal/bootstrap"
 	"github.com/underpass-ai/underpass-runtime/internal/httpapi"
+	"github.com/underpass-ai/underpass-runtime/internal/tlsutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -76,7 +78,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	sessionStore, err := buildSessionStore(logger)
+	// --- TLS setup ---
+	valkeyTLS, err := buildValkeyTLS(logger)
+	if err != nil {
+		logger.Error("failed to build Valkey TLS config", "error", err)
+		os.Exit(1)
+	}
+	natsTLS, err := buildNATSTLS(logger)
+	if err != nil {
+		logger.Error("failed to build NATS TLS config", "error", err)
+		os.Exit(1)
+	}
+	serverTLS, err := buildServerTLS(logger)
+	if err != nil {
+		logger.Error("failed to build server TLS config", "error", err)
+		os.Exit(1)
+	}
+
+	sessionStore, err := buildSessionStore(logger, valkeyTLS)
 	if err != nil {
 		logger.Error("failed to initialize session store", "error", err)
 		os.Exit(1)
@@ -108,16 +127,16 @@ func main() {
 	}
 	policyEngine := policy.NewStaticPolicy()
 	auditLogger := audit.NewLoggerAudit(logger)
-	invocationStore, err := buildInvocationStore(logger)
+	invocationStore, err := buildInvocationStore(logger, valkeyTLS)
 	if err != nil {
 		logger.Error("failed to initialize invocation store", "error", err)
 		os.Exit(1)
 	}
 
 	service := app.NewService(workspaceManager, catalog, policyEngine, engine, artifactStore, auditLogger, invocationStore)
-	eventPub, natsConn, relayStop := buildEventBus(context.Background(), logger)
+	eventPub, natsConn, relayStop := buildEventBus(context.Background(), logger, natsTLS, valkeyTLS)
 	service.SetEventPublisher(eventPub)
-	telRecorder, telQuerier, telStop := buildTelemetry(context.Background(), logger)
+	telRecorder, telQuerier, telStop := buildTelemetry(context.Background(), logger, valkeyTLS)
 	service.SetTelemetry(telRecorder, telQuerier)
 	service.SetKPIMetrics(app.NewKPIMetrics())
 	authConfig, err := httpapi.AuthConfigFromEnv()
@@ -134,9 +153,10 @@ func main() {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      120 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		TLSConfig:         serverTLS,
 	}
 
-	startHTTPServer(httpServer, port, workspaceRoot, logger)
+	startHTTPServer(httpServer, port, workspaceRoot, serverTLS, logger)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -247,7 +267,7 @@ func parseLogLevel(raw string) slog.Level {
 	}
 }
 
-func buildInvocationStore(logger *slog.Logger) (app.InvocationStore, error) {
+func buildInvocationStore(logger *slog.Logger, valkeyTLS *tls.Config) (app.InvocationStore, error) {
 	backend := strings.ToLower(strings.TrimSpace(envOrDefault("INVOCATION_STORE_BACKEND", "memory")))
 	switch backend {
 	case "", "memory":
@@ -273,6 +293,7 @@ func buildInvocationStore(logger *slog.Logger) (app.InvocationStore, error) {
 			db,
 			keyPrefix,
 			time.Duration(ttlSeconds)*time.Second,
+			valkeyTLS,
 		)
 		if err != nil {
 			return nil, err
@@ -284,7 +305,7 @@ func buildInvocationStore(logger *slog.Logger) (app.InvocationStore, error) {
 	}
 }
 
-func buildSessionStore(logger *slog.Logger) (app.SessionStore, error) {
+func buildSessionStore(logger *slog.Logger, valkeyTLS *tls.Config) (app.SessionStore, error) {
 	backend := strings.ToLower(strings.TrimSpace(envOrDefault("SESSION_STORE_BACKEND", "memory")))
 	switch backend {
 	case "", "memory":
@@ -310,6 +331,7 @@ func buildSessionStore(logger *slog.Logger) (app.SessionStore, error) {
 			db,
 			keyPrefix,
 			time.Duration(ttlSeconds)*time.Second,
+			valkeyTLS,
 		)
 		if err != nil {
 			return nil, err
@@ -347,6 +369,91 @@ func parseBoolOrDefault(raw string, fallback bool) bool {
 	}
 }
 
+// buildServerTLS builds the TLS configuration for the HTTP server.
+// Reads WORKSPACE_TLS_MODE, WORKSPACE_TLS_CERT_PATH, WORKSPACE_TLS_KEY_PATH,
+// WORKSPACE_TLS_CLIENT_CA_PATH.
+func buildServerTLS(logger *slog.Logger) (*tls.Config, error) {
+	mode, err := tlsutil.ParseMode(strings.TrimSpace(os.Getenv("WORKSPACE_TLS_MODE")))
+	if err != nil {
+		return nil, err
+	}
+	if mode == tlsutil.ModeDisabled {
+		return nil, nil
+	}
+	cfg, err := tlsutil.BuildServerTLSConfig(tlsutil.Config{
+		Mode:     mode,
+		CertPath: strings.TrimSpace(os.Getenv("WORKSPACE_TLS_CERT_PATH")),
+		KeyPath:  strings.TrimSpace(os.Getenv("WORKSPACE_TLS_KEY_PATH")),
+		CAPath:   strings.TrimSpace(os.Getenv("WORKSPACE_TLS_CLIENT_CA_PATH")),
+	})
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("HTTP server TLS configured", "mode", string(mode))
+	return cfg, nil
+}
+
+// buildValkeyTLS builds the TLS configuration for all Valkey connections.
+// Reads VALKEY_TLS_ENABLED, VALKEY_TLS_CA_PATH, VALKEY_TLS_CERT_PATH,
+// VALKEY_TLS_KEY_PATH.
+// NOTE: The kernel uses URI scheme (rediss://) with query params. The Go
+// runtime uses separate env vars because go-redis accepts addr + TLSConfig.
+// This is a documented divergence from the kernel's Valkey TLS model.
+func buildValkeyTLS(logger *slog.Logger) (*tls.Config, error) {
+	if !parseBoolOrDefault(os.Getenv("VALKEY_TLS_ENABLED"), false) {
+		return nil, nil
+	}
+	caPath := strings.TrimSpace(os.Getenv("VALKEY_TLS_CA_PATH"))
+	certPath := strings.TrimSpace(os.Getenv("VALKEY_TLS_CERT_PATH"))
+	keyPath := strings.TrimSpace(os.Getenv("VALKEY_TLS_KEY_PATH"))
+
+	mode := tlsutil.ModeServer
+	if certPath != "" && keyPath != "" {
+		mode = tlsutil.ModeMutual
+	}
+	cfg, err := tlsutil.BuildClientTLSConfig(tlsutil.Config{
+		Mode:     mode,
+		CAPath:   caPath,
+		CertPath: certPath,
+		KeyPath:  keyPath,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("valkey TLS: %w", err)
+	}
+	logger.Info("Valkey TLS configured", "mode", string(mode))
+	return cfg, nil
+}
+
+// buildNATSTLS builds the TLS configuration for the NATS connection.
+// Reads NATS_TLS_MODE, NATS_TLS_CA_PATH, NATS_TLS_CERT_PATH,
+// NATS_TLS_KEY_PATH, NATS_TLS_FIRST.
+// NOTE: NATS_TLS_FIRST is read for env-var consistency with the kernel (Rust),
+// but the Go NATS client (nats.go) does not support a TLS-first handshake.
+// If the NATS server requires TLS-first, the connection will fail.
+func buildNATSTLS(logger *slog.Logger) (*tls.Config, error) {
+	mode, err := tlsutil.ParseMode(strings.TrimSpace(os.Getenv("NATS_TLS_MODE")))
+	if err != nil {
+		return nil, err
+	}
+	if mode == tlsutil.ModeDisabled {
+		return nil, nil
+	}
+	if parseBoolOrDefault(os.Getenv("NATS_TLS_FIRST"), false) {
+		logger.Warn("NATS_TLS_FIRST=true requested but Go nats.go client does not support TLS-first handshake; flag ignored")
+	}
+	cfg, err := tlsutil.BuildClientTLSConfig(tlsutil.Config{
+		Mode:     mode,
+		CAPath:   strings.TrimSpace(os.Getenv("NATS_TLS_CA_PATH")),
+		CertPath: strings.TrimSpace(os.Getenv("NATS_TLS_CERT_PATH")),
+		KeyPath:  strings.TrimSpace(os.Getenv("NATS_TLS_KEY_PATH")),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("nats TLS: %w", err)
+	}
+	logger.Info("NATS TLS configured", "mode", string(mode))
+	return cfg, nil
+}
+
 func parseStringMapEnv(raw string) (map[string]string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
@@ -370,6 +477,15 @@ func setupTelemetry(ctx context.Context, logger *slog.Logger) (func(context.Cont
 	}
 	if parseBoolOrDefault(os.Getenv("WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE"), false) {
 		options = append(options, otlptracehttp.WithInsecure())
+	}
+	if caPath := strings.TrimSpace(os.Getenv("WORKSPACE_OTEL_TLS_CA_PATH")); caPath != "" {
+		otlpTLS, tlsErr := tlsutil.BuildClientTLSFromCA(caPath)
+		if tlsErr != nil {
+			return nil, fmt.Errorf("OTLP TLS: %w", tlsErr)
+		}
+		if otlpTLS != nil {
+			options = append(options, otlptracehttp.WithTLSClientConfig(otlpTLS))
+		}
 	}
 
 	client := otlptracehttp.NewClient(options...)
@@ -405,12 +521,22 @@ func setupTelemetry(ctx context.Context, logger *slog.Logger) (func(context.Cont
 	return tracerProvider.Shutdown, nil
 }
 
-func startHTTPServer(srv *http.Server, port, workspaceRoot string, logger *slog.Logger) {
+func startHTTPServer(srv *http.Server, port, workspaceRoot string, serverTLS *tls.Config, logger *slog.Logger) {
 	go func() {
-		logger.Info("workspace service listening", "port", port, "workspace_root", workspaceRoot)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Error("http server failed", "error", err)
-			os.Exit(1)
+		if serverTLS != nil {
+			logger.Info("workspace service listening (TLS)", "port", port, "workspace_root", workspaceRoot)
+			// Certs are already in srv.TLSConfig — pass empty strings so
+			// ListenAndServeTLS uses them from the config.
+			if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				logger.Error("https server failed", "error", err)
+				os.Exit(1)
+			}
+		} else {
+			logger.Info("workspace service listening", "port", port, "workspace_root", workspaceRoot)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Error("http server failed", "error", err)
+				os.Exit(1)
+			}
 		}
 	}()
 }
@@ -421,7 +547,7 @@ func startHTTPServer(srv *http.Server, port, workspaceRoot string, logger *slog.
 //
 // EVENT_BUS=none  → NoopPublisher (default)
 // EVENT_BUS=nats  → OutboxPublisher → OutboxRelay → NATSPublisher
-func buildEventBus(ctx context.Context, logger *slog.Logger) (app.EventPublisher, *nats.Conn, func()) {
+func buildEventBus(ctx context.Context, logger *slog.Logger, natsTLS *tls.Config, valkeyTLS *tls.Config) (app.EventPublisher, *nats.Conn, func()) {
 	bus := strings.ToLower(strings.TrimSpace(envOrDefault("EVENT_BUS", "none")))
 	switch bus {
 	case "nats":
@@ -429,6 +555,7 @@ func buildEventBus(ctx context.Context, logger *slog.Logger) (app.EventPublisher
 			ctx,
 			envOrDefault("EVENT_BUS_NATS_URL", "nats://localhost:4222"),
 			envOrDefault("EVENT_BUS_NATS_STREAM", ""),
+			natsTLS,
 		)
 		if err != nil {
 			logger.Error("failed to connect to NATS event bus, falling back to noop", "error", err)
@@ -436,7 +563,7 @@ func buildEventBus(ctx context.Context, logger *slog.Logger) (app.EventPublisher
 		}
 
 		// Outbox backed by Valkey if available, otherwise use NATS directly.
-		outboxPub, outboxRelay := buildOutboxRelay(ctx, logger, natsPub)
+		outboxPub, outboxRelay := buildOutboxRelay(ctx, logger, natsPub, valkeyTLS)
 		if outboxPub != nil {
 			logger.Info("event bus initialized", "bus", "nats+outbox")
 			return outboxPub, nc, outboxRelay
@@ -454,7 +581,7 @@ func buildEventBus(ctx context.Context, logger *slog.Logger) (app.EventPublisher
 // buildOutboxRelay creates an outbox-backed publisher with a relay goroutine
 // that forwards events to the downstream publisher. Returns nil if Valkey
 // outbox is not configured.
-func buildOutboxRelay(ctx context.Context, logger *slog.Logger, downstream app.EventPublisher) (app.EventPublisher, func()) {
+func buildOutboxRelay(ctx context.Context, logger *slog.Logger, downstream app.EventPublisher, valkeyTLS *tls.Config) (app.EventPublisher, func()) {
 	if strings.ToLower(strings.TrimSpace(envOrDefault("EVENT_BUS_OUTBOX", "false"))) != "true" {
 		return nil, nil
 	}
@@ -469,7 +596,7 @@ func buildOutboxRelay(ctx context.Context, logger *slog.Logger, downstream app.E
 	db := parseIntOrDefault(os.Getenv("VALKEY_DB"), 0)
 	keyPrefix := envOrDefault("EVENT_BUS_OUTBOX_KEY_PREFIX", "workspace:outbox")
 
-	outbox, err := eventbus.NewOutboxPublisherFromAddress(ctx, address, password, db, keyPrefix)
+	outbox, err := eventbus.NewOutboxPublisherFromAddress(ctx, address, password, db, keyPrefix, valkeyTLS)
 	if err != nil {
 		logger.Warn("outbox valkey connection failed, skipping outbox relay", "error", err)
 		return nil, nil
@@ -486,7 +613,7 @@ func buildOutboxRelay(ctx context.Context, logger *slog.Logger, downstream app.E
 // TELEMETRY_BACKEND=none   → NoopRecorder + InMemoryAggregator (default)
 // TELEMETRY_BACKEND=memory → InMemoryAggregator (records + queries)
 // TELEMETRY_BACKEND=valkey → ValkeyRecorder + Aggregator (background loop)
-func buildTelemetry(ctx context.Context, logger *slog.Logger) (app.TelemetryRecorder, app.TelemetryQuerier, func()) {
+func buildTelemetry(ctx context.Context, logger *slog.Logger, valkeyTLS *tls.Config) (app.TelemetryRecorder, app.TelemetryQuerier, func()) {
 	backend := strings.ToLower(strings.TrimSpace(envOrDefault("TELEMETRY_BACKEND", "none")))
 	switch backend {
 	case "memory":
@@ -507,7 +634,7 @@ func buildTelemetry(ctx context.Context, logger *slog.Logger) (app.TelemetryReco
 		ttlSeconds := parseIntOrDefault(os.Getenv("TELEMETRY_TTL_SECONDS"), 604800) // 7 days
 
 		rec, err := telemetryadapter.NewValkeyRecorderFromAddress(
-			ctx, address, password, db, keyPrefix, time.Duration(ttlSeconds)*time.Second,
+			ctx, address, password, db, keyPrefix, time.Duration(ttlSeconds)*time.Second, valkeyTLS,
 		)
 		if err != nil {
 			logger.Warn("telemetry valkey connection failed, falling back to memory", "error", err)
@@ -541,6 +668,15 @@ func buildArtifactStore(ctx context.Context, localRoot string, logger *slog.Logg
 		logger.Info("artifact store initialized", "backend", "local", "root", localRoot)
 		return storage.NewLocalArtifactStore(localRoot), nil
 	case "s3":
+		useSSL := parseBoolOrDefault(os.Getenv("ARTIFACT_S3_USE_SSL"), false)
+		var s3TLS *tls.Config
+		if caPath := strings.TrimSpace(os.Getenv("ARTIFACT_S3_CA_PATH")); caPath != "" {
+			var tlsErr error
+			s3TLS, tlsErr = tlsutil.BuildClientTLSFromCA(caPath)
+			if tlsErr != nil {
+				return nil, fmt.Errorf("s3 TLS: %w", tlsErr)
+			}
+		}
 		cfg := storage.S3Config{
 			Bucket:    envOrDefault("ARTIFACT_S3_BUCKET", "workspace-artifacts"),
 			Prefix:    strings.TrimSpace(os.Getenv("ARTIFACT_S3_PREFIX")),
@@ -549,6 +685,8 @@ func buildArtifactStore(ctx context.Context, localRoot string, logger *slog.Logg
 			AccessKey: strings.TrimSpace(os.Getenv("ARTIFACT_S3_ACCESS_KEY")),
 			SecretKey: os.Getenv("ARTIFACT_S3_SECRET_KEY"),
 			PathStyle: parseBoolOrDefault(os.Getenv("ARTIFACT_S3_PATH_STYLE"), true),
+			UseSSL:    useSSL,
+			TLSConfig: s3TLS,
 		}
 		store, err := storage.NewS3ArtifactStoreFromConfig(ctx, cfg)
 		if err != nil {

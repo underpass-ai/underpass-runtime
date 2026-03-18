@@ -2,6 +2,7 @@ package eventbus
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -38,8 +39,12 @@ func NewNATSPublisher(js jsPublisher, subjectPrefix string) *NATSPublisher {
 
 // NewNATSPublisherFromURL connects to NATS, obtains a JetStream context, and
 // ensures the stream exists. The stream is created if absent.
-func NewNATSPublisherFromURL(ctx context.Context, natsURL, streamName string) (*NATSPublisher, *nats.Conn, error) {
-	nc, err := nats.Connect(natsURL)
+func NewNATSPublisherFromURL(ctx context.Context, natsURL, streamName string, tlsCfg *tls.Config) (*NATSPublisher, *nats.Conn, error) {
+	var opts []nats.Option
+	if tlsCfg != nil {
+		opts = append(opts, nats.Secure(tlsCfg))
+	}
+	nc, err := nats.Connect(natsURL, opts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("nats connect: %w", err)
 	}

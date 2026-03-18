@@ -1,3 +1,10 @@
+{{- include "underpass-runtime.validateValues" . -}}
+{{- $tlsMode := include "underpass-runtime.tlsMode" . -}}
+{{- $tls := default (dict) .Values.tls -}}
+{{- $natsTls := default (dict) .Values.natsTls -}}
+{{- $natsTlsMode := include "underpass-runtime.natsTlsMode" . -}}
+{{- $valkeyTls := default (dict) .Values.valkeyTls -}}
+{{- $valkeyTlsEnabled := default false $valkeyTls.enabled -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -36,7 +43,7 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - name: http
+            - name: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           envFrom:
@@ -73,17 +80,34 @@ spec:
                   key: {{ .Values.artifacts.s3.secretKeyKey }}
             {{- end }}
           livenessProbe:
+            {{- if eq $tlsMode "mutual" }}
+            {{- /* mTLS: kubelet cannot present a client cert — use tcpSocket */}}
+            tcpSocket:
+              port: {{ .Values.service.port }}
+            {{- else }}
             httpGet:
               path: /healthz
-              port: http
+              port: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
+              {{- if eq $tlsMode "server" }}
+              scheme: HTTPS
+              {{- end }}
+            {{- end }}
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 3
             failureThreshold: 3
           readinessProbe:
+            {{- if eq $tlsMode "mutual" }}
+            tcpSocket:
+              port: {{ .Values.service.port }}
+            {{- else }}
             httpGet:
               path: /healthz
-              port: http
+              port: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
+              {{- if eq $tlsMode "server" }}
+              scheme: HTTPS
+              {{- end }}
+            {{- end }}
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
@@ -97,6 +121,21 @@ spec:
               mountPath: {{ .Values.artifacts.root }}
             - name: tmp
               mountPath: /tmp
+            {{- if and (ne $tlsMode "disabled") $tls.existingSecret }}
+            - name: tls
+              mountPath: {{ $tls.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- if and (ne $natsTlsMode "disabled") $natsTls.existingSecret }}
+            - name: nats-tls
+              mountPath: {{ $natsTls.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- if and $valkeyTlsEnabled $valkeyTls.existingSecret }}
+            - name: valkey-tls
+              mountPath: {{ $valkeyTls.mountPath }}
+              readOnly: true
+            {{- end }}
       volumes:
         - name: workspaces
           emptyDir:
@@ -107,6 +146,21 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 256Mi
+        {{- if and (ne $tlsMode "disabled") $tls.existingSecret }}
+        - name: tls
+          secret:
+            secretName: {{ $tls.existingSecret }}
+        {{- end }}
+        {{- if and (ne $natsTlsMode "disabled") $natsTls.existingSecret }}
+        - name: nats-tls
+          secret:
+            secretName: {{ $natsTls.existingSecret }}
+        {{- end }}
+        {{- if and $valkeyTlsEnabled $valkeyTls.existingSecret }}
+        - name: valkey-tls
+          secret:
+            secretName: {{ $valkeyTls.existingSecret }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

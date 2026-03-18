@@ -1,3 +1,4 @@
+{{- $tlsMode := include "underpass-runtime.tlsMode" . -}}
 apiVersion: v1
 kind: Service
 metadata:
@@ -8,8 +9,8 @@ spec:
   type: {{ .Values.service.type }}
   ports:
     - port: {{ .Values.service.port }}
-      targetPort: http
+      targetPort: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
       protocol: TCP
-      name: http
+      name: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
   selector:
     {{- include "underpass-runtime.selectorLabels" . | nindent 4 }}

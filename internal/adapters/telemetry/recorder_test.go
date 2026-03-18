@@ -357,7 +357,7 @@ func TestNoopRecorder(t *testing.T) {
 }
 
 func TestNewValkeyRecorderFromAddress_Unreachable(t *testing.T) {
-	_, err := NewValkeyRecorderFromAddress(context.Background(), "localhost:1", "", 0, "ws:tel", time.Hour)
+	_, err := NewValkeyRecorderFromAddress(context.Background(), "localhost:1", "", 0, "ws:tel", time.Hour, nil)
 	if err == nil {
 		t.Fatal("expected error for unreachable address")
 	}

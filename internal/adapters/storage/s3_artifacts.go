@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -41,7 +43,9 @@ type S3Config struct {
 	Region    string
 	AccessKey string
 	SecretKey string
-	PathStyle bool // Required for MinIO
+	PathStyle bool        // Required for MinIO
+	UseSSL    bool        // Use HTTPS for S3 connections
+	TLSConfig *tls.Config // Custom TLS config (e.g. custom CA)
 }
 
 // NewS3ArtifactStore creates an S3ArtifactStore from a pre-configured client.
@@ -67,6 +71,12 @@ func NewS3ArtifactStoreFromConfig(ctx context.Context, cfg S3Config) (*S3Artifac
 		opts = append(opts, config.WithCredentialsProvider(
 			credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, ""),
 		))
+	}
+
+	if cfg.TLSConfig != nil {
+		opts = append(opts, config.WithHTTPClient(&http.Client{
+			Transport: &http.Transport{TLSClientConfig: cfg.TLSConfig},
+		}))
 	}
 
 	awsCfg, err := config.LoadDefaultConfig(ctx, opts...)
