@@ -253,19 +253,19 @@ FROM (
 )
 `
 	if _, err := db.Exec(genSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, 0, 0, fmt.Errorf("generate: %w", err)
 	}
 
 	var count int64
 	if err := db.QueryRow("SELECT COUNT(*) FROM invocations").Scan(&count); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, 0, 0, err
 	}
 
 	var combos int
 	if err := db.QueryRow("SELECT COUNT(DISTINCT tool_id || ':' || context_signature) FROM invocations").Scan(&combos); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, 0, 0, err
 	}
 
@@ -278,7 +278,7 @@ FROM (
 
 // captureAudit records snapshots in-memory.
 type captureAudit struct {
-	mu   sync.Mutex
+	mu    sync.Mutex
 	snaps []auditSnap
 }
 
@@ -549,4 +549,3 @@ func formatNumber(n int64) string {
 	}
 	return string(result)
 }
-

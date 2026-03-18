@@ -13,7 +13,7 @@ import (
 
 func TestBuildWorkspaceManagerKubernetes(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-	memStore, err := buildSessionStore(logger)
+	memStore, err := buildSessionStore(logger, nil)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestInitKubernetesRuntime_NonK8sBackend(t *testing.T) {
 
 func TestBuildWorkspaceManagerKubernetes_NilClient(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-	memStore, err := buildSessionStore(logger)
+	memStore, err := buildSessionStore(logger, nil)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestBuildWorkspaceManagerKubernetes_NilClient(t *testing.T) {
 
 func TestBuildWorkspaceManagerKubernetes_UnsupportedBackend(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-	memStore, err := buildSessionStore(logger)
+	memStore, err := buildSessionStore(logger, nil)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestStartPodJanitorIfEnabled_Disabled(t *testing.T) {
 	t.Setenv("WORKSPACE_K8S_POD_JANITOR_ENABLED", "false")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 	client := k8sfake.NewSimpleClientset()
-	memStore, err := buildSessionStore(logger)
+	memStore, err := buildSessionStore(logger, nil)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestStartPodJanitorIfEnabled_Enabled(t *testing.T) {
 	t.Setenv("WORKSPACE_K8S_POD_JANITOR_ENABLED", "true")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 	client := k8sfake.NewSimpleClientset()
-	memStore, err := buildSessionStore(logger)
+	memStore, err := buildSessionStore(logger, nil)
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
