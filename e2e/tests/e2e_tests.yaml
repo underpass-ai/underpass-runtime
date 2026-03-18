@@ -86,3 +86,11 @@ workspace_tests:
     kind: "agent"
     timeout_override: 300
     tags: ["agent", "event-driven", "nats", "tls", "tools", "code-review"]
+
+  - id: "13"
+    name: "13-multi-agent-pipeline"
+    job_name: "e2e-multi-agent-pipeline"
+    tier: "full"
+    kind: "agent"
+    timeout_override: 300
+    tags: ["agent", "pipeline", "multi-agent", "nats", "tls", "architect", "developer", "tester", "reviewer", "qa"]

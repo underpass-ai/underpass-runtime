@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-multi-agent-pipeline
+  namespace: underpass-runtime
+  labels:
+    app: e2e-multi-agent-pipeline
+    test-type: e2e
+    test-suite: workspace
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 7200
+  activeDeadlineSeconds: 300
+
+  template:
+    metadata:
+      labels:
+        app: e2e-multi-agent-pipeline
+        test-type: e2e
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull
+      volumes:
+        - name: ca-cert
+          configMap:
+            name: runtime-ca
+
+      containers:
+        - name: test-runner
+          image: ghcr.io/underpass-ai/underpass-runtime/e2e-multi-agent-pipeline:v1.0.0
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: ca-cert
+              mountPath: /etc/ssl/runtime
+              readOnly: true
+          env:
+            - name: WORKSPACE_URL
+              value: "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            - name: NATS_URL
+              value: "nats://nats.underpass-runtime.svc.cluster.local:4222"
+            - name: SSL_CERT_FILE
+              value: "/etc/ssl/runtime/ca.crt"
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/ssl/runtime/ca.crt"
+            - name: EVIDENCE_FILE
+              value: "/tmp/evidence-13.json"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: E2E_DEBUG
+              value: "1"
+            - name: E2E_SKIP_CLEANUP
+              value: "0"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
