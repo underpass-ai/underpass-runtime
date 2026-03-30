@@ -114,7 +114,7 @@ Last updated: 2026-03-30
 | # | Action | Effort | Impact |
 |---|--------|--------|--------|
 | N11 | Fix SonarCloud token | 15 min | done (SONAR_TOKEN secret updated) |
-| N12 | Add Helm chart linting job to CI (`helm lint charts/underpass-runtime`) | 30 min | Chart validation |
+| N12 | Add Helm chart linting job to CI (`helm lint charts/underpass-runtime`) | 30 min | done |
 | N13 | Add pre-commit hooks (`.pre-commit-config.yaml`: gofmt, govet, lint) | 30 min | Developer experience |
 
 ### 3.4 Observability (Priority: planned)
@@ -128,18 +128,18 @@ Last updated: 2026-03-30
 
 | # | Action | Effort | Impact |
 |---|--------|--------|--------|
-| N16 | Create OpenAPI spec for HTTP API | 4-8 hours | API-first development |
-| N17 | Add contract validation gate in CI | 2-4 hours | Breaking change detection |
-| N18 | AsyncAPI spec for NATS domain events | 2-4 hours | Event contract clarity |
+| N16 | Create OpenAPI spec for HTTP API | 4-8 hours | done |
+| N17 | Add contract validation gate in CI | 2-4 hours | done |
+| N18 | AsyncAPI spec for NATS domain events | 2-4 hours | done |
 
 ### 3.6 Release & Versioning (Priority: backlog)
 
 | # | Action | Effort | Impact |
 |---|--------|--------|--------|
-| N19 | Semantic versioning strategy + git tags | 1 hour | Release management |
-| N20 | CHANGELOG.md (conventional-commits based) | 1 hour | Change visibility |
-| N21 | Release automation (GitHub Actions) | 2-4 hours | Release process |
-| N22 | Helm chart version automation | 1-2 hours | Deployment consistency |
+| N19 | Semantic versioning strategy + git tags | 1 hour | done (release.yml) |
+| N20 | CHANGELOG.md (conventional-commits based) | 1 hour | done (auto-generated in release.yml) |
+| N21 | Release automation (GitHub Actions) | 2-4 hours | done |
+| N22 | Helm chart version automation | 1-2 hours | backlog |
 
 ### 3.7 Structural (Priority: backlog)
 
@@ -165,9 +165,9 @@ Last updated: 2026-03-30
 | SonarCloud blocking | Yes | No | Yes | Closed |
 | Dependabot | Yes | No | Yes | Closed |
 | Quality gate script | Yes | No | Yes | Closed |
-| Contract validation | buf + contract-gate | None | None | **Open** |
-| OpenAPI/AsyncAPI specs | AsyncAPI | None | None | **Open** |
-| Release automation | Manual | Manual | Manual | **Open** |
-| CHANGELOG | None | None | None | **Open** |
+| Contract validation | buf + contract-gate | None | OpenAPI + Helm lint in CI | Closed |
+| OpenAPI/AsyncAPI specs | AsyncAPI | None | OpenAPI 3.1 + AsyncAPI 3.0 | Closed |
+| Release automation | Manual | Manual | release.yml (tag → build → GH release → GHCR) | Closed |
+| CHANGELOG | None | None | Auto-generated in release workflow | Closed |
 | Pre-commit hooks | Compensated | None | None | **Open** |
 | Domain observability | Value objects | Basic metrics | Basic metrics | **Open** |

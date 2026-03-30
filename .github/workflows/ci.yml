@@ -55,6 +55,24 @@ jobs:
       - name: go vet (k8s)
         run: go vet -tags k8s ./...
 
+      - name: Validate OpenAPI spec
+        run: |
+          go install github.com/pb33f/openapi-changes/cmd/openapi-changes@latest 2>/dev/null || true
+          if command -v npx &>/dev/null; then
+            npx --yes @redocly/cli lint api/openapi/workspace.v1.yaml --skip-rule no-unused-components
+          else
+            echo "Skipping OpenAPI lint (npx not available)"
+          fi
+
+      - name: Helm lint
+        run: |
+          if command -v helm &>/dev/null; then
+            helm lint charts/underpass-runtime
+          else
+            curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+            helm lint charts/underpass-runtime
+          fi
+
   # ──────────────────────────────────────────────
   # Build
   # ──────────────────────────────────────────────

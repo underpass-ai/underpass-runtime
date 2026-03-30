@@ -1,0 +1,305 @@
+asyncapi: 3.0.0
+info:
+  title: Underpass Runtime — Workspace Domain Events
+  version: 0.1.0
+  description: |
+    Domain events published by underpass-runtime to NATS.
+    Events follow the envelope pattern: a common DomainEvent wrapper
+    with event-type-specific payloads.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  development:
+    host: nats://localhost:4222
+    protocol: nats
+    description: Local NATS server
+  kubernetes:
+    host: nats://nats:4222
+    protocol: nats
+    description: In-cluster NATS
+
+defaultContentType: application/json
+
+channels:
+  sessionCreated:
+    address: workspace.session.created
+    messages:
+      sessionCreated:
+        $ref: "#/components/messages/SessionCreated"
+
+  sessionClosed:
+    address: workspace.session.closed
+    messages:
+      sessionClosed:
+        $ref: "#/components/messages/SessionClosed"
+
+  invocationStarted:
+    address: workspace.invocation.started
+    messages:
+      invocationStarted:
+        $ref: "#/components/messages/InvocationStarted"
+
+  invocationCompleted:
+    address: workspace.invocation.completed
+    messages:
+      invocationCompleted:
+        $ref: "#/components/messages/InvocationCompleted"
+
+  invocationDenied:
+    address: workspace.invocation.denied
+    messages:
+      invocationDenied:
+        $ref: "#/components/messages/InvocationDenied"
+
+  artifactStored:
+    address: workspace.artifact.stored
+    messages:
+      artifactStored:
+        $ref: "#/components/messages/ArtifactStored"
+
+operations:
+  publishSessionCreated:
+    action: send
+    channel:
+      $ref: "#/channels/sessionCreated"
+    summary: Published when a new workspace session is created.
+
+  publishSessionClosed:
+    action: send
+    channel:
+      $ref: "#/channels/sessionClosed"
+    summary: Published when a session is closed (manually or via TTL).
+
+  publishInvocationStarted:
+    action: send
+    channel:
+      $ref: "#/channels/invocationStarted"
+    summary: Published when a tool invocation begins execution.
+
+  publishInvocationCompleted:
+    action: send
+    channel:
+      $ref: "#/channels/invocationCompleted"
+    summary: Published when a tool invocation finishes (succeeded or failed).
+
+  publishInvocationDenied:
+    action: send
+    channel:
+      $ref: "#/channels/invocationDenied"
+    summary: Published when the policy engine denies a tool invocation.
+
+  publishArtifactStored:
+    action: send
+    channel:
+      $ref: "#/channels/artifactStored"
+    summary: Published when an invocation artifact is persisted to the artifact store.
+
+components:
+  messages:
+    SessionCreated:
+      name: SessionCreated
+      title: Session Created
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/DomainEventEnvelope"
+      examples:
+        - name: sessionCreated
+          payload:
+            id: evt-abc123
+            type: workspace.session.created
+            version: v1
+            timestamp: "2026-03-30T12:00:00Z"
+            session_id: session-def456
+            tenant_id: acme-corp
+            actor_id: agent-architect
+            payload:
+              runtime_kind: kubernetes
+              repo_url: https://github.com/example/repo.git
+              repo_ref: main
+              expires_at: "2026-03-30T13:00:00Z"
+
+    SessionClosed:
+      name: SessionClosed
+      title: Session Closed
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/DomainEventEnvelope"
+
+    InvocationStarted:
+      name: InvocationStarted
+      title: Invocation Started
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/DomainEventEnvelope"
+
+    InvocationCompleted:
+      name: InvocationCompleted
+      title: Invocation Completed
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/DomainEventEnvelope"
+      examples:
+        - name: invocationCompleted
+          payload:
+            id: evt-ghi789
+            type: workspace.invocation.completed
+            version: v1
+            timestamp: "2026-03-30T12:01:00Z"
+            session_id: session-def456
+            tenant_id: acme-corp
+            actor_id: agent-developer
+            payload:
+              invocation_id: inv-jkl012
+              tool_name: fs.write_file
+              status: succeeded
+              exit_code: 0
+              duration_ms: 45
+              output_bytes: 216
+              artifact_count: 1
+
+    InvocationDenied:
+      name: InvocationDenied
+      title: Invocation Denied
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/DomainEventEnvelope"
+
+    ArtifactStored:
+      name: ArtifactStored
+      title: Artifact Stored
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/DomainEventEnvelope"
+
+  schemas:
+    DomainEventEnvelope:
+      type: object
+      required: [id, type, version, timestamp, session_id, tenant_id, actor_id, payload]
+      properties:
+        id:
+          type: string
+          description: Unique event ID.
+        type:
+          type: string
+          enum:
+            - workspace.session.created
+            - workspace.session.closed
+            - workspace.invocation.started
+            - workspace.invocation.completed
+            - workspace.invocation.denied
+            - workspace.artifact.stored
+        version:
+          type: string
+          enum: [v1]
+        timestamp:
+          type: string
+          format: date-time
+        session_id:
+          type: string
+        tenant_id:
+          type: string
+        actor_id:
+          type: string
+        payload:
+          description: Event-type-specific payload (see typed schemas below).
+          oneOf:
+            - $ref: "#/components/schemas/SessionCreatedPayload"
+            - $ref: "#/components/schemas/SessionClosedPayload"
+            - $ref: "#/components/schemas/InvocationStartedPayload"
+            - $ref: "#/components/schemas/InvocationCompletedPayload"
+            - $ref: "#/components/schemas/InvocationDeniedPayload"
+            - $ref: "#/components/schemas/ArtifactStoredPayload"
+
+    SessionCreatedPayload:
+      type: object
+      properties:
+        runtime_kind:
+          type: string
+          enum: [local, docker, kubernetes]
+        repo_url:
+          type: string
+        repo_ref:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        workspace_dir:
+          type: string
+
+    SessionClosedPayload:
+      type: object
+      properties:
+        runtime_kind:
+          type: string
+          enum: [local, docker, kubernetes]
+        duration_sec:
+          type: integer
+        invocation_count:
+          type: integer
+
+    InvocationStartedPayload:
+      type: object
+      required: [invocation_id, tool_name]
+      properties:
+        invocation_id:
+          type: string
+        tool_name:
+          type: string
+        correlation_id:
+          type: string
+
+    InvocationCompletedPayload:
+      type: object
+      required: [invocation_id, tool_name, status, exit_code, duration_ms]
+      properties:
+        invocation_id:
+          type: string
+        tool_name:
+          type: string
+        correlation_id:
+          type: string
+        status:
+          type: string
+          enum: [running, succeeded, failed, denied]
+        exit_code:
+          type: integer
+        duration_ms:
+          type: integer
+        output_bytes:
+          type: integer
+        artifact_count:
+          type: integer
+        error_code:
+          type: string
+
+    InvocationDeniedPayload:
+      type: object
+      required: [invocation_id, tool_name, reason]
+      properties:
+        invocation_id:
+          type: string
+        tool_name:
+          type: string
+        correlation_id:
+          type: string
+        reason:
+          type: string
+
+    ArtifactStoredPayload:
+      type: object
+      required: [invocation_id, artifact_id, name, content_type, size_bytes]
+      properties:
+        invocation_id:
+          type: string
+        artifact_id:
+          type: string
+        name:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+        sha256:
+          type: string
