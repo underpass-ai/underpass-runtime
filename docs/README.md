@@ -23,6 +23,7 @@
 | Document | Description |
 |---|---|
 | [Testing Guide](testing.md) | Test pyramid, unit/integration/E2E matrix, CI gates |
+| [Observability](observability.md) | Metrics inventory, OTel tracing, Prometheus alerts, Grafana queries |
 
 ## Runbooks
 

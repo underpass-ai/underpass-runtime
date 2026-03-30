@@ -94,11 +94,16 @@ type CommandRunner interface {
 	Run(ctx context.Context, session domain.Session, spec CommandSpec) (CommandResult, error)
 }
 
+// InvocationStore persists tool invocation records.
 type InvocationStore interface {
 	Save(ctx context.Context, invocation domain.Invocation) error
 	Get(ctx context.Context, invocationID string) (domain.Invocation, bool, error)
 }
 
+// CorrelationFinder looks up invocations by their client-provided
+// correlation ID within a session and tool scope. This is a separate
+// interface from InvocationStore because not all store backends support
+// secondary indexes (e.g. a simple key-value store).
 type CorrelationFinder interface {
 	FindByCorrelation(
 		ctx context.Context,
