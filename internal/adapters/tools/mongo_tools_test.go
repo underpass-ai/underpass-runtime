@@ -220,3 +220,48 @@ func TestValidateMongoFilter_EmptyFilter(t *testing.T) {
 		t.Fatalf("expected empty filter to pass: %v", err)
 	}
 }
+
+func TestValidateMongoFilter_DeepNested(t *testing.T) {
+	deep := map[string]any{
+		"level1": map[string]any{
+			"level2": map[string]any{
+				"$function": "evil()",
+			},
+		},
+	}
+	if err := validateMongoFilter(deep); err == nil {
+		t.Fatal("expected deeply nested $function to be rejected")
+	}
+}
+
+func TestValidateMongoFilter_SafeComplex(t *testing.T) {
+	complex := map[string]any{
+		"$or": []any{
+			map[string]any{"status": "active"},
+			map[string]any{"status": "pending"},
+		},
+		"$and": []any{
+			map[string]any{"age": map[string]any{"$gte": 18}},
+			map[string]any{"country": map[string]any{"$in": []any{"US", "UK"}}},
+		},
+		"name": map[string]any{"$regex": "^test"},
+	}
+	if err := validateMongoFilter(complex); err != nil {
+		t.Fatalf("expected complex safe filter to pass: %v", err)
+	}
+}
+
+func TestValidateMongoFilter_AllDangerousRejected(t *testing.T) {
+	for _, op := range []string{"$where", "$accumulator", "$function", "$expr"} {
+		// Top-level
+		if err := validateMongoFilter(map[string]any{op: "val"}); err == nil {
+			t.Errorf("expected top-level %s to be rejected", op)
+		}
+		// Nested
+		if err := validateMongoFilter(map[string]any{
+			"wrapper": map[string]any{op: "val"},
+		}); err == nil {
+			t.Errorf("expected nested %s to be rejected", op)
+		}
+	}
+}
