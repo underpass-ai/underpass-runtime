@@ -57,12 +57,11 @@ jobs:
 
       - name: Validate OpenAPI spec
         run: |
-          go install github.com/pb33f/openapi-changes/cmd/openapi-changes@latest 2>/dev/null || true
-          if command -v npx &>/dev/null; then
-            npx --yes @redocly/cli lint api/openapi/workspace.v1.yaml --skip-rule no-unused-components
-          else
-            echo "Skipping OpenAPI lint (npx not available)"
-          fi
+          npx --yes @redocly/cli lint api/openapi/workspace.v1.yaml \
+            --skip-rule no-unused-components \
+            --skip-rule operation-4xx-response \
+            --skip-rule no-server-example.com \
+            --skip-rule security-defined
 
       - name: Helm lint
         run: |

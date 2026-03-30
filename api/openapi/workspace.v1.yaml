@@ -19,6 +19,10 @@ servers:
   - url: https://underpass-runtime.underpass-runtime.svc.cluster.local:50053
     description: Kubernetes in-cluster
 
+security:
+  - {}
+  - trustedHeaders: []
+
 tags:
   - name: health
     description: Service health and metrics
