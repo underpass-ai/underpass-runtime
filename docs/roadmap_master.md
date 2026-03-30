@@ -121,7 +121,7 @@ Last updated: 2026-03-30
 
 | # | Action | Effort | Impact |
 |---|--------|--------|--------|
-| N14 | Domain-layer observability value objects (like kernel's `BundleQualityMetrics`) | 4-8 hours | backlog (metrics already domain-driven via Invocation) |
+| N14 | Domain-layer observability value objects (like kernel's `BundleQualityMetrics`) | 4-8 hours | done (InvocationQualityMetrics + QualityObserver port) |
 | N15 | Document OTel instruments inventory (current metrics list) | 1 hour | done (docs/observability.md) |
 
 ### 3.5 Contract Management (Priority: backlog)

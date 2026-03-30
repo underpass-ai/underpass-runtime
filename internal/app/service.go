@@ -29,20 +29,21 @@ const (
 )
 
 type Service struct {
-	workspace  WorkspaceManager
-	catalog    CapabilityRegistry
-	policy     Authorizer
-	tools      Invoker
-	invStore   InvocationStore
-	artifacts  ArtifactStore
-	audit      AuditLogger
-	events     EventPublisher
-	telemetry  TelemetryRecorder
-	telemetryQ TelemetryQuerier
-	kpiMetrics *KPIMetrics
-	quotas     *invocationQuotaLimiter
-	metrics    *invocationMetrics
-	tracer     trace.Tracer
+	workspace       WorkspaceManager
+	catalog         CapabilityRegistry
+	policy          Authorizer
+	tools           Invoker
+	invStore        InvocationStore
+	artifacts       ArtifactStore
+	audit           AuditLogger
+	events          EventPublisher
+	telemetry       TelemetryRecorder
+	telemetryQ      TelemetryQuerier
+	kpiMetrics      *KPIMetrics
+	quotas          *invocationQuotaLimiter
+	metrics         *invocationMetrics
+	qualityObserver QualityObserver
+	tracer          trace.Tracer
 }
 
 // NewService creates a workspace service wired to the given ports.
@@ -73,9 +74,17 @@ func NewService(
 		events:     &noopEventPublisher{},
 		telemetry:  noopTelemetryRecorder{},
 		telemetryQ: noopTelemetryQuerier{},
-		quotas:     newInvocationQuotaLimiterFromEnv(),
-		metrics:    newInvocationMetrics(),
-		tracer:     otel.Tracer("workspace.service"),
+		quotas:          newInvocationQuotaLimiterFromEnv(),
+		metrics:         newInvocationMetrics(),
+		qualityObserver: noopQualityObserver{},
+		tracer:          otel.Tracer("workspace.service"),
+	}
+}
+
+// SetQualityObserver replaces the default noop quality observer.
+func (s *Service) SetQualityObserver(obs QualityObserver) {
+	if obs != nil {
+		s.qualityObserver = obs
 	}
 }
 
@@ -94,6 +103,12 @@ func (s *Service) SetTelemetry(rec TelemetryRecorder, q TelemetryQuerier) {
 	if q != nil {
 		s.telemetryQ = q
 	}
+}
+
+// noopQualityObserver discards all quality metrics.
+type noopQualityObserver struct{}
+
+func (noopQualityObserver) ObserveInvocationQuality(context.Context, domain.InvocationQualityMetrics, domain.QualityObservationContext) {
 }
 
 // noopEventPublisher is the zero-dependency default that discards events.
@@ -285,6 +300,16 @@ func (s *Service) InvokeTool(ctx context.Context, sessionID, toolName string, re
 	defer func() {
 		if recordMetrics && s.metrics != nil {
 			s.metrics.Observe(invocation)
+		}
+		if recordMetrics && s.qualityObserver != nil {
+			if qm, qerr := domain.ComputeInvocationQuality(invocation); qerr == nil {
+				s.qualityObserver.ObserveInvocationQuality(ctx, qm, domain.QualityObservationContext{
+					SessionID: session.ID,
+					TenantID:  session.Principal.TenantID,
+					ActorID:   session.Principal.ActorID,
+					Timestamp: time.Now().UTC(),
+				})
+			}
 		}
 	}()
 	if serviceErr := s.storeInvocation(ctx, invocation); serviceErr != nil {
