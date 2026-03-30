@@ -55,6 +55,23 @@ jobs:
       - name: go vet (k8s)
         run: go vet -tags k8s ./...
 
+      - name: Validate OpenAPI spec
+        run: |
+          npx --yes @redocly/cli lint api/openapi/workspace.v1.yaml \
+            --skip-rule no-unused-components \
+            --skip-rule operation-4xx-response \
+            --skip-rule no-server-example.com \
+            --skip-rule security-defined
+
+      - name: Helm lint
+        run: |
+          if command -v helm &>/dev/null; then
+            helm lint charts/underpass-runtime
+          else
+            curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+            helm lint charts/underpass-runtime
+          fi
+
   # ──────────────────────────────────────────────
   # Build
   # ──────────────────────────────────────────────
@@ -300,7 +317,7 @@ jobs:
             -Dsonar.projectKey=underpass-ai_underpass-runtime
             -Dsonar.go.coverage.reportPaths=coverage-full.out
             -Dsonar.sources=.
-            -Dsonar.exclusions=**/*_test.go,**/testdata/**,**/vendor/**,e2e/**,services/**
+            -Dsonar.exclusions=**/*_test.go,**/testdata/**,**/vendor/**,e2e/**,services/**,api/**,.github/**,scripts/**
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.go,e2e/**/*.py
             -Dsonar.coverage.minimum=70

@@ -1,0 +1,631 @@
+openapi: 3.1.0
+info:
+  title: Underpass Runtime — Workspace API
+  version: 0.1.0
+  description: |
+    Governed tool execution API for AI agent workspaces.
+    Provides session management, tool discovery, policy-enforced invocation,
+    and artifact retrieval.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  contact:
+    name: Underpass AI
+    url: https://github.com/underpass-ai/underpass-runtime
+
+servers:
+  - url: http://localhost:50053
+    description: Local development
+  - url: https://underpass-runtime.underpass-runtime.svc.cluster.local:50053
+    description: Kubernetes in-cluster
+
+security:
+  - {}
+  - trustedHeaders: []
+
+tags:
+  - name: health
+    description: Service health and metrics
+  - name: sessions
+    description: Workspace session lifecycle
+  - name: tools
+    description: Tool discovery and recommendations
+  - name: invocations
+    description: Tool invocation and results
+  - name: artifacts
+    description: Invocation artifacts and logs
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [health]
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Prometheus text exposition format
+          content:
+            text/plain:
+              schema:
+                type: string
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /v1/sessions:
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Create a workspace session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session:
+                    $ref: "#/components/schemas/Session"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /v1/sessions/{session_id}:
+    delete:
+      operationId: closeSession
+      tags: [sessions]
+      summary: Close a workspace session
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Session closed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  closed:
+                    type: boolean
+                    enum: [true]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
+
+  /v1/sessions/{session_id}/tools:
+    get:
+      operationId: listTools
+      tags: [tools]
+      summary: List all available tools
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Tool list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tools:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Capability"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/sessions/{session_id}/tools/discovery:
+    get:
+      operationId: discoverTools
+      tags: [tools]
+      summary: Discover tools with filtering
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: detail
+          in: query
+          schema:
+            type: string
+            enum: [compact, full]
+            default: compact
+        - name: risk
+          in: query
+          description: Comma-separated risk levels
+          schema:
+            type: string
+          example: low,medium
+        - name: tags
+          in: query
+          description: Comma-separated tags
+          schema:
+            type: string
+        - name: side_effects
+          in: query
+          description: Comma-separated side effect types
+          schema:
+            type: string
+        - name: scope
+          in: query
+          description: Comma-separated scopes
+          schema:
+            type: string
+        - name: cost
+          in: query
+          description: Comma-separated cost hints
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Filtered tool discovery
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoveryResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/sessions/{session_id}/tools/recommendations:
+    get:
+      operationId: recommendTools
+      tags: [tools]
+      summary: Get tool recommendations
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: task_hint
+          in: query
+          description: Natural language task description for relevance scoring
+          schema:
+            type: string
+        - name: top_k
+          in: query
+          description: Maximum number of recommendations
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+      responses:
+        "200":
+          description: Tool recommendations with scores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/sessions/{session_id}/tools/{tool_name}/invoke:
+    post:
+      operationId: invokeTool
+      tags: [invocations]
+      summary: Invoke a tool in the session workspace
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: tool_name
+          in: path
+          required: true
+          schema:
+            type: string
+          example: fs.write_file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvokeToolRequest"
+      responses:
+        "200":
+          description: Tool invocation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invocation:
+                    $ref: "#/components/schemas/Invocation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: Policy denied the invocation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invocation:
+                    $ref: "#/components/schemas/Invocation"
+                  error:
+                    $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/invocations/{invocation_id}:
+    get:
+      operationId: getInvocation
+      tags: [invocations]
+      summary: Get invocation result
+      parameters:
+        - $ref: "#/components/parameters/InvocationId"
+      responses:
+        "200":
+          description: Invocation details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invocation:
+                    $ref: "#/components/schemas/Invocation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/invocations/{invocation_id}/logs:
+    get:
+      operationId: getInvocationLogs
+      tags: [artifacts]
+      summary: Get invocation logs
+      parameters:
+        - $ref: "#/components/parameters/InvocationId"
+      responses:
+        "200":
+          description: Invocation log lines
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/LogLine"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/invocations/{invocation_id}/artifacts:
+    get:
+      operationId: getInvocationArtifacts
+      tags: [artifacts]
+      summary: List invocation artifacts
+      parameters:
+        - $ref: "#/components/parameters/InvocationId"
+      responses:
+        "200":
+          description: Artifact list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  artifacts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Artifact"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: session-abc123
+    InvocationId:
+      name: invocation_id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: inv-def456
+
+  schemas:
+    CreateSessionRequest:
+      type: object
+      required: [principal]
+      properties:
+        session_id:
+          type: string
+          description: Optional explicit session ID. Auto-generated if omitted.
+        repo_url:
+          type: string
+          description: Git repository URL to clone into workspace.
+        repo_ref:
+          type: string
+          description: Git ref (branch, tag, SHA) to checkout.
+        source_repo_path:
+          type: string
+          description: Local path to copy into workspace (local backend only).
+        allowed_paths:
+          type: array
+          items:
+            type: string
+          description: Restrict tool access to these workspace-relative paths.
+        principal:
+          $ref: "#/components/schemas/Principal"
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Arbitrary key-value metadata (e.g. runner_profile).
+        expires_in_seconds:
+          type: integer
+          minimum: 1
+          description: Session TTL in seconds.
+
+    Principal:
+      type: object
+      required: [tenant_id, actor_id, roles]
+      properties:
+        tenant_id:
+          type: string
+        actor_id:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        workspace_path:
+          type: string
+        runtime:
+          $ref: "#/components/schemas/RuntimeRef"
+        repo_url:
+          type: string
+        repo_ref:
+          type: string
+        allowed_paths:
+          type: array
+          items:
+            type: string
+        principal:
+          $ref: "#/components/schemas/Principal"
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    RuntimeRef:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [local, docker, kubernetes]
+        namespace:
+          type: string
+        pod_name:
+          type: string
+        container:
+          type: string
+        container_id:
+          type: string
+        workdir:
+          type: string
+
+    Capability:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        scope:
+          type: string
+          enum: [repo, workspace, cluster, external]
+        side_effects:
+          type: string
+          enum: [none, reversible, irreversible]
+        risk_level:
+          type: string
+          enum: [low, medium, high]
+        requires_approval:
+          type: boolean
+        idempotency:
+          type: string
+          enum: [guaranteed, best-effort, none]
+        cost_hint:
+          type: string
+
+    InvokeToolRequest:
+      type: object
+      required: [args]
+      properties:
+        correlation_id:
+          type: string
+          description: Client-provided idempotency key.
+        args:
+          type: object
+          description: Tool-specific arguments (validated against input_schema).
+        approved:
+          type: boolean
+          default: false
+          description: Set true to bypass approval requirement for high-risk tools.
+
+    Invocation:
+      type: object
+      properties:
+        id:
+          type: string
+        session_id:
+          type: string
+        tool_name:
+          type: string
+        correlation_id:
+          type: string
+        status:
+          type: string
+          enum: [running, succeeded, failed, denied]
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+        exit_code:
+          type: integer
+        output:
+          description: Tool-specific output (validated against output_schema).
+        output_ref:
+          type: string
+          description: Artifact path for large outputs.
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogLine"
+        logs_ref:
+          type: string
+          description: Artifact path for large log outputs.
+        artifacts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Artifact"
+        error:
+          $ref: "#/components/schemas/Error"
+
+    LogLine:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        channel:
+          type: string
+          enum: [stdout, stderr]
+        message:
+          type: string
+
+    Artifact:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        path:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+        sha256:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+    DiscoveryResponse:
+      type: object
+      description: Filtered tool discovery result. Shape depends on detail level.
+
+    RecommendationResponse:
+      type: object
+      description: Ranked tool recommendations with scores.
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Access denied
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: "#/components/schemas/Error"
+    MethodNotAllowed:
+      description: HTTP method not allowed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: "#/components/schemas/Error"
+
+  securitySchemes:
+    trustedHeaders:
+      type: apiKey
+      in: header
+      name: X-Workspace-Auth-Token
+      description: |
+        Shared token for trusted_headers auth mode.
+        Additional headers: X-Workspace-Tenant-Id, X-Workspace-Actor-Id, X-Workspace-Roles.

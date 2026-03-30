@@ -32,11 +32,18 @@
 | [Scaling](runbooks/scaling.md) | HPA, vertical scaling, capacity planning |
 | [TLS Certificate Rotation](runbooks/tls-rotation.md) | Zero-downtime cert renewal |
 
+## API Contracts
+
+| Document | Description |
+|---|---|
+| [OpenAPI 3.1 — Workspace API](../api/openapi/workspace.v1.yaml) | HTTP API contract (sessions, tools, invocations) |
+| [AsyncAPI 3.0 — Domain Events](../api/asyncapi/workspace-events.v1.yaml) | NATS event contract (6 event types) |
+
 ## Reference
 
 | Document | Description |
 |---|---|
-| [Capability Catalog](CAPABILITY_CATALOG.md) | Auto-generated catalog of 96+ tools |
+| [Capability Catalog](CAPABILITY_CATALOG.md) | Auto-generated catalog of 99 tools |
 | [Tool Catalog Guide](TOOL_CATALOG_GUIDE.md) | How to add new tools |
 | [Runner Images](RUNNER_IMAGES.md) | 6 runner profiles (base, toolchains, secops, container, k6, fat) |
 | [vLLM Setup](VLLM_SETUP.md) | vLLM integration for LLM-driven agents |
