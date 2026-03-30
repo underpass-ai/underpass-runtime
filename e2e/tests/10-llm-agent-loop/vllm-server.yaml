@@ -22,9 +22,18 @@ spec:
         app: vllm-server
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: false          # vLLM requires root for GPU driver access
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: vllm
           image: docker.io/vllm/vllm-openai:v0.15.0-cu130
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           args:
             - "--model"
             - "Qwen/Qwen3-8B"

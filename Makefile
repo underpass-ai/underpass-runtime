@@ -13,7 +13,7 @@ CORE_TEST_PACKAGES := ./internal/app ./internal/adapters/audit ./internal/adapte
 export GOCACHE ?= /tmp/go-cache-workspace
 export GOTMPDIR ?= /tmp/go-tmp-workspace
 
-.PHONY: help run build test test-all test-core coverage coverage-core coverage-full catalog-docs clean docker-build docker-push integration-test integration-up integration-down
+.PHONY: help run build test test-all test-core coverage coverage-core coverage-full catalog-docs clean docker-build docker-push integration-test integration-up integration-down quality-gate
 
 help:
 	@echo "Workspace service commands"
@@ -29,6 +29,7 @@ help:
 	@echo "  make integration-test   # Run integration tests in devcontainer"
 	@echo "  make integration-up     # Start devcontainer services"
 	@echo "  make integration-down   # Stop devcontainer services"
+	@echo "  make quality-gate      # Run full local quality gate (mirrors CI)"
 	@echo ""
 	@echo "Variables:"
 	@echo "  COVERAGE_MIN=$(COVERAGE_MIN)"
@@ -84,6 +85,9 @@ coverage-full:
 catalog-docs:
 	@mkdir -p "$(GOCACHE)" "$(GOTMPDIR)"
 	go run ./cmd/catalog-docs
+
+quality-gate:
+	bash scripts/ci/quality-gate.sh
 
 clean:
 	rm -rf bin coverage*.out

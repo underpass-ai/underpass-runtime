@@ -45,6 +45,10 @@ type Service struct {
 	tracer     trace.Tracer
 }
 
+// NewService creates a workspace service wired to the given ports.
+// An optional InvocationStore may be provided; if omitted, an in-memory
+// store is used. Call Set* methods after construction to attach optional
+// collaborators (event publisher, telemetry, session store, KPI metrics).
 func NewService(
 	workspace WorkspaceManager,
 	catalog CapabilityRegistry,
