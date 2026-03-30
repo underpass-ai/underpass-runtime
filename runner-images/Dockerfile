@@ -27,7 +27,7 @@ WORKDIR /workspace/repo
 USER runner
 CMD ["sh", "-lc", "sleep infinity"]
 
-FROM docker.io/library/golang:1.25-bookworm AS golang
+FROM docker.io/library/golang:1.26-bookworm AS golang
 
 FROM docker.io/aquasec/trivy:0.56.2 AS trivybin
 
