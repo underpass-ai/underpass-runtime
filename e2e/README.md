@@ -19,6 +19,7 @@ End-to-end tests run as Kubernetes Jobs against a live runtime deployment.
 | 12 | event-driven-agent | full | NATS event triggers code-review agent → workspace → findings → NATS |
 | 13 | multi-agent-pipeline | full | 5-agent pipeline (architect → developer → test → review → QA) |
 | 14 | full-infra-stack | full | TLS + Valkey persistence + NATS events + S3 artifacts end-to-end |
+| 15 | vllm-learning-loop | full | vLLM agent → discovery → invoke → telemetry → recommendations adapt |
 
 ## Running
 

@@ -102,3 +102,11 @@ workspace_tests:
     kind: "infra"
     timeout_override: 120
     tags: ["infra", "tls", "valkey", "nats", "outbox", "s3", "telemetry", "persistence"]
+
+  - id: "15"
+    name: "15-vllm-learning-loop"
+    job_name: "e2e-vllm-learning-loop"
+    tier: "full"
+    kind: "research"
+    timeout_override: 900
+    tags: ["vllm", "learning-loop", "recommendations", "telemetry", "beta-swts", "research"]
