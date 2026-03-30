@@ -181,3 +181,42 @@ func TestMongoHelpers_ProfileAndDatabasePolicies(t *testing.T) {
 		t.Fatal("expected database deny")
 	}
 }
+
+func TestValidateMongoFilter_SafeOperators(t *testing.T) {
+	safe := map[string]any{
+		"status": "active",
+		"$and": []any{
+			map[string]any{"age": map[string]any{"$gte": 18}},
+			map[string]any{"role": "admin"},
+		},
+	}
+	if err := validateMongoFilter(safe); err != nil {
+		t.Fatalf("expected safe filter to pass: %v", err)
+	}
+}
+
+func TestValidateMongoFilter_DangerousOperators(t *testing.T) {
+	for _, op := range mongoDangerousOperators {
+		filter := map[string]any{op: "malicious()"}
+		if err := validateMongoFilter(filter); err == nil {
+			t.Fatalf("expected %s to be rejected", op)
+		}
+	}
+}
+
+func TestValidateMongoFilter_NestedDangerous(t *testing.T) {
+	nested := map[string]any{
+		"status": map[string]any{
+			"$where": "this.isAdmin()",
+		},
+	}
+	if err := validateMongoFilter(nested); err == nil {
+		t.Fatal("expected nested $where to be rejected")
+	}
+}
+
+func TestValidateMongoFilter_EmptyFilter(t *testing.T) {
+	if err := validateMongoFilter(map[string]any{}); err != nil {
+		t.Fatalf("expected empty filter to pass: %v", err)
+	}
+}

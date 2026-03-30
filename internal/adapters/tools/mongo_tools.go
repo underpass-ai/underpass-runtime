@@ -276,8 +276,8 @@ func (c *liveMongoClient) Find(ctx context.Context, req mongoFindRequest) ([]map
 	if filter == nil {
 		filter = map[string]any{}
 	}
-	if err := validateMongoFilter(filter); err != nil {
-		return nil, err
+	if filterErr := validateMongoFilter(filter); filterErr != nil {
+		return nil, filterErr
 	}
 
 	cursor, err := coll.Find(ctx, filter, opts)
@@ -313,8 +313,8 @@ func (c *liveMongoClient) Aggregate(ctx context.Context, req mongoAggregateReque
 		pipeline = []map[string]any{}
 	}
 	for _, stage := range pipeline {
-		if err := validateMongoFilter(stage); err != nil {
-			return nil, err
+		if stageErr := validateMongoFilter(stage); stageErr != nil {
+			return nil, stageErr
 		}
 	}
 
