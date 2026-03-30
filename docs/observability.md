@@ -10,6 +10,32 @@ of underpass-runtime.
 underpass-runtime exposes Prometheus-compatible metrics at `/metrics`.
 Metrics are computed in-process — no external metrics library dependency.
 
+### Domain Value Object: InvocationQualityMetrics
+
+Quality metrics are computed as a **domain value object** — invariant-validated
+at construction time, immutable, and observed through a hexagonal port.
+This mirrors rehydration-kernel's `BundleQualityMetrics` pattern.
+
+```
+Invocation completes
+    │
+    ├── domain.ComputeInvocationQuality(invocation)
+    │       → InvocationQualityMetrics (value object)
+    │           ├── tool_name, status, duration_ms, exit_code
+    │           ├── latency_bucket (fast/normal/slow/very_slow)
+    │           ├── success_rate (1.0 or 0.0)
+    │           └── error_code (if failed/denied)
+    │
+    └── QualityObserver.ObserveInvocationQuality(metrics, context)
+            ├── SlogQualityObserver → structured JSON logs (Loki)
+            ├── CompositeQualityObserver → fan-out to multiple backends
+            └── NoopQualityObserver → tests / disabled
+```
+
+**Port**: `QualityObserver` interface in `internal/app/types.go`
+**Value object**: `InvocationQualityMetrics` in `internal/domain/quality_metrics.go`
+**Adapters**: `internal/adapters/telemetry/quality_observer.go`
+
 ### Invocation Metrics (domain-layer)
 
 All metrics originate from the domain `Invocation` value object. When an

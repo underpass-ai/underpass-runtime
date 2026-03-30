@@ -135,6 +135,16 @@ type AuditLogger interface {
 	Record(ctx context.Context, event AuditEvent)
 }
 
+// QualityObserver observes invocation quality metrics computed from
+// completed invocations. Implementations must be safe for concurrent use
+// and should not block (buffer internally if doing I/O).
+//
+// This is the hexagonal port for domain-layer observability, mirroring
+// rehydration-kernel's QualityMetricsObserver pattern.
+type QualityObserver interface {
+	ObserveInvocationQuality(ctx context.Context, metrics domain.InvocationQualityMetrics, obsCtx domain.QualityObservationContext)
+}
+
 // EventPublisher publishes domain events to an event bus.
 // The default implementation is a noop that logs at debug level.
 type EventPublisher interface {
