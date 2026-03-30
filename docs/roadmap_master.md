@@ -93,27 +93,27 @@ Last updated: 2026-03-30
 
 | # | Action | Effort | Impact |
 |---|--------|--------|--------|
-| N1 | Fix README tool count: 96 → 99 | 5 min | Accuracy |
-| N2 | Fix README family count: 15+ → 23 | 5 min | Accuracy |
-| N3 | Add discovery + recommendations endpoints to README API table | 10 min | API discoverability |
-| N4 | Add tests 12, 13, 14 to `e2e/README.md` test catalog | 15 min | Completeness |
+| N1 | Fix README tool count: 96 → 99 | 5 min | done |
+| N2 | Fix README family count: 15+ → 23 | 5 min | done |
+| N3 | Add discovery + recommendations endpoints to README API table | 10 min | done (already present after PR #41 merge) |
+| N4 | Add tests 12, 13, 14 to `e2e/README.md` test catalog | 15 min | done |
 
 ### 3.2 Code Quality (Priority: planned)
 
 | # | Action | Effort | Impact |
 |---|--------|--------|--------|
-| N5 | Remove unused constants in `fs_tools.go` (fsKeyRecursive, fsKeyCreateParents, fsKeyMaxResults, fsKeyMaxEntries, fsKeyMaxBytes) | 10 min | Lint cleanliness |
-| N6 | Remove unused `boolPtr` in `container_tools.go:1129` | 5 min | Lint cleanliness |
-| N7 | Remove unused `containerMaxContainerNameSize`, `containerKeyNamespace`, `containerFmtK8sLogsFailed` in `container_tools.go` | 5 min | Lint cleanliness |
-| N8 | Remove unused `capabilityFamily` in `catalog_docs.go:11` | 5 min | Lint cleanliness |
-| N9 | Fix `dependency_tools.go:532` — replace if with `strings.TrimPrefix` (S1017) | 5 min | Lint compliance |
+| N5 | Remove unused constants in `fs_tools.go` | 10 min | done |
+| N6 | Remove unused `boolPtr` in `container_tools.go` | 5 min | not-applicable (used in k8s build tag) |
+| N7 | Remove unused `containerMaxContainerNameSize` in `container_tools.go` | 5 min | done |
+| N8 | Remove unused `capabilityFamily` in `catalog_docs.go` | 5 min | not-applicable (used in catalog_docs.go) |
+| N9 | Fix `dependency_tools.go:532` — replace if with `strings.TrimPrefix` (S1017) | 5 min | done |
 | N10 | Add bootstrap package tests (`data.go`, `messaging.go`, `secops.go`, `docker.go`) | 2-4 hours | Coverage |
 
 ### 3.3 CI Improvements (Priority: planned)
 
 | # | Action | Effort | Impact |
 |---|--------|--------|--------|
-| N11 | Fix SonarCloud token (403 error — may need sqp_ format token) | 15 min | Quality gate enforcement |
+| N11 | Fix SonarCloud token | 15 min | done (SONAR_TOKEN secret updated) |
 | N12 | Add Helm chart linting job to CI (`helm lint charts/underpass-runtime`) | 30 min | Chart validation |
 | N13 | Add pre-commit hooks (`.pre-commit-config.yaml`: gofmt, govet, lint) | 30 min | Developer experience |
 

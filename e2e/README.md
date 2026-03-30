@@ -16,6 +16,9 @@ End-to-end tests run as Kubernetes Jobs against a live runtime deployment.
 | 08 | data-flow | core | Full write → read → list → artifacts cycle |
 | 10 | llm-agent-loop | full | LLM (Claude/OpenAI/vLLM) drives tool discovery + invocation loop |
 | 11 | tool-learning-pipeline | core | DuckDB → Thompson Sampling → Valkey policies → NATS events |
+| 12 | event-driven-agent | full | NATS event triggers code-review agent → workspace → findings → NATS |
+| 13 | multi-agent-pipeline | full | 5-agent pipeline (architect → developer → test → review → QA) |
+| 14 | full-infra-stack | full | TLS + Valkey persistence + NATS events + S3 artifacts end-to-end |
 
 ## Running
 

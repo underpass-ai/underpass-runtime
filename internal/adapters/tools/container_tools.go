@@ -45,11 +45,10 @@ const (
 	containerDefaultTimeoutSec    = 30
 	containerMaxTimeoutSec        = 600
 	containerDefaultMaxExecBytes  = 512 * 1024
-	containerMaxRunCommandArgs    = 32
-	containerMaxExecCommandArgs   = 16
-	containerMaxCommandArgLength  = 256
-	containerMaxRunEnvVars        = 32
-	containerMaxContainerNameSize = 80
+	containerMaxRunCommandArgs   = 32
+	containerMaxExecCommandArgs  = 16
+	containerMaxCommandArgLength = 256
+	containerMaxRunEnvVars       = 32
 )
 
 const (
