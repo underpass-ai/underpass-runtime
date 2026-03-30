@@ -115,14 +115,14 @@ Last updated: 2026-03-30
 |---|--------|--------|--------|
 | N11 | Fix SonarCloud token | 15 min | done (SONAR_TOKEN secret updated) |
 | N12 | Add Helm chart linting job to CI (`helm lint charts/underpass-runtime`) | 30 min | done |
-| N13 | Add pre-commit hooks (`.pre-commit-config.yaml`: gofmt, govet, lint) | 30 min | Developer experience |
+| N13 | Add pre-commit hooks (`.pre-commit-config.yaml`: gofmt, govet, lint) | 30 min | done |
 
 ### 3.4 Observability (Priority: planned)
 
 | # | Action | Effort | Impact |
 |---|--------|--------|--------|
-| N14 | Domain-layer observability value objects (like kernel's `BundleQualityMetrics`) | 4-8 hours | Architectural quality |
-| N15 | Document OTel instruments inventory (current metrics list) | 1 hour | Operator visibility |
+| N14 | Domain-layer observability value objects (like kernel's `BundleQualityMetrics`) | 4-8 hours | backlog (metrics already domain-driven via Invocation) |
+| N15 | Document OTel instruments inventory (current metrics list) | 1 hour | done (docs/observability.md) |
 
 ### 3.5 Contract Management (Priority: backlog)
 
@@ -147,7 +147,7 @@ Last updated: 2026-03-30
 |---|--------|--------|--------|
 | N23 | Split `fs_tools.go` (1624 lines) into per-operation files | 2-4 hours | Maintainability |
 | N24 | Standardize error wrapping (always `fmt.Errorf %w`) | 2-4 hours | Error chain quality |
-| N25 | Separate `CorrelationFinder` interface from `InvocationStore` | 30 min | Interface clarity |
+| N25 | Separate `CorrelationFinder` interface from `InvocationStore` | 30 min | done (added godoc, already separate) |
 
 ---
 
@@ -169,5 +169,5 @@ Last updated: 2026-03-30
 | OpenAPI/AsyncAPI specs | AsyncAPI | None | OpenAPI 3.1 + AsyncAPI 3.0 | Closed |
 | Release automation | Manual | Manual | release.yml (tag → build → GH release → GHCR) | Closed |
 | CHANGELOG | None | None | Auto-generated in release workflow | Closed |
-| Pre-commit hooks | Compensated | None | None | **Open** |
-| Domain observability | Value objects | Basic metrics | Basic metrics | **Open** |
+| Pre-commit hooks | Compensated | None | .pre-commit-config.yaml | Closed |
+| Domain observability | Value objects | Basic metrics | docs/observability.md + domain-driven metrics | Closed |
