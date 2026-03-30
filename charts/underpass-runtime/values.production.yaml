@@ -1,0 +1,132 @@
+# Production overrides — TLS, Valkey persistence, NATS events, S3 artifacts,
+# monitoring, network policies.
+#
+# Usage:
+#   helm upgrade --install underpass-runtime charts/underpass-runtime \
+#     -f charts/underpass-runtime/values.yaml \
+#     -f charts/underpass-runtime/values.production.yaml \
+#     --set valkey.existingSecret=<your-valkey-secret> \
+#     --set auth.existingSecret=<your-auth-secret> \
+#     --set artifacts.s3.existingSecret=<your-s3-secret>
+#
+# You MUST provide these secrets externally:
+#   - valkey.existingSecret (Valkey password)
+#   - auth.existingSecret (shared auth token)
+#   - artifacts.s3.existingSecret (S3 access key + secret key)
+#   - tls.existingSecret (TLS cert + key + CA)
+#   - natsTls.existingSecret (NATS client TLS)
+#   - valkeyTls.existingSecret (Valkey client TLS)
+
+replicaCount: 2
+
+config:
+  logLevel: info
+  workspaceBackend: local
+  environment: production
+
+# --- TLS on all transports ---
+tls:
+  mode: server
+  # existingSecret: underpass-runtime-tls    # <-- set via --set
+  mountPath: /var/run/underpass-runtime/tls
+  keys:
+    cert: tls.crt
+    key: tls.key
+    clientCa: ca.crt
+
+natsTls:
+  mode: server
+  # existingSecret: underpass-runtime-nats-tls
+  mountPath: /var/run/underpass-runtime/nats-tls
+  keys:
+    ca: ca.crt
+    cert: ""
+    key: ""
+
+valkeyTls:
+  enabled: true
+  # existingSecret: underpass-runtime-valkey-tls
+  mountPath: /var/run/underpass-runtime/valkey-tls
+  keys:
+    ca: ca.crt
+    cert: ""
+    key: ""
+
+# --- Persistent backends ---
+stores:
+  backend: valkey
+  sessionTTLSeconds: 86400
+  invocationTTLSeconds: 86400
+
+valkey:
+  enabled: true
+  host: valkey-master
+  port: 6379
+  db: 0
+  # existingSecret: valkey-password
+
+eventBus:
+  type: nats
+  nats:
+    url: tls://nats:4222
+  outbox: true
+
+artifacts:
+  backend: s3
+  s3:
+    bucket: workspace-artifacts
+    endpoint: minio:9000
+    region: us-east-1
+    pathStyle: true
+    useSSL: true
+    caPath: /var/run/underpass-runtime/tls/ca.crt
+    # existingSecret: minio-workspace-svc
+
+# --- Auth ---
+auth:
+  mode: trusted_headers
+  # existingSecret: workspace-auth
+
+# --- Telemetry ---
+telemetry:
+  backend: valkey
+  ttlSeconds: 604800
+  aggregationIntervalSeconds: 300
+  otel:
+    enabled: true
+    # endpoint: otel-collector:4317
+    insecure: false
+
+# --- Monitoring ---
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+
+prometheusRule:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+
+# --- Resilience ---
+networkPolicy:
+  enabled: true
+
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# --- Tool Learning ---
+toolLearning:
+  enabled: true
+
+# --- MinIO IAM ---
+minioIAM:
+  enabled: true
+  # endpoint: http://minio:9000

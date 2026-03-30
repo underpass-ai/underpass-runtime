@@ -14,6 +14,9 @@ type InMemoryInvocationStore struct {
 	byCorrKey   map[string]string
 }
 
+// NewInMemoryInvocationStore creates an invocation store backed by a simple map
+// with a secondary index for correlation-based lookups.
+// Intended for local development and testing; use Valkey for production.
 func NewInMemoryInvocationStore() *InMemoryInvocationStore {
 	return &InMemoryInvocationStore{
 		invocations: map[string]domain.Invocation{},

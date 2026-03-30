@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDefaultCapabilities_Metadata(t *testing.T) {
 	capabilities := DefaultCapabilities()
@@ -82,5 +85,148 @@ func TestDefaultCapabilities_Metadata(t *testing.T) {
 		if !seen[name] {
 			t.Fatalf("expected critical capability missing: %s", name)
 		}
+	}
+}
+
+func TestLoadCatalog_InvalidYAML(t *testing.T) {
+	_, err := loadCatalog([]byte("{{{{not yaml"))
+	if err == nil {
+		t.Fatal("expected error for invalid YAML")
+	}
+	if !strings.Contains(err.Error(), "catalog_defaults.yaml") {
+		t.Fatalf("error should mention catalog file, got: %s", err)
+	}
+}
+
+func TestLoadCatalog_MissingName(t *testing.T) {
+	yaml := `capabilities:
+  - name: ""
+    description: "test"
+    input_schema: "{}"
+    output_schema: "{}"
+`
+	_, err := loadCatalog([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected error for missing name")
+	}
+	if !strings.Contains(err.Error(), "missing name") {
+		t.Fatalf("error should mention missing name, got: %s", err)
+	}
+}
+
+func TestLoadCatalog_EmptyInputSchema(t *testing.T) {
+	yaml := `capabilities:
+  - name: "test.tool"
+    description: "test"
+    input_schema: ""
+    output_schema: "{}"
+`
+	_, err := loadCatalog([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected error for empty input_schema")
+	}
+	if !strings.Contains(err.Error(), "empty input_schema") {
+		t.Fatalf("error should mention empty input_schema, got: %s", err)
+	}
+}
+
+func TestLoadCatalog_EmptyOutputSchema(t *testing.T) {
+	yaml := `capabilities:
+  - name: "test.tool"
+    description: "test"
+    input_schema: "{}"
+    output_schema: ""
+`
+	_, err := loadCatalog([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected error for empty output_schema")
+	}
+	if !strings.Contains(err.Error(), "empty output_schema") {
+		t.Fatalf("error should mention empty output_schema, got: %s", err)
+	}
+}
+
+func TestLoadCatalog_InvalidJSON(t *testing.T) {
+	yaml := `capabilities:
+  - name: "test.tool"
+    description: "test"
+    input_schema: "not json"
+    output_schema: "{}"
+`
+	_, err := loadCatalog([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+	if !strings.Contains(err.Error(), "invalid JSON") {
+		t.Fatalf("error should mention invalid JSON, got: %s", err)
+	}
+}
+
+func TestLoadCatalog_InvalidExampleJSON(t *testing.T) {
+	yaml := `capabilities:
+  - name: "test.tool"
+    description: "test"
+    input_schema: "{}"
+    output_schema: "{}"
+    examples:
+      - "not json"
+`
+	_, err := loadCatalog([]byte(yaml))
+	if err == nil {
+		t.Fatal("expected error for invalid example JSON")
+	}
+	if !strings.Contains(err.Error(), "invalid JSON in examples[0]") {
+		t.Fatalf("error should mention invalid example, got: %s", err)
+	}
+}
+
+func TestLoadCatalog_ValidMinimal(t *testing.T) {
+	yaml := `capabilities:
+  - name: "test.tool"
+    description: "a test tool"
+    input_schema: '{"type":"object"}'
+    output_schema: '{"type":"object"}'
+    scope: session
+    risk_level: low
+`
+	caps, err := loadCatalog([]byte(yaml))
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if len(caps) != 1 {
+		t.Fatalf("expected 1 capability, got %d", len(caps))
+	}
+	if caps[0].Name != "test.tool" {
+		t.Fatalf("expected name test.tool, got %s", caps[0].Name)
+	}
+	if caps[0].Observability.TraceName != defaultTraceName {
+		t.Fatalf("expected trace name %s, got %s", defaultTraceName, caps[0].Observability.TraceName)
+	}
+	if caps[0].Observability.SpanName != "test.tool" {
+		t.Fatalf("expected span name test.tool, got %s", caps[0].Observability.SpanName)
+	}
+}
+
+func TestValidJSON_Empty(t *testing.T) {
+	_, err := validJSON("", "tool", "field")
+	if err == nil {
+		t.Fatal("expected error for empty string")
+	}
+}
+
+func TestValidJSON_Invalid(t *testing.T) {
+	_, err := validJSON("{broken", "tool", "field")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestValidJSON_Valid(t *testing.T) {
+	raw, err := validJSON(`{"key":"value"}`, "tool", "field")
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if string(raw) != `{"key":"value"}` {
+		t.Fatalf("unexpected raw JSON: %s", string(raw))
 	}
 }

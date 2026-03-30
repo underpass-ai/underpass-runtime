@@ -1,0 +1,64 @@
+# Development overrides — no TLS, memory backends, verbose logging.
+#
+# Usage:
+#   helm upgrade --install underpass-runtime charts/underpass-runtime \
+#     -f charts/underpass-runtime/values.yaml \
+#     -f charts/underpass-runtime/values.dev.yaml
+
+replicaCount: 1
+
+config:
+  logLevel: debug
+  workspaceBackend: local
+  environment: development
+
+tls:
+  mode: disabled
+
+stores:
+  backend: memory
+
+eventBus:
+  type: none
+
+telemetry:
+  backend: memory
+  otel:
+    enabled: false
+
+auth:
+  mode: payload
+
+artifacts:
+  backend: local
+
+toolLearning:
+  enabled: false
+
+minioIAM:
+  enabled: false
+
+networkPolicy:
+  enabled: false
+
+prometheusRule:
+  enabled: false
+
+serviceMonitor:
+  enabled: false
+
+podDisruptionBudget:
+  enabled: false
+
+autoscaling:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+    ephemeral-storage: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+    ephemeral-storage: 2Gi

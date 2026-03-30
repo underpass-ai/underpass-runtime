@@ -1,0 +1,77 @@
+version: 2
+updates:
+  # Go modules — root workspace
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - go
+    groups:
+      aws:
+        patterns:
+          - "github.com/aws/*"
+      k8s:
+        patterns:
+          - "k8s.io/*"
+      otel:
+        patterns:
+          - "go.opentelemetry.io/*"
+
+  # Go modules — tool-learning service
+  - package-ecosystem: gomod
+    directory: /services/tool-learning
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - go
+      - tool-learning
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+
+  # Docker — root Dockerfile
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+
+  # Docker — runner images
+  - package-ecosystem: docker
+    directory: /runner-images
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+      - runner-images
+
+  # Docker — tool-learning
+  - package-ecosystem: docker
+    directory: /services/tool-learning
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+      - tool-learning

@@ -13,6 +13,9 @@ type InMemorySessionStore struct {
 	sessions map[string]domain.Session
 }
 
+// NewInMemorySessionStore creates a session store backed by a simple map.
+// Sessions are expired lazily on Get when ExpiresAt has passed.
+// Intended for local development and testing; use Valkey for production.
 func NewInMemorySessionStore() *InMemorySessionStore {
 	return &InMemorySessionStore{
 		sessions: map[string]domain.Session{},

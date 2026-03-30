@@ -59,23 +59,44 @@ func DefaultCapabilities() []domain.Capability {
 }
 
 func mustLoadCatalog(data []byte) []domain.Capability {
+	caps, err := loadCatalog(data)
+	if err != nil {
+		panic(err.Error())
+	}
+	return caps
+}
+
+// loadCatalog parses the embedded YAML into domain capabilities.
+// Returns a descriptive error instead of panicking so callers can handle
+// startup failures gracefully when needed.
+func loadCatalog(data []byte) ([]domain.Capability, error) {
 	var cat yamlCatalog
 	if err := yaml.Unmarshal(data, &cat); err != nil {
-		panic(fmt.Sprintf("catalog_defaults.yaml: %v", err))
+		return nil, fmt.Errorf("catalog_defaults.yaml: %w", err)
 	}
 
 	caps := make([]domain.Capability, 0, len(cat.Capabilities))
 	for i, yc := range cat.Capabilities {
 		if yc.Name == "" {
-			panic(fmt.Sprintf("catalog_defaults.yaml[%d]: missing name", i))
+			return nil, fmt.Errorf("catalog_defaults.yaml[%d]: missing name", i)
 		}
 
-		inputSchema := mustValidJSON(yc.InputSchema, yc.Name, "input_schema")
-		outputSchema := mustValidJSON(yc.OutputSchema, yc.Name, "output_schema")
+		inputSchema, err := validJSON(yc.InputSchema, yc.Name, "input_schema")
+		if err != nil {
+			return nil, err
+		}
+		outputSchema, err := validJSON(yc.OutputSchema, yc.Name, "output_schema")
+		if err != nil {
+			return nil, err
+		}
 
 		var examples []json.RawMessage
 		for j, ex := range yc.Examples {
-			examples = append(examples, mustValidJSON(ex, yc.Name, fmt.Sprintf("examples[%d]", j)))
+			raw, err := validJSON(ex, yc.Name, fmt.Sprintf("examples[%d]", j))
+			if err != nil {
+				return nil, err
+			}
+			examples = append(examples, raw)
 		}
 
 		// span_name defaults to capability name; trace_name is always the constant.
@@ -100,16 +121,16 @@ func mustLoadCatalog(data []byte) []domain.Capability {
 			Examples:         examples,
 		})
 	}
-	return caps
+	return caps, nil
 }
 
-func mustValidJSON(s, capName, field string) json.RawMessage {
+func validJSON(s, capName, field string) (json.RawMessage, error) {
 	if s == "" {
-		panic(fmt.Sprintf("catalog %q: empty %s", capName, field))
+		return nil, fmt.Errorf("catalog %q: empty %s", capName, field)
 	}
 	raw := json.RawMessage(s)
 	if !json.Valid(raw) {
-		panic(fmt.Sprintf("catalog %q: invalid JSON in %s: %s", capName, field, s))
+		return nil, fmt.Errorf("catalog %q: invalid JSON in %s: %s", capName, field, s)
 	}
-	return raw
+	return raw, nil
 }
