@@ -32,6 +32,7 @@ func run() error {
 	maxLatency := flag.Int64("max-p95-latency-ms", 0, "Hard constraint: max p95 latency (0 = disabled)")
 	maxErrorRate := flag.Float64("max-error-rate", 0, "Hard constraint: max error rate (0 = disabled)")
 	maxCost := flag.Float64("max-p95-cost", 0, "Hard constraint: max p95 cost (0 = disabled)")
+	windowSize := flag.Int("window-size", 0, "Beta-SWTS sliding window: max recent invocations per (context, tool). 0 = stationary (all data)")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -48,6 +49,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	cfg.WindowSize = *windowSize
 	lake, store, publisher, audit, cleanup, err := buildAdapters(cfg, logger)
 	if err != nil {
 		return fmt.Errorf("build adapters: %w", err)
@@ -150,6 +152,7 @@ type adapterConfig struct {
 	NATSURL     string
 	NATSTLS     *tls.Config
 	Schedule    string
+	WindowSize  int
 }
 
 // loadConfig reads adapter configuration from environment variables.
@@ -222,7 +225,7 @@ func buildAdapters(cfg adapterConfig, logger *slog.Logger) (
 	func(),
 	error,
 ) {
-	lake, err := duckdb.NewLakeReaderFromS3(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.LakeBucket, cfg.S3Region, cfg.S3UseSSL)
+	lake, err := duckdb.NewLakeReaderFromS3(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.LakeBucket, cfg.S3Region, cfg.S3UseSSL, cfg.WindowSize)
 	if err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("duckdb lake reader: %w", err)
 	}

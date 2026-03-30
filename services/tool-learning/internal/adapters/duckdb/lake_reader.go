@@ -21,22 +21,35 @@ var safeSource = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$|^read_parquet\('.+
 // LakeReader implements app.TelemetryLakeReader using DuckDB
 // to query Parquet files from an S3-compatible object store (MinIO).
 type LakeReader struct {
-	db    *sql.DB
-	query string // pre-built aggregate query (source baked in at construction)
+	db         *sql.DB
+	query      string // pre-built aggregate query (source baked in at construction)
+	windowSize int    // sliding window: max recent invocations per (context, tool). 0 = unlimited.
 }
 
 // NewLakeReader creates a reader with a pre-configured DuckDB database.
 // source must be a table identifier or a read_parquet(...) expression.
+// windowSize limits to the N most recent invocations per (context, tool);
+// 0 means no limit (uses all data in the time range).
 // Returns an error if the source expression is unsafe.
-func NewLakeReader(db *sql.DB, source string) (*LakeReader, error) {
+func NewLakeReader(db *sql.DB, source string, windowSize ...int) (*LakeReader, error) {
 	if !safeSource.MatchString(source) {
 		return nil, fmt.Errorf("duckdb: unsafe source expression: %q", source)
 	}
-	return &LakeReader{db: db, query: fmt.Sprintf(aggregateQuery, source)}, nil
+	ws := 0
+	if len(windowSize) > 0 && windowSize[0] > 0 {
+		ws = windowSize[0]
+	}
+	q := aggregateQuery
+	if ws > 0 {
+		q = aggregateQueryWindowed
+	}
+	return &LakeReader{db: db, query: fmt.Sprintf(q, source), windowSize: ws}, nil
 }
 
 // NewLakeReaderFromS3 creates a reader configured for MinIO/S3.
-func NewLakeReaderFromS3(endpoint, accessKey, secretKey, bucket, region string, useSSL bool) (*LakeReader, error) {
+// windowSize limits to the N most recent invocations per (context, tool);
+// 0 means no limit (stationary mode, uses all data in time range).
+func NewLakeReaderFromS3(endpoint, accessKey, secretKey, bucket, region string, useSSL bool, windowSize ...int) (*LakeReader, error) {
 	db, err := sql.Open("duckdb", "")
 	if err != nil {
 		return nil, fmt.Errorf("duckdb open: %w", err)
@@ -74,7 +87,15 @@ func NewLakeReaderFromS3(endpoint, accessKey, secretKey, bucket, region string, 
 		"read_parquet('s3://%s/dt=*/hour=*/*.parquet', hive_partitioning=true)",
 		bucket,
 	)
-	return &LakeReader{db: db, query: fmt.Sprintf(aggregateQuery, source)}, nil
+	ws := 0
+	if len(windowSize) > 0 && windowSize[0] > 0 {
+		ws = windowSize[0]
+	}
+	q := aggregateQuery
+	if ws > 0 {
+		q = aggregateQueryWindowed
+	}
+	return &LakeReader{db: db, query: fmt.Sprintf(q, source), windowSize: ws}, nil
 }
 
 const aggregateQuery = `
@@ -92,9 +113,48 @@ WHERE ts >= ? AND ts < ?
 GROUP BY context_signature, tool_id
 `
 
+// aggregateQueryWindowed applies a sliding window: only the N most recent
+// invocations per (context_signature, tool_id) are considered, ordered by
+// timestamp descending. This implements Beta-SWTS (Sliding-Window Thompson
+// Sampling) for non-stationary tool effectiveness adaptation.
+//
+// Reference: Fiandri, Metelli, Trovo. "Sliding-Window Thompson Sampling
+// for Non-Stationary Settings." JAIR 2024. arxiv:2409.05181
+const aggregateQueryWindowed = `
+WITH ranked AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY context_signature, tool_id
+            ORDER BY ts DESC
+        ) AS row_num
+    FROM %s
+    WHERE ts >= ? AND ts < ?
+)
+SELECT
+    context_signature,
+    tool_id,
+    CAST(COUNT(*) AS BIGINT) AS total,
+    CAST(COUNT(*) FILTER (WHERE outcome = 'success') AS BIGINT) AS successes,
+    CAST(COUNT(*) FILTER (WHERE outcome = 'failure') AS BIGINT) AS failures,
+    CAST(COALESCE(PERCENTILE_DISC(0.95) WITHIN GROUP (ORDER BY latency_ms), 0) AS BIGINT) AS p95_latency_ms,
+    COALESCE(PERCENTILE_DISC(0.95) WITHIN GROUP (ORDER BY cost_units), 0.0) AS p95_cost,
+    AVG(CASE WHEN outcome = 'failure' THEN 1.0 ELSE 0.0 END) AS error_rate
+FROM ranked
+WHERE row_num <= ?
+GROUP BY context_signature, tool_id
+`
+
 // QueryAggregates scans invocations in [from, to) and returns per-(context, tool) aggregates.
+// When windowSize > 0 (Beta-SWTS mode), only the N most recent invocations per
+// (context, tool) within the time range are considered.
 func (r *LakeReader) QueryAggregates(ctx context.Context, from, to time.Time) ([]domain.AggregateStats, error) {
-	rows, err := r.db.QueryContext(ctx, r.query, from, to)
+	var rows *sql.Rows
+	var err error
+	if r.windowSize > 0 {
+		rows, err = r.db.QueryContext(ctx, r.query, from, to, r.windowSize)
+	} else {
+		rows, err = r.db.QueryContext(ctx, r.query, from, to)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("duckdb query: %w", err)
 	}
