@@ -11,7 +11,7 @@ We don't build models. We build the infrastructure that makes them actually work
 
 ## What it does
 
-Underpass Runtime gives AI agents **isolated workspaces** with **96+ governed tools** — filesystem, git, build, test, security scans, containers, Kubernetes — all under policy enforcement with full telemetry.
+Underpass Runtime gives AI agents **isolated workspaces** with **99 governed tools** — filesystem, git, build, test, security scans, containers, Kubernetes — all under policy enforcement with full telemetry.
 
 When an event fires (task assigned, PR opened, build broken), a specialized agent activates, gets only the context it needs, selects the best tools via Thompson Sampling, and executes them in a governed workspace. The telemetry feeds back into the learning loop. No polling. No orchestrator.
 
@@ -80,7 +80,7 @@ helm install underpass-runtime charts/underpass-runtime \
 
 ## Tool catalog
 
-96 capabilities across 15+ families:
+99 capabilities across 23 families:
 
 | Family | Tools | Examples |
 |--------|-------|---------|

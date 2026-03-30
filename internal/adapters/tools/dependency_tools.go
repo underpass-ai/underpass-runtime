@@ -529,9 +529,7 @@ func parseRustDependencyInventory(output string, maxDependencies int) ([]depende
 
 		name := strings.TrimSpace(fields[0])
 		version := strings.TrimSpace(fields[1])
-		if strings.HasPrefix(version, "v") {
-			version = strings.TrimPrefix(version, "v")
-		}
+		version = strings.TrimPrefix(version, "v")
 		version = strings.TrimSpace(strings.TrimSuffix(version, ","))
 		if name == "" || version == "" {
 			continue
