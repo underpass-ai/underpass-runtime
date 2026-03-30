@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/underpass-ai/underpass-runtime/internal/app"
@@ -170,6 +171,33 @@ func TestMongoHelpers_ProfileAndDatabasePolicies(t *testing.T) {
 		t.Fatal("expected openMongoClient endpoint validation error")
 	}
 
+	// Validate that liveMongoClient.Find rejects dangerous filters.
+	liveClient := &liveMongoClient{}
+	_, findErr := liveClient.Find(context.Background(), mongoFindRequest{
+		Endpoint:   "mongodb://localhost:27017",
+		Database:   "test",
+		Collection: "col",
+		Filter:     map[string]any{"$where": "evil()"},
+		Limit:      1,
+		Timeout:    1,
+	})
+	if findErr == nil || !strings.Contains(findErr.Error(), "$where") {
+		t.Fatalf("expected $where rejection from liveMongoClient.Find, got: %v", findErr)
+	}
+
+	// Validate that liveMongoClient.Aggregate rejects dangerous pipeline stages.
+	_, aggErr := liveClient.Aggregate(context.Background(), mongoAggregateRequest{
+		Endpoint:   "mongodb://localhost:27017",
+		Database:   "test",
+		Collection: "col",
+		Pipeline:   []map[string]any{{"$function": "evil()"}},
+		Limit:      1,
+		Timeout:    1,
+	})
+	if aggErr == nil || !strings.Contains(aggErr.Error(), "$function") {
+		t.Fatalf("expected $function rejection from liveMongoClient.Aggregate, got: %v", aggErr)
+	}
+
 	profile := connectionProfile{Scopes: map[string]any{"databases": []any{"sandbox", "dev*"}}}
 	if !databaseAllowedByProfile("sandbox", profile) {
 		t.Fatal("expected exact database allow")
@@ -179,5 +207,89 @@ func TestMongoHelpers_ProfileAndDatabasePolicies(t *testing.T) {
 	}
 	if databaseAllowedByProfile("prod", profile) {
 		t.Fatal("expected database deny")
+	}
+}
+
+func TestValidateMongoFilter_SafeOperators(t *testing.T) {
+	safe := map[string]any{
+		"status": "active",
+		"$and": []any{
+			map[string]any{"age": map[string]any{"$gte": 18}},
+			map[string]any{"role": "admin"},
+		},
+	}
+	if err := validateMongoFilter(safe); err != nil {
+		t.Fatalf("expected safe filter to pass: %v", err)
+	}
+}
+
+func TestValidateMongoFilter_DangerousOperators(t *testing.T) {
+	for _, op := range mongoDangerousOperators {
+		filter := map[string]any{op: "malicious()"}
+		if err := validateMongoFilter(filter); err == nil {
+			t.Fatalf("expected %s to be rejected", op)
+		}
+	}
+}
+
+func TestValidateMongoFilter_NestedDangerous(t *testing.T) {
+	nested := map[string]any{
+		"status": map[string]any{
+			"$where": "this.isAdmin()",
+		},
+	}
+	if err := validateMongoFilter(nested); err == nil {
+		t.Fatal("expected nested $where to be rejected")
+	}
+}
+
+func TestValidateMongoFilter_EmptyFilter(t *testing.T) {
+	if err := validateMongoFilter(map[string]any{}); err != nil {
+		t.Fatalf("expected empty filter to pass: %v", err)
+	}
+}
+
+func TestValidateMongoFilter_DeepNested(t *testing.T) {
+	deep := map[string]any{
+		"level1": map[string]any{
+			"level2": map[string]any{
+				"$function": "evil()",
+			},
+		},
+	}
+	if err := validateMongoFilter(deep); err == nil {
+		t.Fatal("expected deeply nested $function to be rejected")
+	}
+}
+
+func TestValidateMongoFilter_SafeComplex(t *testing.T) {
+	complex := map[string]any{
+		"$or": []any{
+			map[string]any{"status": "active"},
+			map[string]any{"status": "pending"},
+		},
+		"$and": []any{
+			map[string]any{"age": map[string]any{"$gte": 18}},
+			map[string]any{"country": map[string]any{"$in": []any{"US", "UK"}}},
+		},
+		"name": map[string]any{"$regex": "^test"},
+	}
+	if err := validateMongoFilter(complex); err != nil {
+		t.Fatalf("expected complex safe filter to pass: %v", err)
+	}
+}
+
+func TestValidateMongoFilter_AllDangerousRejected(t *testing.T) {
+	for _, op := range []string{"$where", "$accumulator", "$function", "$expr"} {
+		// Top-level
+		if err := validateMongoFilter(map[string]any{op: "val"}); err == nil {
+			t.Errorf("expected top-level %s to be rejected", op)
+		}
+		// Nested
+		if err := validateMongoFilter(map[string]any{
+			"wrapper": map[string]any{op: "val"},
+		}); err == nil {
+			t.Errorf("expected nested %s to be rejected", op)
+		}
 	}
 }

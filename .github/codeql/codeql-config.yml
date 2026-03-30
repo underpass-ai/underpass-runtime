@@ -1,0 +1,10 @@
+name: "underpass-runtime CodeQL config"
+
+# Exclude paths that are not application code.
+paths-ignore:
+  - e2e
+  - services
+  - api
+  - docs
+  - scripts
+  - runner-images

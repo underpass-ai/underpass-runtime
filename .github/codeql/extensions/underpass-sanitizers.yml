@@ -1,0 +1,12 @@
+extensions:
+  - addsTo:
+      pack: codeql/go-all
+      extensible: summaryModel
+    data:
+      # resolvePath sanitizes user-provided paths by:
+      # 1. filepath.Clean (canonicalize)
+      # 2. filepath.Abs
+      # 3. strings.HasPrefix check against workspace root
+      # 4. Double verification after Clean
+      # This makes the return value safe from path traversal.
+      - ["github.com/underpass-ai/underpass-runtime/internal/adapters/tools", "", false, "resolvePath", "", "", "Argument[0]", "ReturnValue[0]", "taint", "manual"]

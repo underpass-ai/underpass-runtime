@@ -37,6 +37,10 @@ const (
 	fsShellIfNotE       = "if [ ! -e "
 	fsShellThenSuffix   = " ]; then"
 	fsShellThenRmRf     = " ]; then rm -rf "
+
+	// Allocation caps — prevent uncontrolled allocation from user input.
+	fsMaxListEntriesCap  = 1000
+	fsMaxSearchResultCap = 10000
 )
 
 type FSListHandler struct {
@@ -171,7 +175,11 @@ func (h *FSListHandler) invokeLocal(session domain.Session, request struct {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: err.Error(), Retryable: false}
 	}
 
-	entries := make([]fsListEntry, 0, request.MaxEntries)
+	listCap := request.MaxEntries
+	if listCap > fsMaxListEntriesCap {
+		listCap = fsMaxListEntriesCap
+	}
+	entries := make([]fsListEntry, 0, listCap)
 	appendEntry := func(path string, info os.FileInfo) {
 		rel, relErr := filepath.Rel(session.WorkspacePath, path)
 		if relErr != nil {
@@ -293,7 +301,11 @@ func (h *FSListHandler) invokeRemote(
 	}
 
 	lines := splitOutputLines(commandResult.Output)
-	entries := make([]fsListEntry, 0, request.MaxEntries)
+	remoteCap := request.MaxEntries
+	if remoteCap > fsMaxListEntriesCap {
+		remoteCap = fsMaxListEntriesCap
+	}
+	entries := make([]fsListEntry, 0, remoteCap)
 	for _, line := range lines {
 		parts := strings.SplitN(line, "\t", 2)
 		if len(parts) != 2 {
@@ -1281,7 +1293,11 @@ func (h *FSSearchHandler) invokeLocal(
 // regular file for matches against re. It stops early when maxResults is
 // reached. The returned error is non-nil only for unexpected walk failures.
 func fsSearchWalk(resolved, workspacePath string, re *regexp.Regexp, maxResults int) ([]fsSearchMatch, error) {
-	results := make([]fsSearchMatch, 0, maxResults)
+	searchCap := maxResults
+	if searchCap > fsMaxSearchResultCap {
+		searchCap = fsMaxSearchResultCap
+	}
+	results := make([]fsSearchMatch, 0, searchCap)
 	walkStop := errors.New("search-limit-reached")
 	walkErr := filepath.Walk(resolved, fsSearchWalkFunc(workspacePath, re, &results, maxResults, walkStop))
 	if walkErr != nil && !errors.Is(walkErr, walkStop) {
@@ -1348,7 +1364,11 @@ func (h *FSSearchHandler) invokeRemote(
 		return app.ToolRunResult{}, toFSRunnerError(err, commandResult.Output)
 	}
 
-	results := make([]fsSearchMatch, 0, request.MaxResults)
+	grepCap := request.MaxResults
+	if grepCap > fsMaxSearchResultCap {
+		grepCap = fsMaxSearchResultCap
+	}
+	results := make([]fsSearchMatch, 0, grepCap)
 	for _, line := range splitOutputLines(commandResult.Output) {
 		if len(results) >= request.MaxResults {
 			break

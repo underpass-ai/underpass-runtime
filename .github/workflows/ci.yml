@@ -230,6 +230,8 @@ jobs:
             paths-ignore:
               - services
               - e2e
+            model-packs:
+              - .github/codeql/extensions/underpass-sanitizers.yml
 
       - name: Build
         run: CGO_ENABLED=0 go build -tags k8s ./...
