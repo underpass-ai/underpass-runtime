@@ -8,7 +8,7 @@
 # Monorepo build (from swe-ai-fleet root):
 #   docker build -f services/workspace/Dockerfile -t underpass-runtime services/workspace
 
-FROM docker.io/library/golang:1.25-alpine AS builder
+FROM docker.io/library/golang:1.26-alpine AS builder
 WORKDIR /src
 
 RUN apk add --no-cache git ca-certificates
