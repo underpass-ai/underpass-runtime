@@ -276,6 +276,9 @@ func (c *liveMongoClient) Find(ctx context.Context, req mongoFindRequest) ([]map
 	if filter == nil {
 		filter = map[string]any{}
 	}
+	if err := validateMongoFilter(filter); err != nil {
+		return nil, err
+	}
 
 	cursor, err := coll.Find(ctx, filter, opts)
 	if err != nil {
@@ -309,6 +312,11 @@ func (c *liveMongoClient) Aggregate(ctx context.Context, req mongoAggregateReque
 	if pipeline == nil {
 		pipeline = []map[string]any{}
 	}
+	for _, stage := range pipeline {
+		if err := validateMongoFilter(stage); err != nil {
+			return nil, err
+		}
+	}
 
 	cursor, err := coll.Aggregate(ctx, pipeline)
 	if err != nil {
@@ -328,6 +336,33 @@ func (c *liveMongoClient) Aggregate(ctx context.Context, req mongoAggregateReque
 		return nil, err
 	}
 	return out, nil
+}
+
+// mongoDangerousOperators are MongoDB operators that can execute arbitrary
+// JavaScript or bypass query semantics. Rejecting these prevents NoSQL
+// injection via user-provided filters.
+var mongoDangerousOperators = []string{
+	"$where",
+	"$accumulator",
+	"$function",
+	"$expr",
+}
+
+// validateMongoFilter rejects filters/stages that contain dangerous operators.
+func validateMongoFilter(doc map[string]any) error {
+	for key, val := range doc {
+		for _, op := range mongoDangerousOperators {
+			if key == op {
+				return fmt.Errorf("mongo operator %q is not allowed", op)
+			}
+		}
+		if nested, ok := val.(map[string]any); ok {
+			if err := validateMongoFilter(nested); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func openMongoClient(endpoint string, timeout time.Duration) (*mongo.Client, func(), error) {

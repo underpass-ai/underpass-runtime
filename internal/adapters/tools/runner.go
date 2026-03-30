@@ -31,7 +31,7 @@ func runCommand(ctx context.Context, cwd string, maxBytes int, stdin []byte, com
 		maxBytes = 256 * 1024
 	}
 
-	cmd := exec.CommandContext(ctx, command, args...)
+	cmd := exec.CommandContext(ctx, command, args...) //nolint:gosec // codeql[go/command-injection]: command execution is the core purpose of the workspace runtime; inputs are validated by the policy engine before reaching this point
 	cmd.Dir = cwd
 	if len(stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(stdin)

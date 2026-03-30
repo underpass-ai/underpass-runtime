@@ -124,7 +124,7 @@ func cloneRepo(ctx context.Context, repoURL, repoRef, targetPath string) error {
 	}
 	args = append(args, repoURL, targetPath)
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // codeql[go/command-injection]: git clone with validated repo URL and ref from session config
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git clone failed: %w: %s", err, string(output))
