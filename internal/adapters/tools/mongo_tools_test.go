@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/underpass-ai/underpass-runtime/internal/app"
@@ -168,6 +169,33 @@ func TestMongoHelpers_ProfileAndDatabasePolicies(t *testing.T) {
 
 	if _, _, err := openMongoClient("", 10); err == nil {
 		t.Fatal("expected openMongoClient endpoint validation error")
+	}
+
+	// Validate that liveMongoClient.Find rejects dangerous filters.
+	liveClient := &liveMongoClient{}
+	_, findErr := liveClient.Find(context.Background(), mongoFindRequest{
+		Endpoint:   "mongodb://localhost:27017",
+		Database:   "test",
+		Collection: "col",
+		Filter:     map[string]any{"$where": "evil()"},
+		Limit:      1,
+		Timeout:    1,
+	})
+	if findErr == nil || !strings.Contains(findErr.Error(), "$where") {
+		t.Fatalf("expected $where rejection from liveMongoClient.Find, got: %v", findErr)
+	}
+
+	// Validate that liveMongoClient.Aggregate rejects dangerous pipeline stages.
+	_, aggErr := liveClient.Aggregate(context.Background(), mongoAggregateRequest{
+		Endpoint:   "mongodb://localhost:27017",
+		Database:   "test",
+		Collection: "col",
+		Pipeline:   []map[string]any{{"$function": "evil()"}},
+		Limit:      1,
+		Timeout:    1,
+	})
+	if aggErr == nil || !strings.Contains(aggErr.Error(), "$function") {
+		t.Fatalf("expected $function rejection from liveMongoClient.Aggregate, got: %v", aggErr)
 	}
 
 	profile := connectionProfile{Scopes: map[string]any{"databases": []any{"sandbox", "dev*"}}}
