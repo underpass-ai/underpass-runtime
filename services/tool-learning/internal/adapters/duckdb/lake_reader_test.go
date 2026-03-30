@@ -237,6 +237,73 @@ func TestInstallHTTPFS(t *testing.T) {
 	}
 }
 
+func TestQueryAggregatesSlidingWindow(t *testing.T) {
+	db := openTestDB(t)
+
+	// Insert 10 invocations for fs.write: first 7 succeed, last 3 fail.
+	// With window=3, only the last 3 (all failures) should be aggregated.
+	_, err := db.Exec(`INSERT INTO invocations VALUES
+		('inv1', '2026-03-09 12:00:00', 'fs.write', 'gen:go:std', 'success', 100, 0.1),
+		('inv2', '2026-03-09 12:01:00', 'fs.write', 'gen:go:std', 'success', 100, 0.1),
+		('inv3', '2026-03-09 12:02:00', 'fs.write', 'gen:go:std', 'success', 100, 0.1),
+		('inv4', '2026-03-09 12:03:00', 'fs.write', 'gen:go:std', 'success', 100, 0.1),
+		('inv5', '2026-03-09 12:04:00', 'fs.write', 'gen:go:std', 'success', 100, 0.1),
+		('inv6', '2026-03-09 12:05:00', 'fs.write', 'gen:go:std', 'success', 100, 0.1),
+		('inv7', '2026-03-09 12:06:00', 'fs.write', 'gen:go:std', 'success', 100, 0.1),
+		('inv8', '2026-03-09 12:07:00', 'fs.write', 'gen:go:std', 'failure', 500, 0.5),
+		('inv9', '2026-03-09 12:08:00', 'fs.write', 'gen:go:std', 'failure', 600, 0.6),
+		('inv10','2026-03-09 12:09:00', 'fs.write', 'gen:go:std', 'failure', 700, 0.7)
+	`)
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	// Without window: all 10 invocations, 3/10 failures = 30% error rate
+	readerFull, err := NewLakeReader(db, "invocations")
+	if err != nil {
+		t.Fatalf("NewLakeReader: %v", err)
+	}
+	from := time.Date(2026, 3, 9, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC)
+
+	full, err := readerFull.QueryAggregates(context.Background(), from, to)
+	if err != nil {
+		t.Fatalf("full QueryAggregates: %v", err)
+	}
+	if len(full) != 1 || full[0].Total != 10 {
+		t.Fatalf("full: expected 1 result with 10 total, got %d results", len(full))
+	}
+	if full[0].Failures != 3 {
+		t.Errorf("full failures = %d, want 3", full[0].Failures)
+	}
+
+	// With window=3: only last 3 invocations, all failures = 100% error rate
+	readerWindowed, err := NewLakeReader(db, "invocations", 3)
+	if err != nil {
+		t.Fatalf("NewLakeReader windowed: %v", err)
+	}
+
+	windowed, err := readerWindowed.QueryAggregates(context.Background(), from, to)
+	if err != nil {
+		t.Fatalf("windowed QueryAggregates: %v", err)
+	}
+	if len(windowed) != 1 {
+		t.Fatalf("windowed: expected 1 result, got %d", len(windowed))
+	}
+	if windowed[0].Total != 3 {
+		t.Errorf("windowed total = %d, want 3", windowed[0].Total)
+	}
+	if windowed[0].Successes != 0 {
+		t.Errorf("windowed successes = %d, want 0", windowed[0].Successes)
+	}
+	if windowed[0].Failures != 3 {
+		t.Errorf("windowed failures = %d, want 3", windowed[0].Failures)
+	}
+	if windowed[0].ErrorRate < 0.99 {
+		t.Errorf("windowed error_rate = %f, want 1.0", windowed[0].ErrorRate)
+	}
+}
+
 func TestQueryAggregatesP95(t *testing.T) {
 	db := openTestDB(t)
 
