@@ -63,15 +63,15 @@ func ComputeInvocationQuality(inv Invocation) (InvocationQualityMetrics, error) 
 
 // Getters — value objects are immutable.
 
-func (m InvocationQualityMetrics) ToolName() string          { return m.toolName }
-func (m InvocationQualityMetrics) Status() InvocationStatus  { return m.status }
-func (m InvocationQualityMetrics) DurationMS() int64         { return m.durationMS }
-func (m InvocationQualityMetrics) ExitCode() int             { return m.exitCode }
-func (m InvocationQualityMetrics) OutputBytes() int64        { return m.outputBytes }
-func (m InvocationQualityMetrics) HasError() bool            { return m.hasError }
-func (m InvocationQualityMetrics) ErrorCode() string         { return m.errorCode }
-func (m InvocationQualityMetrics) LatencyBucket() string     { return m.latencyBucket }
-func (m InvocationQualityMetrics) SuccessRate() float64      { return m.successRate }
+func (m InvocationQualityMetrics) ToolName() string         { return m.toolName }
+func (m InvocationQualityMetrics) Status() InvocationStatus { return m.status }
+func (m InvocationQualityMetrics) DurationMS() int64        { return m.durationMS }
+func (m InvocationQualityMetrics) ExitCode() int            { return m.exitCode }
+func (m InvocationQualityMetrics) OutputBytes() int64       { return m.outputBytes }
+func (m InvocationQualityMetrics) HasError() bool           { return m.hasError }
+func (m InvocationQualityMetrics) ErrorCode() string        { return m.errorCode }
+func (m InvocationQualityMetrics) LatencyBucket() string    { return m.latencyBucket }
+func (m InvocationQualityMetrics) SuccessRate() float64     { return m.successRate }
 
 // QualityObservationContext provides metadata for the observer to add as
 // labels or structured log fields.
