@@ -87,7 +87,7 @@ jobs:
 
       - name: Upload binary
         if: matrix.tags == ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: underpass-runtime-linux-amd64
           path: bin/underpass-runtime
@@ -129,7 +129,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-docker-local
           path: |
@@ -160,7 +160,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-k8s
           path: coverage-k8s.out

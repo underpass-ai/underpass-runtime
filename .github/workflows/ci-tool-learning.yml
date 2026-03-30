@@ -98,7 +98,7 @@ jobs:
         run: go build -o bin/tool-learning ./cmd/tool-learning
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tool-learning-linux-amd64
           path: services/tool-learning/bin/tool-learning
@@ -139,7 +139,7 @@ jobs:
         run: go test ./... -coverprofile=coverage-full.out -covermode=atomic
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-tool-learning
           path: services/tool-learning/coverage-full.out
