@@ -50,3 +50,9 @@ type Clock = Nower
 type RealClock struct{}
 
 func (RealClock) Now() time.Time { return time.Now() }
+
+// PolicyComputer computes tool policies from aggregate telemetry.
+// Implementations: domain.ThompsonSampler, domain.ThompsonSamplerLLM.
+type PolicyComputer interface {
+	ComputePolicy(contextSig, toolID string, stats domain.AggregateStats) domain.ToolPolicy
+}

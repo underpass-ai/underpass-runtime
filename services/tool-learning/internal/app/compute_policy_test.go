@@ -91,6 +91,25 @@ func (f *failingPublisher) PublishPolicyUpdated(_ context.Context, _ []domain.To
 	return fmt.Errorf("nats unavailable")
 }
 
+type fakePolicyComputer struct {
+	calls int
+}
+
+func (f *fakePolicyComputer) ComputePolicy(contextSig, toolID string, stats domain.AggregateStats) domain.ToolPolicy {
+	f.calls++
+	return domain.ToolPolicy{
+		ContextSignature: contextSig,
+		ToolID:           toolID,
+		Alpha:            999,
+		Beta:             1,
+		Confidence:       0.999,
+		P95LatencyMs:     stats.P95LatencyMs,
+		P95Cost:          stats.P95Cost,
+		ErrorRate:        stats.ErrorRate,
+		NSamples:         stats.Total,
+	}
+}
+
 // --- Tests ---
 
 func TestComputePolicyRunHourly(t *testing.T) {
@@ -278,6 +297,39 @@ func TestComputePolicyAuditAndPublishErrors(t *testing.T) {
 	}
 	if result.PoliciesWritten != 1 {
 		t.Errorf("PoliciesWritten = %d, want 1", result.PoliciesWritten)
+	}
+}
+
+func TestComputePolicyWithCustomSampler(t *testing.T) {
+	now := time.Date(2026, 3, 9, 12, 0, 0, 0, time.UTC)
+	lake := &fakeLakeReader{
+		aggregates: []domain.AggregateStats{
+			{ContextSignature: "gen:go:std", ToolID: "fs.write", Total: 50, Successes: 45, Failures: 5, P95LatencyMs: 200, P95Cost: 0.1, ErrorRate: 0.1},
+		},
+	}
+	store := &fakePolicyStore{}
+	sampler := &fakePolicyComputer{}
+
+	uc := NewComputePolicyUseCase(ComputePolicyConfig{
+		Lake:    lake,
+		Store:   store,
+		Sampler: sampler,
+		Clock:   fakeClock{now: now},
+		Logger:  slog.Default(),
+	})
+
+	result, err := uc.RunHourly(context.Background())
+	if err != nil {
+		t.Fatalf("RunHourly() error: %v", err)
+	}
+	if result.PoliciesWritten != 1 {
+		t.Errorf("PoliciesWritten = %d, want 1", result.PoliciesWritten)
+	}
+	if sampler.calls != 1 {
+		t.Errorf("sampler.calls = %d, want 1", sampler.calls)
+	}
+	if store.written[0].Alpha != 999 {
+		t.Errorf("Alpha = %f, want 999 (from custom sampler)", store.written[0].Alpha)
 	}
 }
 
