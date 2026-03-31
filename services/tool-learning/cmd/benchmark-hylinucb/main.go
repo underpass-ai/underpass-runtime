@@ -22,7 +22,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -37,11 +36,12 @@ func main() {
 }
 
 var (
-	runtimeURL = flag.String("runtime-url", envOr("WORKSPACE_URL", "https://underpass-runtime:50053"), "Runtime API URL")
-	vllmURL    = flag.String("vllm-url", envOr("VLLM_URL", "http://vllm-server:8000"), "vLLM API URL")
-	vllmModel  = flag.String("vllm-model", envOr("VLLM_MODEL", "Qwen/Qwen3-8B"), "vLLM model name")
-	alpha      = flag.Float64("alpha", 0.25, "HyLinUCB exploration coefficient")
-	outputFile = flag.String("output", "", "Evidence JSON output file")
+	runtimeURL    = flag.String("runtime-url", envOr("WORKSPACE_URL", "https://underpass-runtime:50053"), "Runtime API URL")
+	vllmURL       = flag.String("vllm-url", envOr("VLLM_URL", "http://vllm-server:8000"), "vLLM API URL")
+	vllmModel     = flag.String("vllm-model", envOr("VLLM_MODEL", "Qwen/Qwen3-8B"), "vLLM model name")
+	alpha         = flag.Float64("alpha", 0.25, "HyLinUCB exploration coefficient")
+	outputFile    = flag.String("output", "", "Evidence JSON output file")
+	tlsSkipVerify = flag.Bool("tls-skip-verify", envOr("TLS_SKIP_VERIFY", "") == "true", "Skip TLS certificate verification (E2E only)")
 )
 
 type evidence struct {
@@ -75,11 +75,13 @@ type rankEvidence struct {
 func run() error {
 	flag.Parse()
 
+	transport := &http.Transport{}
+	if *tlsSkipVerify {
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // gated behind explicit --tls-skip-verify flag
+	}
 	client := &http.Client{
-		Timeout: 120 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // E2E test against self-signed certs
-		},
+		Timeout:   120 * time.Second,
+		Transport: transport,
 	}
 
 	scorer := domain.NewHyLinUCB(domain.SharedFeatureDim, domain.ArmFeatureDim, *alpha)
@@ -206,39 +208,55 @@ func run() error {
 
 	// ── Verify context differentiation ──
 	section("Verify Context Differentiation")
-	if len(ev.Rankings) >= 2 {
-		top1 := ev.Rankings[0].TopK
-		top2 := ev.Rankings[1].TopK
-		if len(top1) > 0 && len(top2) > 0 {
-			same := top1[0].ToolID == top2[0].ToolID
-			fmt.Printf("  Go top tool:     %s (%.4f)\n", top1[0].ToolID, top1[0].Score)
-			fmt.Printf("  Python top tool: %s (%.4f)\n", top2[0].ToolID, top2[0].Score)
-			if same {
-				fmt.Println("  INFO: Same top tool (may need more diverse invocations)")
-			} else {
-				fmt.Println("  CONTEXT DIFFERENTIATION CONFIRMED")
-			}
-		}
-	}
+	verifyDifferentiation(ev.Rankings)
 
 	ev.Status = "passed"
 
 	// ── Write evidence ──
-	if *outputFile != "" {
-		data, _ := json.MarshalIndent(ev, "", "  ")
-		if err := os.WriteFile(*outputFile, data, 0644); err != nil {
-			return fmt.Errorf("write evidence: %w", err)
-		}
-		fmt.Printf("\nEvidence written to %s\n", *outputFile)
-	} else {
-		data, _ := json.MarshalIndent(ev, "", "  ")
-		fmt.Printf("\n%s\n", string(data))
+	if err := writeEvidence(ev, *outputFile); err != nil {
+		return err
 	}
 
 	fmt.Println("\n" + strings.Repeat("=", 60))
 	fmt.Println("E2E BENCHMARK 16: PASSED")
 	fmt.Printf("Arms learned: %d\n", scorer.ArmCount())
 	fmt.Println(strings.Repeat("=", 60))
+	return nil
+}
+
+// verifyDifferentiation checks whether distinct contexts produce different
+// top-ranked tools, printing the result.
+func verifyDifferentiation(rankings []rankEvidence) bool {
+	if len(rankings) < 2 {
+		return false
+	}
+	top1 := rankings[0].TopK
+	top2 := rankings[1].TopK
+	if len(top1) == 0 || len(top2) == 0 {
+		return false
+	}
+	same := top1[0].ToolID == top2[0].ToolID
+	fmt.Printf("  Go top tool:     %s (%.4f)\n", top1[0].ToolID, top1[0].Score)
+	fmt.Printf("  Python top tool: %s (%.4f)\n", top2[0].ToolID, top2[0].Score)
+	if same {
+		fmt.Println("  INFO: Same top tool (may need more diverse invocations)")
+		return false
+	}
+	fmt.Println("  CONTEXT DIFFERENTIATION CONFIRMED")
+	return true
+}
+
+// writeEvidence serializes the evidence to a file or stdout.
+func writeEvidence(ev evidence, path string) error {
+	data, _ := json.MarshalIndent(ev, "", "  ")
+	if path != "" {
+		if err := os.WriteFile(path, data, 0644); err != nil {
+			return fmt.Errorf("write evidence: %w", err)
+		}
+		fmt.Printf("\nEvidence written to %s\n", path)
+		return nil
+	}
+	fmt.Printf("\n%s\n", string(data))
 	return nil
 }
 
@@ -441,6 +459,3 @@ func envOr(key, fallback string) string {
 	}
 	return fallback
 }
-
-// Ensure sort is used (imported for potential future use).
-var _ = sort.Strings
