@@ -370,10 +370,10 @@ func buildSampler(ctx context.Context, algo string, cfg algorithmConfig, logger 
 }
 
 // loadToolDescriptions reads tool descriptions from a JSON file.
-// If path is empty, returns a minimal default set.
+// If path is empty, returns the full embedded catalog (99 tools).
 func loadToolDescriptions(path string) ([]domain.ToolDescription, error) {
 	if path == "" {
-		return defaultToolDescriptions(), nil
+		return domain.CatalogToolDescriptions(), nil
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -384,21 +384,4 @@ func loadToolDescriptions(path string) ([]domain.ToolDescription, error) {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	return descs, nil
-}
-
-// defaultToolDescriptions returns a minimal set of tool descriptions
-// for LLM prior generation when no file is provided.
-func defaultToolDescriptions() []domain.ToolDescription {
-	return []domain.ToolDescription{
-		{ID: "fs.write_file", Description: "Write content to a file", Risk: "low", SideEffects: "reversible", Cost: "free"},
-		{ID: "fs.read_file", Description: "Read a file's contents", Risk: "low", SideEffects: "none", Cost: "free"},
-		{ID: "fs.search", Description: "Search files by pattern", Risk: "low", SideEffects: "none", Cost: "free"},
-		{ID: "git.commit", Description: "Create a git commit", Risk: "medium", SideEffects: "reversible", Cost: "free"},
-		{ID: "git.push", Description: "Push commits to remote", Risk: "high", SideEffects: "irreversible", Cost: "free"},
-		{ID: "repo.test", Description: "Run project test suite", Risk: "low", SideEffects: "none", Cost: "low"},
-		{ID: "repo.build", Description: "Build the project", Risk: "low", SideEffects: "none", Cost: "low"},
-		{ID: "security.scan_dependencies", Description: "Scan dependencies for vulnerabilities", Risk: "low", SideEffects: "none", Cost: "low"},
-		{ID: "k8s.get_pods", Description: "List Kubernetes pods", Risk: "low", SideEffects: "none", Cost: "free"},
-		{ID: "k8s.apply_manifest", Description: "Apply a Kubernetes manifest", Risk: "high", SideEffects: "irreversible", Cost: "medium"},
-	}
 }

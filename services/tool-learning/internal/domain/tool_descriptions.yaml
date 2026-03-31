@@ -1,0 +1,512 @@
+- id: fs.list
+  description: List files/directories under the session workspace.
+  risk: low
+  side_effects: none
+  cost: low
+- id: fs.read_file
+  description: Read a text or binary file from workspace.
+  risk: low
+  side_effects: none
+  cost: low
+- id: fs.write_file
+  description: Write a file in workspace using UTF-8 or base64 payload.
+  risk: medium
+  side_effects: reversible
+  cost: low
+- id: fs.mkdir
+  description: Create a directory inside workspace.
+  risk: medium
+  side_effects: reversible
+  cost: low
+- id: fs.move
+  description: Move or rename a file/directory inside workspace.
+  risk: medium
+  side_effects: reversible
+  cost: low
+- id: fs.copy
+  description: Copy a file/directory inside workspace.
+  risk: medium
+  side_effects: reversible
+  cost: low
+- id: fs.delete
+  description: Delete a file/directory inside workspace.
+  risk: high
+  side_effects: irreversible
+  cost: low
+- id: fs.stat
+  description: Get metadata (type, size, mode, mtime) for a workspace path.
+  risk: low
+  side_effects: none
+  cost: low
+- id: fs.patch
+  description: Apply a unified diff patch to files in the workspace.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: fs.search
+  description: Search file contents using regex pattern.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: conn.list_profiles
+  description: List governable external connection profiles visible to the session
+    principal.
+  risk: low
+  side_effects: none
+  cost: low
+- id: conn.describe_profile
+  description: Describe a specific connection profile (without exposing credentials).
+  risk: low
+  side_effects: none
+  cost: low
+- id: api.benchmark
+  description: Run a bounded k6 benchmark against an allowlisted HTTP profile route.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: nats.request
+  description: Send NATS request/reply call with profile-governed subject limits.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: nats.publish
+  description: Publish NATS message to an allowlisted subject.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: nats.subscribe_pull
+  description: Pull messages from NATS subject with deterministic limits.
+  risk: medium
+  side_effects: none
+  cost: medium
+- id: kafka.consume
+  description: Consume Kafka messages from an allowlisted topic with bounded output.
+  risk: medium
+  side_effects: none
+  cost: medium
+- id: kafka.produce
+  description: Produce Kafka message to an allowlisted topic.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: kafka.topic_metadata
+  description: Describe Kafka topic metadata for an allowlisted topic.
+  risk: low
+  side_effects: none
+  cost: low
+- id: rabbit.consume
+  description: Consume RabbitMQ messages from an allowlisted queue with bounded output.
+  risk: medium
+  side_effects: none
+  cost: medium
+- id: rabbit.publish
+  description: Publish RabbitMQ message to an allowlisted queue/routing key.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: rabbit.queue_info
+  description: Inspect RabbitMQ queue metrics for an allowlisted queue.
+  risk: low
+  side_effects: none
+  cost: low
+- id: redis.get
+  description: Read a single Redis key from an allowlisted key prefix.
+  risk: low
+  side_effects: none
+  cost: low
+- id: redis.mget
+  description: Read multiple Redis keys from allowlisted key prefixes.
+  risk: low
+  side_effects: none
+  cost: low
+- id: redis.scan
+  description: Scan Redis keys under an allowlisted prefix with deterministic bounds.
+  risk: low
+  side_effects: none
+  cost: low
+- id: redis.ttl
+  description: Get TTL metadata for a Redis key in an allowlisted prefix.
+  risk: low
+  side_effects: none
+  cost: low
+- id: redis.exists
+  description: Check existence for Redis keys in allowlisted prefixes.
+  risk: low
+  side_effects: none
+  cost: low
+- id: redis.set
+  description: Set a Redis key with mandatory TTL in an allowlisted prefix.
+  risk: medium
+  side_effects: reversible
+  cost: low
+- id: redis.del
+  description: Delete Redis keys from allowlisted prefixes.
+  risk: medium
+  side_effects: irreversible
+  cost: low
+- id: mongo.find
+  description: Find MongoDB documents from an allowlisted database with a hard result
+    limit.
+  risk: medium
+  side_effects: none
+  cost: medium
+- id: mongo.aggregate
+  description: Run MongoDB aggregation with a server-side hard result limit.
+  risk: medium
+  side_effects: none
+  cost: medium
+- id: git.status
+  description: Run git status in the workspace repository.
+  risk: low
+  side_effects: none
+  cost: low
+- id: git.diff
+  description: Return unified diff from git workspace.
+  risk: low
+  side_effects: none
+  cost: low
+- id: git.apply_patch
+  description: Apply a unified diff patch using git apply.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: git.checkout
+  description: Checkout a branch or ref, optionally creating a new branch.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: git.log
+  description: List commit history for a ref with bounded output.
+  risk: low
+  side_effects: none
+  cost: low
+- id: git.show
+  description: Show commit details or file content at a ref.
+  risk: low
+  side_effects: none
+  cost: low
+- id: git.branch_list
+  description: List local and/or remote branches.
+  risk: low
+  side_effects: none
+  cost: low
+- id: git.commit
+  description: Create a commit from staged changes or selected paths.
+  risk: medium
+  side_effects: irreversible
+  cost: medium
+- id: git.push
+  description: Push commits to an allowlisted remote/refspec.
+  risk: high
+  side_effects: irreversible
+  cost: high
+- id: git.fetch
+  description: Fetch refs from an allowlisted remote/refspec.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: git.pull
+  description: Pull from an allowlisted remote/refspec.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: repo.detect_project_type
+  description: Detect repository project type for build/test orchestration.
+  risk: low
+  side_effects: none
+  cost: low
+- id: repo.detect_toolchain
+  description: Detect language toolchain metadata for orchestration.
+  risk: low
+  side_effects: none
+  cost: low
+- id: repo.validate
+  description: Run toolchain-aware repository validation (syntax/compile checks).
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: repo.build
+  description: Execute project build command with repository-aware defaults.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: repo.test
+  description: Execute repository test suite (preferred alias of repo.run_tests).
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: repo.run_tests
+  description: Execute repository test suite with repo-aware defaults.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: repo.test_failures_summary
+  description: Summarize failed tests from provided test output or by executing repository
+    tests.
+  risk: low
+  side_effects: reversible
+  cost: medium
+- id: repo.stacktrace_summary
+  description: Summarize stacktraces from provided output or by executing repository
+    tests.
+  risk: low
+  side_effects: reversible
+  cost: medium
+- id: repo.changed_files
+  description: Return deterministic changed file metadata from git status/diff or
+    provided status output.
+  risk: low
+  side_effects: none
+  cost: low
+- id: repo.symbol_search
+  description: Search symbols with deterministic file/line/column matches in allowed
+    workspace paths.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: repo.find_references
+  description: Find symbol references with declaration tagging for refactor-safe reasoning.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: repo.coverage_report
+  description: Run repository tests and return a normalized coverage report.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: repo.static_analysis
+  description: Run project-aware static analysis and lint checks.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: repo.package
+  description: Package repository output into deployable artifacts.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: image.build
+  description: Build container image from workspace Dockerfile using available builder
+    with deterministic fallback.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: image.push
+  description: Push an existing container image reference using available builder
+    with deterministic fallback.
+  risk: medium
+  side_effects: irreversible
+  cost: high
+- id: image.inspect
+  description: Inspect Dockerfile or image reference metadata with deterministic security
+    hints.
+  risk: low
+  side_effects: none
+  cost: low
+- id: artifact.upload
+  description: Read a workspace file and publish it as invocation artifact payload.
+  risk: low
+  side_effects: reversible
+  cost: low
+- id: artifact.download
+  description: Read artifact-like content from workspace and return encoded payload.
+  risk: low
+  side_effects: none
+  cost: low
+- id: artifact.list
+  description: List candidate artifact files in workspace path.
+  risk: low
+  side_effects: none
+  cost: low
+- id: container.ps
+  description: List containers from available runtime (Kubernetes session pods or
+    local podman/docker/nerdctl).
+  risk: low
+  side_effects: none
+  cost: low
+- id: container.logs
+  description: Read container logs from available runtime (Kubernetes session pods
+    or local podman/docker/nerdctl).
+  risk: low
+  side_effects: none
+  cost: low
+- id: container.run
+  description: Start a container using available runtime with bounded args (Kubernetes
+    session pod or local runtime).
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: container.exec
+  description: Execute bounded allowlisted command inside a running runtime container
+    (Kubernetes pod or local runtime).
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: k8s.get_pods
+  description: List Kubernetes pods in a namespace using the Kubernetes SDK.
+  risk: low
+  side_effects: none
+  cost: low
+- id: k8s.get_services
+  description: List Kubernetes services in a namespace using the Kubernetes SDK.
+  risk: low
+  side_effects: none
+  cost: low
+- id: k8s.get_deployments
+  description: List Kubernetes deployments in a namespace using the Kubernetes SDK.
+  risk: low
+  side_effects: none
+  cost: low
+- id: k8s.get_images
+  description: Aggregate container images used by pods in a namespace.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: k8s.get_logs
+  description: Fetch logs from a Kubernetes pod container.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: k8s.apply_manifest
+  description: Apply bounded Kubernetes manifests for allowlisted kinds in a namespace.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: k8s.rollout_status
+  description: Wait for a deployment rollout to complete within bounded timeout.
+  risk: medium
+  side_effects: none
+  cost: medium
+- id: k8s.restart_deployment
+  description: Trigger a deployment restart by patching pod-template restart annotation.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: security.scan_dependencies
+  description: Collect dependency inventory for the detected project toolchain.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: sbom.generate
+  description: Generate a CycloneDX JSON SBOM from repository dependencies.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: security.scan_secrets
+  description: Scan workspace files for likely hardcoded secrets.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: security.scan_container
+  description: Scan container image or Dockerfile context for vulnerabilities and
+    misconfigurations.
+  risk: low
+  side_effects: none
+  cost: high
+- id: security.license_check
+  description: Evaluate repository dependency licenses against allow/deny policy.
+  risk: medium
+  side_effects: none
+  cost: medium
+- id: quality.gate
+  description: Evaluate quality metrics against deterministic acceptance thresholds.
+  risk: low
+  side_effects: none
+  cost: low
+- id: ci.run_pipeline
+  description: 'Execute a deterministic CI-like sequence: validate, build, test, and
+    optional analysis/coverage.'
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: go.mod.tidy
+  description: Run go mod tidy to validate and normalize module dependencies.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: go.generate
+  description: Run go generate for a package target.
+  risk: medium
+  side_effects: reversible
+  cost: medium
+- id: go.build
+  description: Compile Go package with restricted build flags and optional output
+    binary name.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: go.test
+  description: Run Go tests with optional coverage and run-pattern filter.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: rust.build
+  description: Compile Rust project/package with cargo build.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: rust.test
+  description: Run Rust tests using cargo test.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: rust.clippy
+  description: Run clippy lints for Rust project.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: rust.format
+  description: Run rustfmt in check or write mode.
+  risk: low
+  side_effects: reversible
+  cost: medium
+- id: node.install
+  description: Install Node dependencies using npm ci/install.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: node.build
+  description: Run Node/TypeScript build script with npm.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: node.test
+  description: Run Node test script with npm.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: node.lint
+  description: Run Node lint script with npm.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: node.typecheck
+  description: Run TypeScript typecheck script with npm.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: python.install_deps
+  description: Install Python dependencies in an isolated venv.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: python.validate
+  description: Validate Python syntax/bytecode compilation.
+  risk: low
+  side_effects: none
+  cost: medium
+- id: python.test
+  description: Run Python tests with constrained pytest options.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: c.build
+  description: Compile C source files with constrained compiler options.
+  risk: medium
+  side_effects: reversible
+  cost: high
+- id: c.test
+  description: Compile and optionally run C test source files.
+  risk: medium
+  side_effects: reversible
+  cost: high
+

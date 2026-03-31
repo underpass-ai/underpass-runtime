@@ -1,6 +1,25 @@
 package domain
 
-import "math"
+import (
+	_ "embed"
+	"math"
+
+	"gopkg.in/yaml.v3"
+)
+
+//go:embed tool_descriptions.yaml
+var toolDescriptionsYAML []byte
+
+// CatalogToolDescriptions returns all 99 tool descriptions from the
+// embedded catalog YAML. This is the source of truth for LLM prior
+// generation — no hardcoded defaults.
+func CatalogToolDescriptions() []ToolDescription {
+	var descs []ToolDescription
+	if err := yaml.Unmarshal(toolDescriptionsYAML, &descs); err != nil {
+		panic("embedded tool_descriptions.yaml is invalid: " + err.Error())
+	}
+	return descs
+}
 
 // ToolPrior represents an LLM-generated prior belief about a tool's
 // effectiveness for a given context. The LLM estimates a success
@@ -149,11 +168,11 @@ Tools:
 
 // ToolDescription is a minimal tool description for the LLM prompt.
 type ToolDescription struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	Risk        string `json:"risk"`
-	SideEffects string `json:"side_effects"`
-	Cost        string `json:"cost"`
+	ID          string `json:"id" yaml:"id"`
+	Description string `json:"description" yaml:"description"`
+	Risk        string `json:"risk" yaml:"risk"`
+	SideEffects string `json:"side_effects" yaml:"side_effects"`
+	Cost        string `json:"cost" yaml:"cost"`
 }
 
 func formatToolDescriptions(tools []ToolDescription) string {

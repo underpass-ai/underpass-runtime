@@ -139,6 +139,37 @@ func TestLLMPriorPrompt_ContainsContext(t *testing.T) {
 	}
 }
 
+func TestCatalogToolDescriptions(t *testing.T) {
+	descs := CatalogToolDescriptions()
+	if len(descs) != 99 {
+		t.Fatalf("expected 99 tools, got %d", len(descs))
+	}
+	for _, d := range descs {
+		if d.ID == "" {
+			t.Fatal("tool with empty ID")
+		}
+		if d.Description == "" {
+			t.Errorf("tool %s has empty description", d.ID)
+		}
+		if d.Risk == "" {
+			t.Errorf("tool %s has empty risk", d.ID)
+		}
+	}
+	// Spot-check known tool.
+	found := false
+	for _, d := range descs {
+		if d.ID == "fs.write_file" {
+			found = true
+			if d.SideEffects != "reversible" {
+				t.Errorf("fs.write_file side_effects = %q, want reversible", d.SideEffects)
+			}
+		}
+	}
+	if !found {
+		t.Error("fs.write_file not found in catalog")
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
 }
