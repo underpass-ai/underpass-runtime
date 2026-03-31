@@ -4,8 +4,6 @@
 // 	protoc        (unknown)
 // source: underpass/runtime/v1/runtime.proto
 
-// Ajuste 1: package scoped to org to avoid collision.
-
 package runtimev1
 
 import (
@@ -1096,17 +1094,14 @@ func (x *Observability) GetSpanName() string {
 	return ""
 }
 
-// Tool is a full capability definition.
-// Ajuste 2: input_schema and output_schema as bytes (JSON-encoded JSON Schema).
-// Avoids double-serialization; clients parse as needed.
-// Ajuste 4: includes preconditions, postconditions, policy, observability,
-// examples for full parity with HTTP discovery.
+// Tool is a full capability definition with parity to the internal
+// domain model. Schemas and examples are bytes to avoid double-serialization.
 type Tool struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description      string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	InputSchema      []byte                 `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`    // JSON Schema, JSON-encoded
-	OutputSchema     []byte                 `protobuf:"bytes,4,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"` // JSON Schema, JSON-encoded
+	InputSchema      []byte                 `protobuf:"bytes,3,opt,name=input_schema,json=inputSchema,proto3" json:"input_schema,omitempty"`    // JSON Schema, UTF-8 JSON-encoded
+	OutputSchema     []byte                 `protobuf:"bytes,4,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"` // JSON Schema, UTF-8 JSON-encoded
 	Scope            Scope                  `protobuf:"varint,5,opt,name=scope,proto3,enum=underpass.runtime.v1.Scope" json:"scope,omitempty"`
 	SideEffects      SideEffects            `protobuf:"varint,6,opt,name=side_effects,json=sideEffects,proto3,enum=underpass.runtime.v1.SideEffects" json:"side_effects,omitempty"`
 	RiskLevel        RiskLevel              `protobuf:"varint,7,opt,name=risk_level,json=riskLevel,proto3,enum=underpass.runtime.v1.RiskLevel" json:"risk_level,omitempty"`
@@ -1118,9 +1113,11 @@ type Tool struct {
 	Postconditions   []string               `protobuf:"bytes,13,rep,name=postconditions,proto3" json:"postconditions,omitempty"`
 	Policy           *PolicyMetadata        `protobuf:"bytes,14,opt,name=policy,proto3" json:"policy,omitempty"`
 	Observability    *Observability         `protobuf:"bytes,15,opt,name=observability,proto3" json:"observability,omitempty"`
-	Examples         [][]byte               `protobuf:"bytes,16,rep,name=examples,proto3" json:"examples,omitempty"` // JSON-encoded example args
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Each item is a UTF-8 encoded JSON value representing example tool args.
+	// Example: {"path": "main.go", "content": "package main"}
+	Examples      [][]byte `protobuf:"bytes,16,rep,name=examples,proto3" json:"examples,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Tool) Reset() {
@@ -1734,8 +1731,8 @@ func (x *Artifact) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// Ajuste 3: output as Value (not Struct) — tools can return string, array,
-// number, not just objects.
+// Invocation represents a governed tool execution and its result.
+// output is Value (not Struct) because tools can return any JSON type.
 type Invocation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -2396,7 +2393,7 @@ func (x *DiscoverToolsRequest) GetCost() []string {
 	return nil
 }
 
-// Ajuste 5: oneof for discovery results — cleaner than "only one list populated".
+// oneof ensures exactly one variant is populated per response.
 type DiscoverToolsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Tools:
