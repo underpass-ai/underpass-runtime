@@ -80,33 +80,24 @@ spec:
                   key: {{ .Values.artifacts.s3.secretKeyKey }}
             {{- end }}
           livenessProbe:
-            {{- if eq $tlsMode "mutual" }}
-            {{- /* mTLS: kubelet cannot present a client cert — use tcpSocket */}}
+            {{- if ne $tlsMode "disabled" }}
             tcpSocket:
               port: {{ .Values.service.port }}
             {{- else }}
-            httpGet:
-              path: /healthz
-              port: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
-              {{- if eq $tlsMode "server" }}
-              scheme: HTTPS
-              {{- end }}
+            grpc:
+              port: {{ .Values.service.port }}
             {{- end }}
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 3
             failureThreshold: 3
           readinessProbe:
-            {{- if eq $tlsMode "mutual" }}
+            {{- if ne $tlsMode "disabled" }}
             tcpSocket:
               port: {{ .Values.service.port }}
             {{- else }}
-            httpGet:
-              path: /healthz
-              port: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
-              {{- if eq $tlsMode "server" }}
-              scheme: HTTPS
-              {{- end }}
+            grpc:
+              port: {{ .Values.service.port }}
             {{- end }}
             initialDelaySeconds: 5
             periodSeconds: 10
