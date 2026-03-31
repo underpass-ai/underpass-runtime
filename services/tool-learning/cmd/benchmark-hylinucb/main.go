@@ -45,26 +45,26 @@ var (
 )
 
 type evidence struct {
-	TestID    string        `json:"test_id"`
-	Timestamp string        `json:"timestamp"`
-	Status    string        `json:"status"`
-	Model     string        `json:"model"`
-	Alpha     float64       `json:"alpha"`
-	Contexts  []ctxEvidence `json:"contexts"`
+	TestID    string         `json:"test_id"`
+	Timestamp string         `json:"timestamp"`
+	Status    string         `json:"status"`
+	Model     string         `json:"model"`
+	Alpha     float64        `json:"alpha"`
+	Contexts  []ctxEvidence  `json:"contexts"`
 	Rankings  []rankEvidence `json:"rankings"`
 }
 
 type ctxEvidence struct {
-	Name        string       `json:"name"`
-	Signature   string       `json:"signature"`
-	SessionID   string       `json:"session_id"`
+	Name        string        `json:"name"`
+	Signature   string        `json:"signature"`
+	SessionID   string        `json:"session_id"`
 	Invocations []invEvidence `json:"invocations"`
 }
 
 type invEvidence struct {
-	Tool    string `json:"tool"`
-	Status  string `json:"status"`
-	Reward  float64 `json:"reward"`
+	Tool   string  `json:"tool"`
+	Status string  `json:"status"`
+	Reward float64 `json:"reward"`
 }
 
 type rankEvidence struct {
@@ -320,18 +320,18 @@ When done: {"done": true, "summary": "completed"}`
 
 func vllmChat(client *http.Client, messages []map[string]any) (string, error) {
 	payload, _ := json.Marshal(map[string]any{
-		"model":                  *vllmModel,
-		"messages":               messages,
-		"temperature":            0.3,
-		"max_tokens":             1024,
-		"chat_template_kwargs":   map[string]any{"enable_thinking": false},
+		"model":                *vllmModel,
+		"messages":             messages,
+		"temperature":          0.3,
+		"max_tokens":           1024,
+		"chat_template_kwargs": map[string]any{"enable_thinking": false},
 	})
 
 	resp, err := client.Post(*vllmURL+"/v1/chat/completions", "application/json", bytes.NewReader(payload))
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	var data map[string]any
@@ -382,11 +382,11 @@ func apiCall(client *http.Client, method, url string, body any) (map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	raw, _ := io.ReadAll(resp.Body)
 	var result map[string]any
-	json.Unmarshal(raw, &result)
+	_ = json.Unmarshal(raw, &result)
 	return result, nil
 }
 
@@ -414,9 +414,10 @@ func extractJSON(s string) map[string]any {
 	}
 	depth := 0
 	for i := start; i < len(s); i++ {
-		if s[i] == '{' {
+		switch s[i] {
+		case '{':
 			depth++
-		} else if s[i] == '}' {
+		case '}':
 			depth--
 			if depth == 0 {
 				var m map[string]any

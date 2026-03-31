@@ -12,19 +12,19 @@ type ToolFeatures struct {
 // ContextFeatures encodes task context into a fixed-size numeric vector
 // for use as context features in HyLinUCB.
 type ContextFeatures struct {
-	LangGo         float64 // 1 if Go project
-	LangPython     float64 // 1 if Python
-	LangJS         float64 // 1 if JavaScript
-	LangRust       float64 // 1 if Rust
-	LangJava       float64 // 1 if Java
-	LangOther      float64 // 1 if other/unknown
-	TypeService    float64 // 1 if service
-	TypeCLI        float64 // 1 if CLI
-	TypeLibrary    float64 // 1 if library
-	HasDockerfile  float64 // 1 if Dockerfile present
-	HasK8s         float64 // 1 if K8s manifests present
-	TestsPassing   float64 // 1 if tests passing, 0 otherwise
-	SecurityClean  float64 // 1 if clean, 0 if warnings
+	LangGo        float64 // 1 if Go project
+	LangPython    float64 // 1 if Python
+	LangJS        float64 // 1 if JavaScript
+	LangRust      float64 // 1 if Rust
+	LangJava      float64 // 1 if Java
+	LangOther     float64 // 1 if other/unknown
+	TypeService   float64 // 1 if service
+	TypeCLI       float64 // 1 if CLI
+	TypeLibrary   float64 // 1 if library
+	HasDockerfile float64 // 1 if Dockerfile present
+	HasK8s        float64 // 1 if K8s manifests present
+	TestsPassing  float64 // 1 if tests passing, 0 otherwise
+	SecurityClean float64 // 1 if clean, 0 if warnings
 }
 
 // ArmFeatureDim is the dimension of arm-specific context features (d).

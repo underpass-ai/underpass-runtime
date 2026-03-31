@@ -9,15 +9,17 @@ import (
 // shared and arm-specific parameters for contextual tool selection.
 //
 // The reward model is:
-//   r(x, z) = z^T * beta + x^T * theta_a + alpha * sqrt(s)
+//
+//	r(x, z) = z^T * beta + x^T * theta_a + alpha * sqrt(s)
 //
 // Where:
-//   x = context features (task type, language, framework)
-//   z = combined context+arm features (includes tool metadata)
-//   beta = shared parameters (learned across all tools)
-//   theta_a = arm-specific parameters (learned per tool)
-//   alpha = exploration coefficient
-//   s = confidence bound width
+//
+//	x = context features (task type, language, framework)
+//	z = combined context+arm features (includes tool metadata)
+//	beta = shared parameters (learned across all tools)
+//	theta_a = arm-specific parameters (learned per tool)
+//	alpha = exploration coefficient
+//	s = confidence bound width
 //
 // Reference: Das, Sinha. "Linear Contextual Bandits with Hybrid Payoff:
 // Revisited." ECML PKDD 2024. arxiv:2406.10131
