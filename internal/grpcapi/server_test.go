@@ -618,6 +618,66 @@ func TestRuntimeKindToProto(t *testing.T) {
 	}
 }
 
+func TestEnumConverters_AllValues(t *testing.T) {
+	// Scope
+	for _, s := range []domain.Scope{domain.ScopeRepo, domain.ScopeWorkspace, domain.ScopeCluster, domain.ScopeExternal, "x"} {
+		_ = scopeToProto(s)
+	}
+	// SideEffects
+	for _, s := range []domain.SideEffects{domain.SideEffectsNone, domain.SideEffectsReversible, domain.SideEffectsIrreversible, "x"} {
+		_ = sideEffectsToProto(s)
+	}
+	// RiskLevel
+	for _, r := range []domain.RiskLevel{domain.RiskLow, domain.RiskMedium, domain.RiskHigh, "x"} {
+		_ = riskLevelToProto(r)
+	}
+	// Idempotency
+	for _, i := range []domain.Idempotency{domain.IdempotencyGuaranteed, domain.IdempotencyBestEffort, domain.IdempotencyNone, "x"} {
+		_ = idempotencyToProto(i)
+	}
+	// InvocationStatus
+	for _, s := range []domain.InvocationStatus{domain.InvocationStatusRunning, domain.InvocationStatusSucceeded, domain.InvocationStatusFailed, domain.InvocationStatusDenied, "x"} {
+		_ = invocationStatusToProto(s)
+	}
+}
+
+func TestFullToolToProto_WithStats(t *testing.T) {
+	ft := app.FullTool{
+		Capability: domain.Capability{Name: "fs.read_file", Idempotency: domain.IdempotencyGuaranteed},
+		Tags:       []string{"fs"},
+		Cost:       "low",
+		Stats:      &app.ToolStats{SuccessRate: 0.99, P50Duration: 10, P95Duration: 50, InvocationN: 1000},
+	}
+	proto := fullToolToProto(ft)
+	if proto.GetStats() == nil {
+		t.Fatal("expected stats")
+	}
+	if proto.GetStats().GetSuccessRate() != 0.99 {
+		t.Errorf("success_rate = %f", proto.GetStats().GetSuccessRate())
+	}
+}
+
+func TestPolicyMetadataToProto_AllFields(t *testing.T) {
+	pm := domain.PolicyMetadata{
+		PathFields:      []domain.PolicyPathField{{Field: "path", Multi: false, WorkspaceRelative: true}},
+		ArgFields:       []domain.PolicyArgField{{Field: "cmd", MaxLength: 100, DenyCharacters: []string{";", "|"}}},
+		ProfileFields:   []domain.PolicyProfileField{{Field: "profile"}},
+		SubjectFields:   []domain.PolicySubjectField{{Field: "subject"}},
+		TopicFields:     []domain.PolicyTopicField{{Field: "topic"}},
+		QueueFields:     []domain.PolicyQueueField{{Field: "queue"}},
+		KeyPrefixFields: []domain.PolicyKeyPrefixField{{Field: "prefix"}},
+		NamespaceFields: []string{"default"},
+		RegistryFields:  []string{"ghcr.io"},
+	}
+	proto := policyMetadataToProto(pm)
+	if len(proto.GetPathFields()) != 1 || len(proto.GetArgFields()) != 1 {
+		t.Errorf("path=%d arg=%d", len(proto.GetPathFields()), len(proto.GetArgFields()))
+	}
+	if len(proto.GetProfileFields()) != 1 || len(proto.GetNamespaceFields()) != 1 {
+		t.Errorf("profile=%d ns=%d", len(proto.GetProfileFields()), len(proto.GetNamespaceFields()))
+	}
+}
+
 func TestAuthConfigFromEnv_Default(t *testing.T) {
 	for _, k := range []string{"WORKSPACE_AUTH_MODE", "WORKSPACE_AUTH_SHARED_TOKEN"} {
 		t.Setenv(k, "")
