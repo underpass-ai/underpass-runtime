@@ -145,21 +145,47 @@ message Constraints {
   int32           output_limit_kb = 4;
 }
 
-// PolicyMetadata holds per-tool policy configuration (path validation, etc).
+// PolicyMetadata holds per-tool policy enforcement configuration.
+// Full parity with domain model (9 field types).
 message PolicyMetadata {
-  repeated PathField path_fields = 1;
+  repeated PathField     path_fields       = 1;
+  repeated ArgField      arg_fields        = 2;
+  repeated SimpleField   profile_fields    = 3;
+  repeated SimpleField   subject_fields    = 4;
+  repeated SimpleField   topic_fields      = 5;
+  repeated SimpleField   queue_fields      = 6;
+  repeated SimpleField   key_prefix_fields = 7;
+  repeated string        namespace_fields  = 8;
+  repeated string        registry_fields   = 9;
 }
 
 message PathField {
   string field              = 1;
-  bool   workspace_relative = 2;
+  bool   multi              = 2;
+  bool   workspace_relative = 3;
 }
 
-// Observability holds per-tool observability configuration.
+message ArgField {
+  string          field           = 1;
+  bool            multi           = 2;
+  int32           max_items       = 3;
+  int32           max_length      = 4;
+  repeated string allowed_values  = 5;
+  repeated string allowed_prefix  = 6;
+  repeated string denied_prefix   = 7;
+  repeated string deny_characters = 8;
+}
+
+// SimpleField is used for profile, subject, topic, queue, and key_prefix policy fields.
+message SimpleField {
+  string field = 1;
+  bool   multi = 2;
+}
+
+// Observability holds per-tool tracing configuration.
 message Observability {
-  bool log_output    = 1;
-  bool log_input     = 2;
-  bool trace_enabled = 3;
+  string trace_name = 1;
+  string span_name  = 2;
 }
 
 // Tool is a full capability definition.
