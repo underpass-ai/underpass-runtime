@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package underpass.runtime.v1;
+
+option go_package = "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1;runtimev1";
+
+import "google/protobuf/timestamp.proto";
+
+// Domain events published by underpass-runtime to NATS JetStream.
+//
+// Transport: NATS JetStream (not gRPC streaming).
+// Subject prefix: workspace.events
+// Stream: WORKSPACE_EVENTS (subject filter: workspace.events.>)
+//
+// This proto defines the canonical event envelope and typed payloads.
+// Events are serialized as JSON on the wire (not protobuf binary),
+// but this spec formalizes the schema at the same level as the sync API.
+
+// EventType identifies a workspace domain event.
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED          = 0;
+  EVENT_TYPE_SESSION_CREATED      = 1;  // workspace.session.created
+  EVENT_TYPE_SESSION_CLOSED       = 2;  // workspace.session.closed
+  EVENT_TYPE_INVOCATION_STARTED   = 3;  // workspace.invocation.started
+  EVENT_TYPE_INVOCATION_COMPLETED = 4;  // workspace.invocation.completed
+  EVENT_TYPE_INVOCATION_DENIED    = 5;  // workspace.invocation.denied
+  EVENT_TYPE_ARTIFACT_STORED      = 6;  // workspace.artifact.stored (reserved, not emitted yet)
+}
+
+// DomainEvent is the canonical envelope for all async events.
+// Published as JSON to NATS, not as protobuf binary.
+message DomainEvent {
+  string                    id         = 1;  // unique event ID (used as JetStream dedup key)
+  string                    type       = 2;  // e.g. "workspace.session.created"
+  string                    version    = 3;  // schema version, currently "v1"
+  google.protobuf.Timestamp timestamp  = 4;
+  string                    session_id = 5;
+  string                    tenant_id  = 6;
+  string                    actor_id   = 7;
+
+  // Exactly one payload per event type.
+  oneof payload {
+    SessionCreatedPayload      session_created      = 10;
+    SessionClosedPayload       session_closed       = 11;
+    InvocationStartedPayload   invocation_started   = 12;
+    InvocationCompletedPayload invocation_completed = 13;
+    InvocationDeniedPayload    invocation_denied    = 14;
+    ArtifactStoredPayload      artifact_stored      = 15;
+  }
+}
+
+// ─── Event Payloads ─────────────────────────────────────────────────────────
+
+// Published after successful session creation.
+// Subject: workspace.events.session.created
+message SessionCreatedPayload {
+  string                    runtime_kind  = 1;  // "local", "docker", "kubernetes"
+  string                    repo_url      = 2;
+  string                    repo_ref      = 3;
+  google.protobuf.Timestamp expires_at    = 4;
+  string                    workspace_dir = 5;
+}
+
+// Published after session close.
+// Subject: workspace.events.session.closed
+message SessionClosedPayload {
+  string runtime_kind    = 1;
+  int64  duration_sec    = 2;
+  int32  invocation_count = 3;
+}
+
+// Published after a running invocation record is stored (before execution).
+// Subject: workspace.events.invocation.started
+message InvocationStartedPayload {
+  string invocation_id  = 1;
+  string tool_name      = 2;
+  string correlation_id = 3;
+}
+
+// Published after invocation succeeds or fails.
+// Subject: workspace.events.invocation.completed
+message InvocationCompletedPayload {
+  string invocation_id  = 1;
+  string tool_name      = 2;
+  string correlation_id = 3;
+  string status         = 4;  // "succeeded" or "failed"
+  int32  exit_code      = 5;
+  int64  duration_ms    = 6;
+  int64  output_bytes   = 7;
+  int32  artifact_count = 8;
+  string error_code     = 9;
+}
+
+// Published after a governed denial.
+// Subject: workspace.events.invocation.denied
+message InvocationDeniedPayload {
+  string invocation_id  = 1;
+  string tool_name      = 2;
+  string correlation_id = 3;
+  string reason         = 4;
+}
+
+// Reserved in v1. Defined for forward compatibility, not emitted today.
+// Subject: workspace.events.artifact.stored
+message ArtifactStoredPayload {
+  string invocation_id = 1;
+  string artifact_id   = 2;
+  string name          = 3;
+  string content_type  = 4;
+  int64  size_bytes    = 5;
+  string sha256        = 6;
+}

@@ -1,6 +1,5 @@
 syntax = "proto3";
 
-// Ajuste 1: package scoped to org to avoid collision.
 package underpass.runtime.v1;
 
 option go_package = "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1;runtimev1";
@@ -188,16 +187,13 @@ message Observability {
   string span_name  = 2;
 }
 
-// Tool is a full capability definition.
-// Ajuste 2: input_schema and output_schema as bytes (JSON-encoded JSON Schema).
-// Avoids double-serialization; clients parse as needed.
-// Ajuste 4: includes preconditions, postconditions, policy, observability,
-// examples for full parity with HTTP discovery.
+// Tool is a full capability definition with parity to the internal
+// domain model. Schemas and examples are bytes to avoid double-serialization.
 message Tool {
   string          name              = 1;
   string          description       = 2;
-  bytes           input_schema      = 3;  // JSON Schema, JSON-encoded
-  bytes           output_schema     = 4;  // JSON Schema, JSON-encoded
+  bytes           input_schema      = 3;  // JSON Schema, UTF-8 JSON-encoded
+  bytes           output_schema     = 4;  // JSON Schema, UTF-8 JSON-encoded
   Scope           scope             = 5;
   SideEffects     side_effects      = 6;
   RiskLevel       risk_level        = 7;
@@ -209,7 +205,9 @@ message Tool {
   repeated string postconditions    = 13;
   PolicyMetadata  policy            = 14;
   Observability   observability     = 15;
-  repeated bytes  examples          = 16;  // JSON-encoded example args
+  // Each item is a UTF-8 encoded JSON value representing example tool args.
+  // Example: {"path": "main.go", "content": "package main"}
+  repeated bytes  examples          = 16;
 }
 
 // CompactTool is an LLM-optimized summary (~30% of full Tool size).
@@ -266,8 +264,8 @@ message Artifact {
   google.protobuf.Timestamp created_at   = 7;
 }
 
-// Ajuste 3: output as Value (not Struct) — tools can return string, array,
-// number, not just objects.
+// Invocation represents a governed tool execution and its result.
+// output is Value (not Struct) because tools can return any JSON type.
 message Invocation {
   string                    id             = 1;
   string                    session_id     = 2;
@@ -343,7 +341,7 @@ message DiscoverToolsRequest {
   repeated string cost         = 7;
 }
 
-// Ajuste 5: oneof for discovery results — cleaner than "only one list populated".
+// oneof ensures exactly one variant is populated per response.
 message DiscoverToolsResponse {
   oneof tools {
     CompactToolList compact = 1;

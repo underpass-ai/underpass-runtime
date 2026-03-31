@@ -4,8 +4,6 @@
 // - protoc             (unknown)
 // source: underpass/runtime/v1/runtime.proto
 
-// Ajuste 1: package scoped to org to avoid collision.
-
 package runtimev1
 
 import (
