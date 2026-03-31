@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY e2e/tests/workspace_common /app/workspace_common
 COPY e2e/tests/07-invocation-retrieval/test_invocation_retrieval.py /app/test_invocation_retrieval.py
 
+RUN pip install --no-cache-dir grpcio protobuf
+
+COPY e2e/gen /app/gen
 RUN groupadd -r testuser && useradd -r -m -g testuser -u 1000 testuser && \
     chown -R testuser:testuser /app
 

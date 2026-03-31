@@ -8,3 +8,7 @@ plugins:
     out: gen
     opt:
       - paths=source_relative
+  - remote: buf.build/protocolbuffers/python
+    out: e2e/gen
+  - remote: buf.build/grpc/python
+    out: e2e/gen
