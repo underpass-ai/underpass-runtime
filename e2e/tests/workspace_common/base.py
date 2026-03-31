@@ -1,16 +1,27 @@
-"""Shared base helpers for underpass-runtime E2E tests."""
+"""Shared base helpers for underpass-runtime E2E tests (gRPC transport)."""
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 import time
-import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
-from .console import print_info, print_warning
+import grpc
+from google.protobuf import json_format, struct_pb2
+
+# Add generated stubs to path (works both locally and inside container).
+_gen_dir = os.path.join(os.path.dirname(__file__), "..", "..", "gen")
+if not os.path.isdir(_gen_dir):
+    _gen_dir = "/app/gen"  # container path
+sys.path.insert(0, _gen_dir)
+
+from underpass.runtime.v1 import runtime_pb2 as pb  # noqa: E402
+from underpass.runtime.v1 import runtime_pb2_grpc as pb_grpc  # noqa: E402
+
+from .console import print_info, print_warning  # noqa: E402
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -22,18 +33,18 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 
 class WorkspaceE2EBase:
-    """Reusable base class for workspace E2E tests.
+    """Reusable base class for workspace E2E tests (gRPC transport).
 
     Provides:
-    - HTTP requests with optional trusted header auth
+    - gRPC channel with optional TLS and auth metadata
     - session lifecycle helpers
     - tool invocation tracking
     - evidence recording and emission
+    - backward-compatible request() for tests using raw HTTP-style calls
 
     Debug mode (E2E_DEBUG=1):
-    - Logs every HTTP request/response
+    - Logs every RPC call/response
     - Skips session cleanup so workspaces can be inspected
-    - Prints session IDs and invocation details inline
     """
 
     def __init__(
@@ -68,15 +79,83 @@ class WorkspaceE2EBase:
             "invocations": [],
         }
 
+        # Build gRPC channel.
+        self._metadata = self._build_auth_metadata()
+        self._channel = self._build_channel()
+        self._session_stub = pb_grpc.SessionServiceStub(self._channel)
+        self._catalog_stub = pb_grpc.CapabilityCatalogServiceStub(self._channel)
+        self._invocation_stub = pb_grpc.InvocationServiceStub(self._channel)
+        self._health_stub = pb_grpc.HealthServiceStub(self._channel)
+
         if self.debug:
-            print_info(f"DEBUG MODE — cleanup disabled, verbose logging")
+            print_info("DEBUG MODE — cleanup disabled, verbose logging")
             print_info(f"  test_id:       {self.test_id}")
             print_info(f"  run_id:        {self.run_id}")
             print_info(f"  workspace_url: {self.workspace_url}")
 
+    def _build_channel(self) -> grpc.Channel:
+        """Build gRPC channel from WORKSPACE_URL."""
+        target = self.workspace_url
+        # Strip protocol prefix if present.
+        for prefix in ("https://", "http://", "grpc://"):
+            if target.startswith(prefix):
+                target = target[len(prefix):]
+
+        tls_ca = os.getenv("WORKSPACE_TLS_CA_PATH", "").strip()
+        tls_cert = os.getenv("WORKSPACE_TLS_CERT_PATH", "").strip()
+        tls_key = os.getenv("WORKSPACE_TLS_KEY_PATH", "").strip()
+
+        if tls_ca or self.workspace_url.startswith("https://"):
+            root_certs = None
+            if tls_ca:
+                with open(tls_ca, "rb") as f:
+                    root_certs = f.read()
+            private_key = None
+            cert_chain = None
+            if tls_cert and tls_key:
+                with open(tls_key, "rb") as f:
+                    private_key = f.read()
+                with open(tls_cert, "rb") as f:
+                    cert_chain = f.read()
+            creds = grpc.ssl_channel_credentials(
+                root_certificates=root_certs,
+                private_key=private_key,
+                certificate_chain=cert_chain,
+            )
+            return grpc.secure_channel(target, creds)
+        return grpc.insecure_channel(target)
+
+    @staticmethod
+    def _build_auth_metadata() -> list[tuple[str, str]]:
+        """Build gRPC metadata for auth (mirrors HTTP trusted headers)."""
+        token = os.getenv("WORKSPACE_AUTH_TOKEN", "").strip()
+        if not token:
+            return []
+        return [
+            (os.getenv("WORKSPACE_AUTH_TOKEN_HEADER", "x-workspace-auth-token").lower(), token),
+            (os.getenv("WORKSPACE_AUTH_TENANT_HEADER", "x-workspace-tenant-id").lower(),
+             os.getenv("WORKSPACE_AUTH_TENANT_ID", "e2e-tenant")),
+            (os.getenv("WORKSPACE_AUTH_ACTOR_HEADER", "x-workspace-actor-id").lower(),
+             os.getenv("WORKSPACE_AUTH_ACTOR_ID", "e2e-workspace")),
+            (os.getenv("WORKSPACE_AUTH_ROLES_HEADER", "x-workspace-roles").lower(),
+             os.getenv("WORKSPACE_AUTH_ROLES", "developer,devops")),
+        ]
+
     @staticmethod
     def now_iso() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    # ─── gRPC call helpers ───────────────────────────────────────────────
+
+    def _call(self, method, request, timeout: int = 60):
+        """Execute a gRPC call with auth metadata and timeout."""
+        return method(request, metadata=self._metadata, timeout=timeout)
+
+    # ─── Backward-compatible request() ───────────────────────────────────
+    #
+    # Many E2E tests call self.request("GET", "/v1/sessions/{id}/tools").
+    # This translates HTTP-style calls to gRPC RPCs so tests don't need
+    # rewriting.
 
     def request(
         self,
@@ -85,54 +164,147 @@ class WorkspaceE2EBase:
         payload: dict[str, Any] | None = None,
         timeout: int = 60,
     ) -> tuple[int, dict[str, Any]]:
-        url = self.workspace_url + path
-        data = None
-        headers = {"Content-Type": "application/json"}
-        auth_token = os.getenv("WORKSPACE_AUTH_TOKEN", "").strip()
-        if auth_token:
-            headers.update(
-                {
-                    os.getenv("WORKSPACE_AUTH_TOKEN_HEADER", "X-Workspace-Auth-Token"): auth_token,
-                    os.getenv("WORKSPACE_AUTH_TENANT_HEADER", "X-Workspace-Tenant-Id"): os.getenv(
-                        "WORKSPACE_AUTH_TENANT_ID", "e2e-tenant"
-                    ),
-                    os.getenv("WORKSPACE_AUTH_ACTOR_HEADER", "X-Workspace-Actor-Id"): os.getenv(
-                        "WORKSPACE_AUTH_ACTOR_ID", "e2e-workspace"
-                    ),
-                    os.getenv("WORKSPACE_AUTH_ROLES_HEADER", "X-Workspace-Roles"): os.getenv(
-                        "WORKSPACE_AUTH_ROLES", "developer,devops"
-                    ),
-                }
-            )
-        if payload is not None:
-            data = json.dumps(payload).encode("utf-8")
+        """Translate HTTP-style request to gRPC call.
 
+        Returns (status_code, response_dict) for backward compatibility.
+        200 on success, gRPC error code mapped to HTTP equivalent on failure.
+        """
         if self.debug:
             print_info(f"  >> {method} {path}")
-            if payload is not None:
-                print_info(f"     body: {json.dumps(payload, ensure_ascii=False)[:200]}")
 
-        req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as response:
-                body = response.read().decode("utf-8")
-                code = response.getcode()
-                try:
-                    parsed = json.loads(body) if body else {}
-                except (json.JSONDecodeError, ValueError):
-                    parsed = {"raw": body}
-                if self.debug:
-                    print_info(f"  << {code} ({len(body)} bytes)")
-                return code, parsed
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8")
-            try:
-                parsed = json.loads(body) if body else {}
-            except Exception:
-                parsed = {"raw": body}
+            result = self._dispatch(method, path, payload, timeout)
             if self.debug:
-                print_info(f"  << {exc.code} (error, {len(body)} bytes)")
-            return exc.code, parsed
+                print_info(f"  << 200")
+            return 200 if method != "POST" or "invoke" in path else 200, result
+        except grpc.RpcError as e:
+            code = e.code()
+            http_status = _grpc_to_http(code)
+            if self.debug:
+                print_info(f"  << {http_status} ({code.name}: {e.details()})")
+            return http_status, {"error": {"code": code.name.lower(), "message": e.details()}}
+
+    def _dispatch(self, method: str, path: str, payload: dict | None, timeout: int) -> dict:
+        """Route HTTP-style path to the correct gRPC RPC."""
+        # Health
+        if path == "/healthz":
+            resp = self._call(self._health_stub.Check, pb.CheckRequest(), timeout)
+            return {"status": resp.status}
+
+        # POST /v1/sessions
+        if method == "POST" and path == "/v1/sessions":
+            return self._rpc_create_session(payload or {}, timeout)
+
+        # DELETE /v1/sessions/{id}
+        if method == "DELETE" and path.startswith("/v1/sessions/"):
+            session_id = path.split("/v1/sessions/")[1].split("/")[0]
+            resp = self._call(self._session_stub.CloseSession,
+                              pb.CloseSessionRequest(session_id=session_id), timeout)
+            return {"closed": resp.closed}
+
+        # GET /v1/sessions/{id}/tools
+        if path.endswith("/tools") and "/v1/sessions/" in path:
+            session_id = path.split("/v1/sessions/")[1].split("/")[0]
+            resp = self._call(self._catalog_stub.ListTools,
+                              pb.ListToolsRequest(session_id=session_id), timeout)
+            return {"tools": [json_format.MessageToDict(t) for t in resp.tools]}
+
+        # GET /v1/sessions/{id}/tools/discovery
+        if "/tools/discovery" in path:
+            session_id = path.split("/v1/sessions/")[1].split("/")[0]
+            req = pb.DiscoverToolsRequest(
+                session_id=session_id,
+                detail=pb.DiscoveryDetail.DISCOVERY_DETAIL_COMPACT,
+            )
+            resp = self._call(self._catalog_stub.DiscoverTools, req, timeout)
+            tools = []
+            if resp.HasField("compact"):
+                tools = [json_format.MessageToDict(t) for t in resp.compact.tools]
+            elif resp.HasField("full"):
+                tools = [json_format.MessageToDict(t) for t in resp.full.tools]
+            return {"tools": tools, "total": resp.total, "filtered": resp.filtered}
+
+        # GET /v1/sessions/{id}/tools/recommendations
+        if "/tools/recommendations" in path:
+            session_id = path.split("/v1/sessions/")[1].split("/")[0]
+            req = pb.RecommendToolsRequest(session_id=session_id, task_hint="", top_k=10)
+            resp = self._call(self._catalog_stub.RecommendTools, req, timeout)
+            return {
+                "recommendations": [json_format.MessageToDict(r) for r in resp.recommendations],
+                "task_hint": resp.task_hint,
+                "top_k": resp.top_k,
+            }
+
+        # POST /v1/sessions/{id}/tools/{name}/invoke
+        if method == "POST" and "/tools/" in path and "/invoke" in path:
+            parts = path.split("/")
+            session_id = parts[3]
+            tool_name = parts[5]
+            return self._rpc_invoke(session_id, tool_name, payload or {}, timeout)
+
+        # GET /v1/invocations/{id}
+        if path.startswith("/v1/invocations/"):
+            inv_id = path.split("/v1/invocations/")[1].split("/")[0]
+            sub = path.split(inv_id)[-1].strip("/")
+
+            if sub == "logs":
+                resp = self._call(self._invocation_stub.GetInvocationLogs,
+                                  pb.GetInvocationLogsRequest(invocation_id=inv_id), timeout)
+                return {"logs": [json_format.MessageToDict(l) for l in resp.logs]}
+
+            if sub == "artifacts":
+                resp = self._call(self._invocation_stub.GetInvocationArtifacts,
+                                  pb.GetInvocationArtifactsRequest(invocation_id=inv_id), timeout)
+                return {"artifacts": [json_format.MessageToDict(a) for a in resp.artifacts]}
+
+            resp = self._call(self._invocation_stub.GetInvocation,
+                              pb.GetInvocationRequest(invocation_id=inv_id), timeout)
+            return {"invocation": json_format.MessageToDict(resp.invocation)}
+
+        raise ValueError(f"Unknown route: {method} {path}")
+
+    def _rpc_create_session(self, payload: dict, timeout: int) -> dict:
+        principal = payload.get("principal", {})
+        req = pb.CreateSessionRequest(
+            session_id=payload.get("session_id", ""),
+            repo_url=payload.get("repo_url", ""),
+            repo_ref=payload.get("repo_ref", ""),
+            source_repo_path=payload.get("source_repo_path", ""),
+            allowed_paths=payload.get("allowed_paths", []),
+            principal=pb.Principal(
+                tenant_id=principal.get("tenant_id", ""),
+                actor_id=principal.get("actor_id", ""),
+                roles=principal.get("roles", []),
+            ),
+            metadata=payload.get("metadata", {}),
+            expires_in_seconds=payload.get("expires_in_seconds", 0),
+        )
+        resp = self._call(self._session_stub.CreateSession, req, timeout)
+        return {"session": json_format.MessageToDict(resp.session)}
+
+    def _rpc_invoke(self, session_id: str, tool_name: str, payload: dict, timeout: int) -> dict:
+        args_dict = payload.get("args", {})
+        args_struct = struct_pb2.Struct()
+        args_struct.update(args_dict)
+
+        req = pb.InvokeToolRequest(
+            session_id=session_id,
+            tool_name=tool_name,
+            correlation_id=payload.get("correlation_id", ""),
+            args=args_struct,
+            approved=payload.get("approved", False),
+        )
+        resp = self._call(self._invocation_stub.InvokeTool, req, timeout)
+        result = {"invocation": json_format.MessageToDict(resp.invocation)}
+        # Include error at top level if present (for backward compat with HTTP).
+        if resp.invocation.HasField("error"):
+            result["error"] = {
+                "code": resp.invocation.error.code,
+                "message": resp.invocation.error.message,
+            }
+        return result
+
+    # ─── High-level helpers (unchanged API) ──────────────────────────────
 
     def record_step(self, name: str, status: str, data: Any | None = None) -> None:
         entry: dict[str, Any] = {"at": self.now_iso(), "step": name, "status": status}
@@ -177,7 +349,7 @@ class WorkspaceE2EBase:
         session_record: dict[str, Any] | None = None,
     ) -> str:
         status, body = self.request("POST", "/v1/sessions", payload)
-        if status != 201:
+        if status != 200:
             raise RuntimeError(f"create session failed ({status}): {body}")
 
         session_id = str(body.get("session", {}).get("id", "")).strip()
@@ -191,7 +363,6 @@ class WorkspaceE2EBase:
         else:
             entry["payload"] = payload
 
-        # Capture workspace_path from response for debug inspection
         workspace_path = body.get("session", {}).get("workspace_path", "")
         if workspace_path:
             entry["workspace_path"] = workspace_path
@@ -339,9 +510,6 @@ class WorkspaceE2EBase:
 
         if self.skip_cleanup:
             print(f"\n  {Colors.YELLOW}Sessions left open for inspection.{Colors.NC}")
-            print(f"  Inspect with:")
-            print(f"    kubectl exec -n underpass-runtime deploy/valkey -- valkey-cli KEYS 'workspace:session:*'")
-            print(f"    kubectl debug -n underpass-runtime <pod> --image=busybox --target=underpass-runtime --profile=general")
 
         print(f"\n{sep}\n")
 
@@ -357,3 +525,18 @@ class WorkspaceE2EBase:
                 self.request("DELETE", f"/v1/sessions/{session_id}")
             except Exception:
                 pass
+
+
+def _grpc_to_http(code: grpc.StatusCode) -> int:
+    """Map gRPC status code to HTTP status code for backward compatibility."""
+    return {
+        grpc.StatusCode.OK: 200,
+        grpc.StatusCode.INVALID_ARGUMENT: 400,
+        grpc.StatusCode.UNAUTHENTICATED: 401,
+        grpc.StatusCode.PERMISSION_DENIED: 403,
+        grpc.StatusCode.NOT_FOUND: 404,
+        grpc.StatusCode.FAILED_PRECONDITION: 428,
+        grpc.StatusCode.DEADLINE_EXCEEDED: 504,
+        grpc.StatusCode.INTERNAL: 500,
+        grpc.StatusCode.UNAVAILABLE: 503,
+    }.get(code, 500)
