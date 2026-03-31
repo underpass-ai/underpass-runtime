@@ -16,6 +16,7 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -36,12 +37,12 @@ func main() {
 }
 
 var (
-	runtimeURL    = flag.String("runtime-url", envOr("WORKSPACE_URL", "https://underpass-runtime:50053"), "Runtime API URL")
-	vllmURL       = flag.String("vllm-url", envOr("VLLM_URL", "http://vllm-server:8000"), "vLLM API URL")
-	vllmModel     = flag.String("vllm-model", envOr("VLLM_MODEL", "Qwen/Qwen3-8B"), "vLLM model name")
-	alpha         = flag.Float64("alpha", 0.25, "HyLinUCB exploration coefficient")
-	outputFile    = flag.String("output", "", "Evidence JSON output file")
-	tlsSkipVerify = flag.Bool("tls-skip-verify", envOr("TLS_SKIP_VERIFY", "") == "true", "Skip TLS certificate verification (E2E only)")
+	runtimeURL = flag.String("runtime-url", envOr("WORKSPACE_URL", "https://underpass-runtime:50053"), "Runtime API URL")
+	vllmURL    = flag.String("vllm-url", envOr("VLLM_URL", "http://vllm-server:8000"), "vLLM API URL")
+	vllmModel  = flag.String("vllm-model", envOr("VLLM_MODEL", "Qwen/Qwen3-8B"), "vLLM model name")
+	alpha      = flag.Float64("alpha", 0.25, "HyLinUCB exploration coefficient")
+	outputFile = flag.String("output", "", "Evidence JSON output file")
+	tlsCACert  = flag.String("tls-ca-path", envOr("TLS_CA_PATH", ""), "Path to CA certificate for TLS verification")
 )
 
 type evidence struct {
@@ -76,8 +77,16 @@ func run() error {
 	flag.Parse()
 
 	transport := &http.Transport{}
-	if *tlsSkipVerify {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // gated behind explicit --tls-skip-verify flag
+	if *tlsCACert != "" {
+		caCert, err := os.ReadFile(*tlsCACert)
+		if err != nil {
+			return fmt.Errorf("read CA cert: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caCert) {
+			return fmt.Errorf("no valid certs in %s", *tlsCACert)
+		}
+		transport.TLSClientConfig = &tls.Config{RootCAs: pool}
 	}
 	client := &http.Client{
 		Timeout:   120 * time.Second,
