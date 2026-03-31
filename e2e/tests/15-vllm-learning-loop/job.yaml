@@ -1,0 +1,74 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-vllm-learning-loop
+  namespace: underpass-runtime
+  labels:
+    app: e2e-test
+    test-type: "15-vllm-learning-loop"
+    test-suite: underpass-runtime
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app: e2e-test
+        test-type: "15-vllm-learning-loop"
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: test
+          image: ghcr.io/underpass-ai/underpass-runtime/e2e-15-vllm-learning-loop:latest
+          env:
+            - name: WORKSPACE_URL
+              value: "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            - name: VLLM_URL
+              value: "http://vllm-server:8000"
+            - name: VLLM_MODEL
+              value: "Qwen/Qwen3-8B"
+            - name: EVIDENCE_FILE
+              value: "/tmp/e2e-15.json"
+            - name: WORKSPACE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: workspace-auth
+                  key: sharedToken
+                  optional: true
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/ssl/runtime/ca.crt"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+              ephemeral-storage: 256Mi
+          volumeMounts:
+            - name: tls-ca
+              mountPath: /etc/ssl/runtime
+              readOnly: true
+      volumes:
+        - name: tls-ca
+          secret:
+            secretName: runtime-tls
+            items:
+              - key: ca.crt
+                path: ca.crt
+            optional: true
