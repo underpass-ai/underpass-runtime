@@ -191,11 +191,11 @@ Invocation completes
 - [ ] Extend Parquet schema with new fields
 - [ ] Update DuckDB queries for contextual aggregation
 
-### Phase 2: Algorithms (Weeks 3-4)
+### Phase 2: Algorithms (Weeks 3-4) — COMPLETE
 
-- [ ] Implement Beta-SWTS in tool-learning pipeline
-- [ ] Implement LLM prior initialization
-- [ ] Implement HyLinUCB with hybrid payoff
+- [x] Implement Beta-SWTS in tool-learning pipeline (PR #66, merged)
+- [x] Implement LLM prior initialization (PR #69)
+- [x] Implement HyLinUCB with hybrid payoff (PR #68)
 - [ ] Implement hierarchical family selector
 - [ ] Add step-grained reward computation
 
