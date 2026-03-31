@@ -203,12 +203,23 @@ func TestLoadToolDescriptions_Default(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(descs) == 0 {
-		t.Fatal("expected non-empty default descriptions")
+	// Should return the full catalog (99 tools).
+	if len(descs) != 99 {
+		t.Errorf("expected 99 tools from catalog, got %d", len(descs))
 	}
-	// Check first entry.
-	if descs[0].ID != "fs.write_file" {
-		t.Errorf("first tool = %q, want fs.write_file", descs[0].ID)
+	// Spot-check known tool.
+	found := false
+	for _, d := range descs {
+		if d.ID == "fs.write_file" {
+			found = true
+			if d.Risk == "" || d.SideEffects == "" {
+				t.Errorf("fs.write_file has empty metadata: %+v", d)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("fs.write_file not found in catalog")
 	}
 }
 
@@ -246,10 +257,10 @@ func TestLoadToolDescriptions_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestDefaultToolDescriptions(t *testing.T) {
-	descs := defaultToolDescriptions()
-	if len(descs) < 5 {
-		t.Errorf("expected at least 5 default tools, got %d", len(descs))
+func TestCatalogToolDescriptions(t *testing.T) {
+	descs := domain.CatalogToolDescriptions()
+	if len(descs) != 99 {
+		t.Errorf("expected 99 tools, got %d", len(descs))
 	}
 	for _, d := range descs {
 		if d.ID == "" || d.Description == "" {
