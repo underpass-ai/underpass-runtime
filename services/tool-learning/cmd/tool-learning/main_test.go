@@ -191,6 +191,19 @@ func TestBuildSampler_ThompsonLLM_MissingEndpoint(t *testing.T) {
 	}
 }
 
+func TestBuildSampler_HyLinUCB(t *testing.T) {
+	s, err := buildSampler(context.Background(), "hylinucb", algorithmConfig{EquivalentN: 0.5}, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := s.ComputePolicy("gen:go:std", "fs.write", domain.AggregateStats{
+		Successes: 80, Failures: 20, Total: 100,
+	})
+	if policy.Confidence <= 0 {
+		t.Errorf("confidence = %f, want positive", policy.Confidence)
+	}
+}
+
 func TestBuildSampler_Unknown(t *testing.T) {
 	_, err := buildSampler(context.Background(), "banana", algorithmConfig{}, slog.Default())
 	if err == nil {

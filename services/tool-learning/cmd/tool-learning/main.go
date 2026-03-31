@@ -364,8 +364,16 @@ func buildSampler(ctx context.Context, algo string, cfg algorithmConfig, logger 
 		logger.Info("LLM priors generated", "algorithm", "thompson-llm", "priors_count", len(priors))
 		return domain.NewThompsonSamplerWithPriors(priors), nil
 
+	case "hylinucb":
+		alphaVal := 0.25
+		if cfg.EquivalentN > 0 {
+			alphaVal = cfg.EquivalentN // reuse flag as alpha exploration coefficient
+		}
+		logger.Info("algorithm selected", "algorithm", "hylinucb", "alpha", alphaVal)
+		return domain.NewHyLinUCBPolicyComputer(alphaVal), nil
+
 	default:
-		return nil, fmt.Errorf("unknown algorithm %q (valid: thompson, thompson-llm)", algo)
+		return nil, fmt.Errorf("unknown algorithm %q (valid: thompson, thompson-llm, hylinucb)", algo)
 	}
 }
 
