@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 	dockerclient "github.com/docker/docker/client"
 	"github.com/nats-io/nats.go"
 
+	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/eventbus"
 	invocationstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/invocationstore"
@@ -28,7 +30,7 @@ import (
 	workspaceadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/workspace"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
 	"github.com/underpass-ai/underpass-runtime/internal/bootstrap"
-	"github.com/underpass-ai/underpass-runtime/internal/httpapi"
+	"github.com/underpass-ai/underpass-runtime/internal/grpcapi"
 	"github.com/underpass-ai/underpass-runtime/internal/tlsutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -37,6 +39,9 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
 )
 
 const (
@@ -139,24 +144,44 @@ func main() {
 	telRecorder, telQuerier, telStop := buildTelemetry(context.Background(), logger, valkeyTLS)
 	service.SetTelemetry(telRecorder, telQuerier)
 	service.SetKPIMetrics(app.NewKPIMetrics())
-	authConfig, err := httpapi.AuthConfigFromEnv()
+	authConfig, err := grpcapi.AuthConfigFromEnv()
 	if err != nil {
 		logger.Error("failed to initialize auth configuration", "error", err)
 		os.Exit(1)
 	}
-	server := httpapi.NewServer(logger, service, authConfig)
+	grpcServer := grpcapi.NewServer(service, authConfig, logger)
 
-	httpServer := &http.Server{
-		Addr:              ":" + port,
-		Handler:           server.Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      120 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		TLSConfig:         serverTLS,
+	grpcOpts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(grpcapi.UnaryAuthInterceptor(authConfig)),
 	}
+	if serverTLS != nil {
+		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(serverTLS)))
+	}
+	srv := grpc.NewServer(grpcOpts...)
+	pb.RegisterSessionServiceServer(srv, grpcServer)
+	pb.RegisterCapabilityCatalogServiceServer(srv, grpcServer)
+	pb.RegisterInvocationServiceServer(srv, grpcServer)
+	pb.RegisterHealthServiceServer(srv, grpcServer)
+	reflection.Register(srv)
 
-	startHTTPServer(httpServer, port, workspaceRoot, serverTLS, logger)
+	// Prometheus metrics remain on HTTP (separate port).
+	metricsPort := envOrDefault("METRICS_PORT", "9090")
+	metricsServer := &http.Server{
+		Addr:              ":" + metricsPort,
+		ReadHeaderTimeout: 5 * time.Second,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+			_, _ = w.Write([]byte(service.PrometheusMetrics()))
+		}),
+	}
+	go func() {
+		logger.Info("metrics server listening", "port", metricsPort)
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("metrics server failed", "error", err)
+		}
+	}()
+
+	startGRPCServer(srv, port, workspaceRoot, serverTLS, logger)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -174,9 +199,10 @@ func main() {
 		natsConn.Close()
 	}
 
+	srv.GracefulStop()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_ = httpServer.Shutdown(ctx)
+	_ = metricsServer.Shutdown(ctx)
 	logger.Info("workspace service stopped")
 }
 
@@ -521,22 +547,21 @@ func setupTelemetry(ctx context.Context, logger *slog.Logger) (func(context.Cont
 	return tracerProvider.Shutdown, nil
 }
 
-func startHTTPServer(srv *http.Server, port, workspaceRoot string, serverTLS *tls.Config, logger *slog.Logger) {
+func startGRPCServer(srv *grpc.Server, port, workspaceRoot string, serverTLS *tls.Config, logger *slog.Logger) {
 	go func() {
+		lis, err := net.Listen("tcp", ":"+port)
+		if err != nil {
+			logger.Error("failed to listen", "port", port, "error", err)
+			os.Exit(1)
+		}
 		if serverTLS != nil {
-			logger.Info("workspace service listening (TLS)", "port", port, "workspace_root", workspaceRoot)
-			// Certs are already in srv.TLSConfig — pass empty strings so
-			// ListenAndServeTLS uses them from the config.
-			if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-				logger.Error("https server failed", "error", err)
-				os.Exit(1)
-			}
+			logger.Info("workspace gRPC service listening (TLS)", "port", port, "workspace_root", workspaceRoot)
 		} else {
-			logger.Info("workspace service listening", "port", port, "workspace_root", workspaceRoot)
-			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logger.Error("http server failed", "error", err)
-				os.Exit(1)
-			}
+			logger.Info("workspace gRPC service listening", "port", port, "workspace_root", workspaceRoot)
+		}
+		if err := srv.Serve(lis); err != nil {
+			logger.Error("grpc server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 }

@@ -1,2 +1,2 @@
 # Generated proto code — regenerate with `make proto-generate`
-*.pb.go
+# Committed to repo so `go build` works without buf installed.
