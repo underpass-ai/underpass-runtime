@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/domain"
 )
 
 func TestParseLogLevel(t *testing.T) {
@@ -160,5 +164,96 @@ func TestLoadConfigInvalidValkeyTTL(t *testing.T) {
 	_, err := loadConfig("hourly")
 	if err == nil {
 		t.Fatal("expected error for invalid VALKEY_TTL")
+	}
+}
+
+func TestBuildSampler_Thompson(t *testing.T) {
+	s, err := buildSampler(context.Background(), "thompson", algorithmConfig{}, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s == nil {
+		t.Fatal("expected non-nil sampler")
+	}
+	// Verify it produces a valid policy.
+	policy := s.ComputePolicy("gen:go:std", "fs.write", domain.AggregateStats{
+		Successes: 90, Failures: 10, Total: 100, P95LatencyMs: 200,
+	})
+	if policy.Alpha != 91 || policy.Beta != 11 {
+		t.Errorf("Alpha=%f Beta=%f, want 91/11", policy.Alpha, policy.Beta)
+	}
+}
+
+func TestBuildSampler_ThompsonLLM_MissingEndpoint(t *testing.T) {
+	_, err := buildSampler(context.Background(), "thompson-llm", algorithmConfig{}, slog.Default())
+	if err == nil {
+		t.Fatal("expected error when LLM endpoint is missing")
+	}
+}
+
+func TestBuildSampler_Unknown(t *testing.T) {
+	_, err := buildSampler(context.Background(), "banana", algorithmConfig{}, slog.Default())
+	if err == nil {
+		t.Fatal("expected error for unknown algorithm")
+	}
+}
+
+func TestLoadToolDescriptions_Default(t *testing.T) {
+	descs, err := loadToolDescriptions("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(descs) == 0 {
+		t.Fatal("expected non-empty default descriptions")
+	}
+	// Check first entry.
+	if descs[0].ID != "fs.write_file" {
+		t.Errorf("first tool = %q, want fs.write_file", descs[0].ID)
+	}
+}
+
+func TestLoadToolDescriptions_FromFile(t *testing.T) {
+	descs := []domain.ToolDescription{
+		{ID: "test.tool", Description: "A test tool", Risk: "low", SideEffects: "none", Cost: "free"},
+	}
+	data, _ := json.Marshal(descs)
+	path := t.TempDir() + "/tools.json"
+	os.WriteFile(path, data, 0644)
+
+	loaded, err := loadToolDescriptions(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].ID != "test.tool" {
+		t.Errorf("loaded = %v, want [test.tool]", loaded)
+	}
+}
+
+func TestLoadToolDescriptions_FileNotFound(t *testing.T) {
+	_, err := loadToolDescriptions("/nonexistent/path.json")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestLoadToolDescriptions_InvalidJSON(t *testing.T) {
+	path := t.TempDir() + "/bad.json"
+	os.WriteFile(path, []byte("not json"), 0644)
+
+	_, err := loadToolDescriptions(path)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestDefaultToolDescriptions(t *testing.T) {
+	descs := defaultToolDescriptions()
+	if len(descs) < 5 {
+		t.Errorf("expected at least 5 default tools, got %d", len(descs))
+	}
+	for _, d := range descs {
+		if d.ID == "" || d.Description == "" {
+			t.Errorf("tool description has empty fields: %+v", d)
+		}
 	}
 }

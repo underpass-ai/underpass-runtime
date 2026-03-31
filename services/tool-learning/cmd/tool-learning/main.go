@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/duckdb"
+	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/llm"
 	natspub "github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/nats"
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/s3"
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/adapters/valkey"
@@ -33,6 +35,12 @@ func run() error {
 	maxErrorRate := flag.Float64("max-error-rate", 0, "Hard constraint: max error rate (0 = disabled)")
 	maxCost := flag.Float64("max-p95-cost", 0, "Hard constraint: max p95 cost (0 = disabled)")
 	windowSize := flag.Int("window-size", 0, "Beta-SWTS sliding window: max recent invocations per (context, tool). 0 = stationary (all data)")
+	algorithm := flag.String("algorithm", envOrDefault("ALGORITHM", "thompson"), "Algorithm: thompson, thompson-llm")
+	llmEndpoint := flag.String("llm-endpoint", envOrDefault("LLM_ENDPOINT", ""), "vLLM/OpenAI endpoint for LLM priors (required for thompson-llm)")
+	llmModel := flag.String("llm-model", envOrDefault("LLM_MODEL", "Qwen/Qwen3-8B"), "LLM model name")
+	llmAPIKey := flag.String("llm-api-key", envOrDefault("LLM_API_KEY", ""), "LLM API key (optional for vLLM)")
+	priorEquivN := flag.Float64("prior-equivalent-n", 10, "LLM prior confidence weight (equivalent sample size)")
+	toolDescFile := flag.String("tool-descriptions", envOrDefault("TOOL_DESCRIPTIONS", ""), "Path to tool descriptions JSON for LLM priors")
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -56,11 +64,23 @@ func run() error {
 	}
 	defer cleanup()
 
+	sampler, err := buildSampler(context.Background(), *algorithm, algorithmConfig{
+		LLMEndpoint:  *llmEndpoint,
+		LLMModel:     *llmModel,
+		LLMAPIKey:    *llmAPIKey,
+		EquivalentN:  *priorEquivN,
+		ToolDescFile: *toolDescFile,
+	}, logger)
+	if err != nil {
+		return fmt.Errorf("build sampler: %w", err)
+	}
+
 	return execute(context.Background(), executeParams{
 		Lake:        lake,
 		Store:       store,
 		Publisher:   publisher,
 		Audit:       audit,
+		Sampler:     sampler,
 		Constraints: constraints,
 		Schedule:    *schedule,
 		Logger:      logger,
@@ -73,6 +93,7 @@ type executeParams struct {
 	Store       app.PolicyStore
 	Publisher   app.PolicyEventPublisher
 	Audit       app.PolicyAuditStore
+	Sampler     app.PolicyComputer
 	Constraints domain.PolicyConstraints
 	Schedule    string
 	Logger      *slog.Logger
@@ -87,6 +108,7 @@ func execute(parent context.Context, p executeParams) error {
 		Store:       p.Store,
 		Publisher:   p.Publisher,
 		Audit:       p.Audit,
+		Sampler:     p.Sampler,
 		Constraints: p.Constraints,
 		Logger:      p.Logger,
 	})
@@ -295,4 +317,88 @@ func envOrDefault(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// algorithmConfig holds parameters for algorithm selection.
+type algorithmConfig struct {
+	LLMEndpoint  string
+	LLMModel     string
+	LLMAPIKey    string
+	EquivalentN  float64
+	ToolDescFile string
+}
+
+// buildSampler creates a PolicyComputer based on the selected algorithm.
+func buildSampler(ctx context.Context, algo string, cfg algorithmConfig, logger *slog.Logger) (app.PolicyComputer, error) {
+	switch algo {
+	case "thompson":
+		logger.Info("algorithm selected", "algorithm", "thompson", "priors", "uniform Beta(1,1)")
+		return domain.NewThompsonSampler(), nil
+
+	case "thompson-llm":
+		if cfg.LLMEndpoint == "" {
+			return nil, fmt.Errorf("--llm-endpoint is required for algorithm=thompson-llm")
+		}
+
+		toolDescs, err := loadToolDescriptions(cfg.ToolDescFile)
+		if err != nil {
+			return nil, fmt.Errorf("load tool descriptions: %w", err)
+		}
+		logger.Info("generating LLM priors", "endpoint", cfg.LLMEndpoint, "model", cfg.LLMModel, "tools", len(toolDescs))
+
+		pg := llm.NewPriorGenerator(llm.PriorGeneratorConfig{
+			Endpoint: cfg.LLMEndpoint,
+			Model:    cfg.LLMModel,
+			APIKey:   cfg.LLMAPIKey,
+			PriorConfig: domain.PriorConfig{
+				EquivalentN: cfg.EquivalentN,
+				MinP:        0.01,
+				MaxP:        0.99,
+			},
+		})
+
+		priors, err := pg.GeneratePriors(ctx, toolDescs, domain.ContextSignature{})
+		if err != nil {
+			return nil, fmt.Errorf("generate LLM priors: %w", err)
+		}
+		logger.Info("LLM priors generated", "algorithm", "thompson-llm", "priors_count", len(priors))
+		return domain.NewThompsonSamplerWithPriors(priors), nil
+
+	default:
+		return nil, fmt.Errorf("unknown algorithm %q (valid: thompson, thompson-llm)", algo)
+	}
+}
+
+// loadToolDescriptions reads tool descriptions from a JSON file.
+// If path is empty, returns a minimal default set.
+func loadToolDescriptions(path string) ([]domain.ToolDescription, error) {
+	if path == "" {
+		return defaultToolDescriptions(), nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	var descs []domain.ToolDescription
+	if err := json.Unmarshal(data, &descs); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return descs, nil
+}
+
+// defaultToolDescriptions returns a minimal set of tool descriptions
+// for LLM prior generation when no file is provided.
+func defaultToolDescriptions() []domain.ToolDescription {
+	return []domain.ToolDescription{
+		{ID: "fs.write_file", Description: "Write content to a file", Risk: "low", SideEffects: "reversible", Cost: "free"},
+		{ID: "fs.read_file", Description: "Read a file's contents", Risk: "low", SideEffects: "none", Cost: "free"},
+		{ID: "fs.search", Description: "Search files by pattern", Risk: "low", SideEffects: "none", Cost: "free"},
+		{ID: "git.commit", Description: "Create a git commit", Risk: "medium", SideEffects: "reversible", Cost: "free"},
+		{ID: "git.push", Description: "Push commits to remote", Risk: "high", SideEffects: "irreversible", Cost: "free"},
+		{ID: "repo.test", Description: "Run project test suite", Risk: "low", SideEffects: "none", Cost: "low"},
+		{ID: "repo.build", Description: "Build the project", Risk: "low", SideEffects: "none", Cost: "low"},
+		{ID: "security.scan_dependencies", Description: "Scan dependencies for vulnerabilities", Risk: "low", SideEffects: "none", Cost: "low"},
+		{ID: "k8s.get_pods", Description: "List Kubernetes pods", Risk: "low", SideEffects: "none", Cost: "free"},
+		{ID: "k8s.apply_manifest", Description: "Apply a Kubernetes manifest", Risk: "high", SideEffects: "irreversible", Cost: "medium"},
+	}
 }

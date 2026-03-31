@@ -9,14 +9,15 @@ import (
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/domain"
 )
 
-// ComputePolicyUseCase reads telemetry from the lake, computes Thompson Sampling
-// policies, persists them, and publishes update events.
+// ComputePolicyUseCase reads telemetry from the lake, computes tool
+// policies via a pluggable PolicyComputer, persists them, and publishes
+// update events.
 type ComputePolicyUseCase struct {
 	lake        TelemetryLakeReader
 	store       PolicyStore
 	publisher   PolicyEventPublisher
 	audit       PolicyAuditStore
-	sampler     *domain.ThompsonSampler
+	sampler     PolicyComputer
 	constraints domain.PolicyConstraints
 	clock       Clock
 	logger      *slog.Logger
@@ -28,6 +29,7 @@ type ComputePolicyConfig struct {
 	Store       PolicyStore
 	Publisher   PolicyEventPublisher
 	Audit       PolicyAuditStore
+	Sampler     PolicyComputer
 	Constraints domain.PolicyConstraints
 	Clock       Clock
 	Logger      *slog.Logger
@@ -39,12 +41,16 @@ func NewComputePolicyUseCase(cfg ComputePolicyConfig) *ComputePolicyUseCase {
 	if clk == nil {
 		clk = RealClock{}
 	}
+	sampler := cfg.Sampler
+	if sampler == nil {
+		sampler = domain.NewThompsonSampler()
+	}
 	return &ComputePolicyUseCase{
 		lake:        cfg.Lake,
 		store:       cfg.Store,
 		publisher:   cfg.Publisher,
 		audit:       cfg.Audit,
-		sampler:     domain.NewThompsonSampler(),
+		sampler:     sampler,
 		constraints: cfg.Constraints,
 		clock:       clk,
 		logger:      cfg.Logger,
