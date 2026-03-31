@@ -22,12 +22,12 @@ const (
 // AuthConfig configures gRPC authentication. Mirrors the HTTP auth config
 // but reads from gRPC metadata instead of HTTP headers.
 type AuthConfig struct {
-	Mode         string // "payload" or "trusted_headers"
-	TenantKey    string // metadata key for tenant ID
-	ActorKey     string // metadata key for actor ID
-	RolesKey     string // metadata key for roles (comma-separated)
-	TokenKey     string // metadata key for auth token
-	SharedToken  string // expected token value
+	Mode        string // "payload" or "trusted_headers"
+	TenantKey   string // metadata key for tenant ID
+	ActorKey    string // metadata key for actor ID
+	RolesKey    string // metadata key for roles (comma-separated)
+	TokenKey    string // metadata key for auth token
+	SharedToken string // expected token value
 }
 
 // DefaultAuthConfig returns auth config for development (no auth required).

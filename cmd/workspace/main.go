@@ -18,6 +18,7 @@ import (
 	dockerclient "github.com/docker/docker/client"
 	"github.com/nats-io/nats.go"
 
+	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/eventbus"
 	invocationstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/invocationstore"
@@ -31,10 +32,6 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/bootstrap"
 	"github.com/underpass-ai/underpass-runtime/internal/grpcapi"
 	"github.com/underpass-ai/underpass-runtime/internal/tlsutil"
-	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/reflection"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -42,6 +39,9 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
 )
 
 const (

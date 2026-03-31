@@ -3,9 +3,9 @@ package grpcapi
 import (
 	"encoding/json"
 
+	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
-	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -321,7 +321,8 @@ func policyMetadataToProto(pm domain.PolicyMetadata) *pb.PolicyMetadata {
 			Field: f.Field, Multi: f.Multi, WorkspaceRelative: f.WorkspaceRelative,
 		})
 	}
-	for _, f := range pm.ArgFields {
+	for i := range pm.ArgFields {
+		f := &pm.ArgFields[i]
 		p.ArgFields = append(p.ArgFields, &pb.ArgField{
 			Field: f.Field, Multi: f.Multi,
 			MaxItems: int32(f.MaxItems), MaxLength: int32(f.MaxLength),
@@ -383,16 +384,16 @@ func anyToProtoValue(v any) *structpb.Value {
 		return structpb.NewNullValue()
 	}
 	// Marshal to JSON then back to structpb.Value to handle any type.
-	data, err := json.Marshal(v)
-	if err != nil {
-		return structpb.NewStringValue(err.Error())
+	data, marshalErr := json.Marshal(v)
+	if marshalErr != nil {
+		return structpb.NewStringValue(marshalErr.Error())
 	}
 	var raw any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if unmarshalErr := json.Unmarshal(data, &raw); unmarshalErr != nil {
 		return structpb.NewStringValue(string(data))
 	}
-	val, err := structpb.NewValue(raw)
-	if err != nil {
+	val, valErr := structpb.NewValue(raw)
+	if valErr != nil {
 		return structpb.NewStringValue(string(data))
 	}
 	return val

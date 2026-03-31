@@ -5,8 +5,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/underpass-ai/underpass-runtime/internal/app"
 	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
+	"github.com/underpass-ai/underpass-runtime/internal/app"
 )
 
 // Server implements the four gRPC services defined in runtime.proto.
@@ -69,8 +69,8 @@ func (s *Server) ListTools(ctx context.Context, req *pb.ListToolsRequest) (*pb.L
 		return nil, serviceErrorToStatus(svcErr)
 	}
 	resp := &pb.ListToolsResponse{}
-	for _, t := range tools {
-		resp.Tools = append(resp.Tools, toolToProto(t))
+	for i := range tools {
+		resp.Tools = append(resp.Tools, toolToProto(tools[i]))
 	}
 	return resp, nil
 }
@@ -95,14 +95,14 @@ func (s *Server) DiscoverTools(ctx context.Context, req *pb.DiscoverToolsRequest
 	switch tools := discovery.Tools.(type) {
 	case []app.CompactTool:
 		list := &pb.CompactToolList{}
-		for _, t := range tools {
-			list.Tools = append(list.Tools, compactToolToProto(t))
+		for i := range tools {
+			list.Tools = append(list.Tools, compactToolToProto(tools[i]))
 		}
 		resp.Tools = &pb.DiscoverToolsResponse_Compact{Compact: list}
 	case []app.FullTool:
 		list := &pb.FullToolList{}
-		for _, t := range tools {
-			list.Tools = append(list.Tools, fullToolToProto(t))
+		for i := range tools {
+			list.Tools = append(list.Tools, fullToolToProto(tools[i]))
 		}
 		resp.Tools = &pb.DiscoverToolsResponse_Full{Full: list}
 	}
