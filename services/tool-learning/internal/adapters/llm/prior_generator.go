@@ -26,11 +26,11 @@ type PriorGenerator struct {
 
 // PriorGeneratorConfig holds configuration for the LLM prior generator.
 type PriorGeneratorConfig struct {
-	Endpoint    string            // e.g. "http://vllm:8000" or "https://api.openai.com"
-	Model       string            // e.g. "Qwen/Qwen3-8B" or "gpt-4o-mini"
-	APIKey      string            // bearer token (optional for vLLM)
+	Endpoint    string // e.g. "http://vllm:8000" or "https://api.openai.com"
+	Model       string // e.g. "Qwen/Qwen3-8B" or "gpt-4o-mini"
+	APIKey      string // bearer token (optional for vLLM)
 	PriorConfig domain.PriorConfig
-	Timeout     time.Duration     // default 120s
+	Timeout     time.Duration // default 120s
 }
 
 // NewPriorGenerator creates an LLM-backed prior generator.
@@ -110,7 +110,7 @@ func (g *PriorGenerator) chat(ctx context.Context, prompt string) (string, error
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {

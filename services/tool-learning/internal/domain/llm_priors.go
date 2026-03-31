@@ -9,12 +9,12 @@ import "math"
 // Reference: Alamdari, Cao, Wilson. "Jump Starting Bandits with
 // LLM-Generated Prior Knowledge." EMNLP 2024.
 type ToolPrior struct {
-	ToolID          string  `json:"tool_id"`
-	EstimatedP      float64 `json:"estimated_p"`       // LLM's estimated success probability [0, 1]
-	EquivalentN     float64 `json:"equivalent_n"`       // equivalent sample size (confidence in the estimate)
-	Alpha           float64 `json:"alpha"`              // Beta shape: estimated_p * equivalent_n
-	Beta            float64 `json:"beta"`               // Beta shape: (1 - estimated_p) * equivalent_n
-	Rationale       string  `json:"rationale,omitempty"` // LLM's reasoning (for audit)
+	ToolID      string  `json:"tool_id"`
+	EstimatedP  float64 `json:"estimated_p"`         // LLM's estimated success probability [0, 1]
+	EquivalentN float64 `json:"equivalent_n"`        // equivalent sample size (confidence in the estimate)
+	Alpha       float64 `json:"alpha"`               // Beta shape: estimated_p * equivalent_n
+	Beta        float64 `json:"beta"`                // Beta shape: (1 - estimated_p) * equivalent_n
+	Rationale   string  `json:"rationale,omitempty"` // LLM's reasoning (for audit)
 }
 
 // PriorConfig controls how LLM estimates are converted to Beta priors.
