@@ -1,0 +1,356 @@
+syntax = "proto3";
+
+package runtime.v1;
+
+option go_package = "github.com/underpass-ai/underpass-runtime/gen/runtime/v1;runtimev1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// ─── Services ────────────────────────────────────────────────────────────────
+//
+// Split by bounded context per DDD: session lifecycle, capability catalog,
+// governed invocation, and health. Auth via gRPC metadata:
+//   x-workspace-auth-token, x-workspace-tenant-id,
+//   x-workspace-actor-id, x-workspace-roles.
+
+// SessionService manages workspace session lifecycle.
+service SessionService {
+  // CreateSession creates an isolated workspace session.
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+
+  // CloseSession tears down the workspace and releases resources.
+  rpc CloseSession(CloseSessionRequest) returns (CloseSessionResponse);
+}
+
+// CapabilityCatalogService handles tool discovery and recommendations.
+service CapabilityCatalogService {
+  // ListTools returns all tools available in the session's runtime.
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+
+  // DiscoverTools returns tools filtered by metadata, with compact or full detail.
+  rpc DiscoverTools(DiscoverToolsRequest) returns (DiscoverToolsResponse);
+
+  // RecommendTools returns scored tool recommendations for a given task.
+  rpc RecommendTools(RecommendToolsRequest) returns (RecommendToolsResponse);
+}
+
+// InvocationService handles governed tool execution and result retrieval.
+service InvocationService {
+  // InvokeTool executes a tool in the session's workspace.
+  rpc InvokeTool(InvokeToolRequest) returns (InvokeToolResponse);
+
+  // GetInvocation retrieves a completed or running invocation by ID.
+  rpc GetInvocation(GetInvocationRequest) returns (GetInvocationResponse);
+
+  // GetInvocationLogs retrieves execution logs for an invocation.
+  rpc GetInvocationLogs(GetInvocationLogsRequest) returns (GetInvocationLogsResponse);
+
+  // GetInvocationArtifacts lists artifacts produced by an invocation.
+  rpc GetInvocationArtifacts(GetInvocationArtifactsRequest) returns (GetInvocationArtifactsResponse);
+}
+
+// HealthService provides liveness checks. Prometheus metrics remain on HTTP.
+service HealthService {
+  rpc Check(CheckRequest) returns (CheckResponse);
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum RuntimeKind {
+  RUNTIME_KIND_UNSPECIFIED = 0;
+  RUNTIME_KIND_LOCAL       = 1;
+  RUNTIME_KIND_DOCKER      = 2;
+  RUNTIME_KIND_KUBERNETES  = 3;
+}
+
+enum InvocationStatus {
+  INVOCATION_STATUS_UNSPECIFIED = 0;
+  INVOCATION_STATUS_RUNNING     = 1;
+  INVOCATION_STATUS_SUCCEEDED   = 2;
+  INVOCATION_STATUS_FAILED      = 3;
+  INVOCATION_STATUS_DENIED      = 4;
+}
+
+enum Scope {
+  SCOPE_UNSPECIFIED = 0;
+  SCOPE_REPO        = 1;
+  SCOPE_WORKSPACE   = 2;
+  SCOPE_CLUSTER     = 3;
+  SCOPE_EXTERNAL    = 4;
+}
+
+enum SideEffects {
+  SIDE_EFFECTS_UNSPECIFIED  = 0;
+  SIDE_EFFECTS_NONE         = 1;
+  SIDE_EFFECTS_REVERSIBLE   = 2;
+  SIDE_EFFECTS_IRREVERSIBLE = 3;
+}
+
+enum RiskLevel {
+  RISK_LEVEL_UNSPECIFIED = 0;
+  RISK_LEVEL_LOW         = 1;
+  RISK_LEVEL_MEDIUM      = 2;
+  RISK_LEVEL_HIGH        = 3;
+}
+
+enum Idempotency {
+  IDEMPOTENCY_UNSPECIFIED  = 0;
+  IDEMPOTENCY_GUARANTEED   = 1;
+  IDEMPOTENCY_BEST_EFFORT  = 2;
+  IDEMPOTENCY_NONE         = 3;
+}
+
+enum DiscoveryDetail {
+  DISCOVERY_DETAIL_UNSPECIFIED = 0;
+  DISCOVERY_DETAIL_COMPACT     = 1;
+  DISCOVERY_DETAIL_FULL        = 2;
+}
+
+// ─── Core Messages ───────────────────────────────────────────────────────────
+
+message Principal {
+  string          tenant_id = 1;
+  string          actor_id  = 2;
+  repeated string roles     = 3;
+}
+
+message RuntimeRef {
+  RuntimeKind kind         = 1;
+  string      namespace    = 2;
+  string      pod_name     = 3;
+  string      container    = 4;
+  string      container_id = 5;
+  string      workdir      = 6;
+}
+
+message Session {
+  string                    id             = 1;
+  string                    workspace_path = 2;
+  RuntimeRef                runtime        = 3;
+  string                    repo_url       = 4;
+  string                    repo_ref       = 5;
+  repeated string           allowed_paths  = 6;
+  Principal                 principal      = 7;
+  map<string, string>       metadata       = 8;
+  google.protobuf.Timestamp created_at     = 9;
+  google.protobuf.Timestamp expires_at     = 10;
+}
+
+message Constraints {
+  int32           timeout_seconds = 1;
+  int32           max_retries     = 2;
+  repeated string allowed_paths   = 3;
+  int32           output_limit_kb = 4;
+}
+
+// Tool is a full capability definition. input_schema and output_schema are
+// JSON Schema strings — kept as data, not proto types, because schemas are
+// per-tool and evolve independently of the API contract.
+message Tool {
+  string      name              = 1;
+  string      description       = 2;
+  string      input_schema      = 3;
+  string      output_schema     = 4;
+  Scope       scope             = 5;
+  SideEffects side_effects      = 6;
+  RiskLevel   risk_level        = 7;
+  bool        requires_approval = 8;
+  Idempotency idempotency       = 9;
+  Constraints constraints       = 10;
+  string      cost_hint         = 11;
+}
+
+// CompactTool is an LLM-optimized summary (~30% of full Tool size).
+message CompactTool {
+  string          name          = 1;
+  string          description   = 2;
+  repeated string required_args = 3;
+  string          risk          = 4;
+  string          side_effects  = 5;
+  bool            approval      = 6;
+  repeated string tags          = 7;
+  string          cost          = 8;
+}
+
+message ToolStats {
+  double success_rate     = 1;
+  int64  p50_duration_ms  = 2;
+  int64  p95_duration_ms  = 3;
+  double avg_output_kb    = 4;
+  double deny_rate        = 5;
+  int32  invocation_count = 6;
+}
+
+// FullTool wraps a Tool with discovery metadata and optional telemetry stats.
+message FullTool {
+  Tool            tool  = 1;
+  repeated string tags  = 2;
+  string          cost  = 3;
+  ToolStats       stats = 4;
+}
+
+// Error represents a governed execution error (not a transport error).
+// Transport errors use standard gRPC status codes.
+// Governed denials return a materialized Invocation with status=DENIED.
+message Error {
+  string code      = 1;
+  string message   = 2;
+  bool   retryable = 3;
+}
+
+message LogLine {
+  google.protobuf.Timestamp at      = 1;
+  string                    channel = 2;
+  string                    message = 3;
+}
+
+message Artifact {
+  string                    id           = 1;
+  string                    name         = 2;
+  string                    path         = 3;
+  string                    content_type = 4;
+  int64                     size_bytes   = 5;
+  string                    sha256       = 6;
+  google.protobuf.Timestamp created_at   = 7;
+}
+
+message Invocation {
+  string                    id             = 1;
+  string                    session_id     = 2;
+  string                    tool_name      = 3;
+  string                    correlation_id = 4;
+  InvocationStatus          status         = 5;
+  google.protobuf.Timestamp started_at     = 6;
+  google.protobuf.Timestamp completed_at   = 7;
+  int64                     duration_ms    = 8;
+  string                    trace_name     = 9;
+  string                    span_name      = 10;
+  int32                     exit_code      = 11;
+  google.protobuf.Struct    output         = 12;
+  string                    output_ref     = 13;
+  repeated LogLine          logs           = 14;
+  string                    logs_ref       = 15;
+  repeated Artifact         artifacts      = 16;
+  Error                     error          = 17;
+}
+
+message Recommendation {
+  string          name           = 1;
+  double          score          = 2;
+  string          why            = 3;
+  string          estimated_cost = 4;
+  repeated string policy_notes   = 5;
+}
+
+// ─── Request/Response ────────────────────────────────────────────────────────
+
+// SessionService
+
+message CreateSessionRequest {
+  string              session_id         = 1;
+  string              repo_url           = 2;
+  string              repo_ref           = 3;
+  string              source_repo_path   = 4;
+  repeated string     allowed_paths      = 5;
+  Principal           principal          = 6;
+  map<string, string> metadata           = 7;
+  int32               expires_in_seconds = 8;
+}
+
+message CreateSessionResponse {
+  Session session = 1;
+}
+
+message CloseSessionRequest {
+  string session_id = 1;
+}
+
+message CloseSessionResponse {
+  bool closed = 1;
+}
+
+// CapabilityCatalogService
+
+message ListToolsRequest {
+  string session_id = 1;
+}
+
+message ListToolsResponse {
+  repeated Tool tools = 1;
+}
+
+message DiscoverToolsRequest {
+  string          session_id   = 1;
+  DiscoveryDetail detail       = 2;
+  repeated string risk         = 3;
+  repeated string tags         = 4;
+  repeated string side_effects = 5;
+  repeated string scope        = 6;
+  repeated string cost         = 7;
+}
+
+message DiscoverToolsResponse {
+  repeated CompactTool compact_tools = 1;
+  repeated FullTool    full_tools    = 2;
+  int32                total         = 3;
+  int32                filtered      = 4;
+}
+
+message RecommendToolsRequest {
+  string session_id = 1;
+  string task_hint  = 2;
+  int32  top_k      = 3;
+}
+
+message RecommendToolsResponse {
+  repeated Recommendation recommendations = 1;
+  string                  task_hint       = 2;
+  int32                   top_k           = 3;
+}
+
+// InvocationService
+
+message InvokeToolRequest {
+  string                 session_id     = 1;
+  string                 tool_name      = 2;
+  string                 correlation_id = 3;
+  google.protobuf.Struct args           = 4;
+  bool                   approved       = 5;
+}
+
+message InvokeToolResponse {
+  Invocation invocation = 1;
+}
+
+message GetInvocationRequest {
+  string invocation_id = 1;
+}
+
+message GetInvocationResponse {
+  Invocation invocation = 1;
+}
+
+message GetInvocationLogsRequest {
+  string invocation_id = 1;
+}
+
+message GetInvocationLogsResponse {
+  repeated LogLine logs = 1;
+}
+
+message GetInvocationArtifactsRequest {
+  string invocation_id = 1;
+}
+
+message GetInvocationArtifactsResponse {
+  repeated Artifact artifacts = 1;
+}
+
+// HealthService
+
+message CheckRequest {}
+
+message CheckResponse {
+  string status = 1;
+}

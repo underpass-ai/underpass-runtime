@@ -86,6 +86,15 @@ catalog-docs:
 	@mkdir -p "$(GOCACHE)" "$(GOTMPDIR)"
 	go run ./cmd/catalog-docs
 
+proto-generate:
+	rm -rf gen/runtime
+	buf lint
+	buf generate
+	@echo "Proto generated: gen/runtime/v1/"
+
+proto-lint:
+	buf lint
+
 quality-gate:
 	bash scripts/ci/quality-gate.sh
 

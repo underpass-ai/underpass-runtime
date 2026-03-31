@@ -1,0 +1,2 @@
+# Generated proto code — regenerate with `make proto-generate`
+*.pb.go
