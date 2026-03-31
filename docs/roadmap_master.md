@@ -4,7 +4,7 @@ Quality roadmap for underpass-runtime. Tracks gaps found during the
 comparative audit against rehydration-kernel, plus code-vs-documentation
 discrepancies.
 
-Last updated: 2026-03-30
+Last updated: 2026-03-31
 
 ---
 
@@ -171,3 +171,18 @@ Last updated: 2026-03-30
 | CHANGELOG | None | None | Auto-generated in release workflow | Closed |
 | Pre-commit hooks | Compensated | None | .pre-commit-config.yaml | Closed |
 | Domain observability | Value objects | Basic metrics | docs/observability.md + domain-driven metrics | Closed |
+
+---
+
+## 8. RTK Inspiration Notes
+
+These notes capture RTK ideas that are worth reusing in `underpass-runtime`:
+
+- [RTK gap analysis](../rehydration-kernel/docs/research/rtk-useful-gap-analysis.md)
+- [RTK ideas for Underpass Runtime](../rehydration-kernel/docs/research/rtk-runtime-ideas.md)
+- [RTK command coverage gaps](../rehydration-kernel/docs/research/rtk-missing-tools.md)
+- [RTK-inspired runtime roadmap](../rehydration-kernel/docs/research/underpass-runtime-rtk-roadmap.md)
+
+The goal is not to copy RTK’s shell proxy architecture.
+The goal is to reuse the UX lessons: transparent activation, family-based routing,
+output shaping by tool type, safe fallback, and visible savings.
