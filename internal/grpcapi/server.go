@@ -7,7 +7,24 @@ import (
 
 	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
+	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
+
+// WorkspaceService is the interface the gRPC adapter calls.
+// Satisfied by *app.Service.
+type WorkspaceService interface {
+	CreateSession(ctx context.Context, req app.CreateSessionRequest) (domain.Session, *app.ServiceError)
+	CloseSession(ctx context.Context, sessionID string) *app.ServiceError
+	ListTools(ctx context.Context, sessionID string) ([]domain.Capability, *app.ServiceError)
+	DiscoverTools(ctx context.Context, sessionID string, detail app.DiscoveryDetail, filter app.DiscoveryFilter) (app.DiscoveryResponse, *app.ServiceError)
+	RecommendTools(ctx context.Context, sessionID string, taskHint string, topK int) (app.RecommendationsResponse, *app.ServiceError)
+	InvokeTool(ctx context.Context, sessionID, toolName string, req app.InvokeToolRequest) (domain.Invocation, *app.ServiceError)
+	GetInvocation(ctx context.Context, invocationID string) (domain.Invocation, *app.ServiceError)
+	GetInvocationLogs(ctx context.Context, invocationID string) ([]domain.LogLine, *app.ServiceError)
+	GetInvocationArtifacts(ctx context.Context, invocationID string) ([]domain.Artifact, *app.ServiceError)
+	ValidateSessionAccess(ctx context.Context, sessionID string, principal domain.Principal) *app.ServiceError
+	ValidateInvocationAccess(ctx context.Context, invocationID string, principal domain.Principal) *app.ServiceError
+}
 
 // Server implements the four gRPC services defined in runtime.proto.
 type Server struct {
@@ -16,13 +33,13 @@ type Server struct {
 	pb.UnimplementedInvocationServiceServer
 	pb.UnimplementedHealthServiceServer
 
-	service *app.Service
+	service WorkspaceService
 	auth    AuthConfig
 	logger  *slog.Logger
 }
 
 // NewServer creates the gRPC server adapter.
-func NewServer(service *app.Service, auth AuthConfig, logger *slog.Logger) *Server {
+func NewServer(service WorkspaceService, auth AuthConfig, logger *slog.Logger) *Server {
 	return &Server{service: service, auth: auth, logger: logger}
 }
 
