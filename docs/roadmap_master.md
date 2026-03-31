@@ -25,15 +25,15 @@ Last updated: 2026-03-31
 
 | # | Gap | Severity | Status | Details |
 |---|-----|----------|--------|---------|
-| D1 | **Tool count wrong** (says 96, actual 99) | HIGH | next | `README.md:119` — catalog_defaults.yaml has 99 tools |
-| D2 | **Tool families understated** (says 15+, actual 23) | MEDIUM | next | `README.md:119` — CAPABILITY_CATALOG.md shows 23 families |
-| D3 | **2 API endpoints missing from README** | CRITICAL | next | `GET /v1/sessions/{id}/tools/discovery` and `GET /v1/sessions/{id}/tools/recommendations` exist in `httpapi/server.go:157-190` but not in README API table |
+| D1 | **Tool count wrong** (says 96, actual 99) | HIGH | done | Fixed in PR #41 — README now says 99 |
+| D2 | **Tool families understated** (says 15+, actual 23) | MEDIUM | done | README table now lists all 23 families with counts |
+| D3 | **2 API endpoints missing from README** | CRITICAL | done | discovery + recommendations added in PR #41 |
 
 ### 1.2 E2E Test Documentation
 
 | # | Gap | Severity | Status | Details |
 |---|-----|----------|--------|---------|
-| D4 | **3 E2E tests undocumented** in `e2e/README.md` | MEDIUM | next | Tests 12 (event-driven-agent), 13 (multi-agent-pipeline), 14 (full-infra-stack) exist as directories with Dockerfiles, job.yaml, and test files but are not in the test catalog table |
+| D4 | **3 E2E tests undocumented** in `e2e/README.md` | MEDIUM | done | Tests 12, 13, 14, 15 all documented in e2e/README.md |
 
 ---
 

@@ -44,7 +44,7 @@ Full TLS across all 5 transports. Helm chart with mTLS support and fail-fast val
 
 ## Proven in production-style E2E
 
-14 E2E tests run as Kubernetes Jobs against a live cluster with TLS enabled:
+15 E2E tests run as Kubernetes Jobs against a live cluster with TLS enabled:
 
 | Test | What it proves |
 |------|---------------|
@@ -82,18 +82,31 @@ helm install underpass-runtime charts/underpass-runtime \
 
 99 capabilities across 23 families:
 
-| Family | Tools | Examples |
-|--------|-------|---------|
-| `fs.*` | File operations | read, write, search, patch, stat, tree |
-| `git.*` | Version control | status, diff, commit, push, branch, log |
-| `repo.*` | Project analysis | detect, build, test, coverage, symbols |
-| `security.*` | Supply chain | scan, sbom, license audit, secret detection |
-| `k8s.*` | Kubernetes | get, apply, rollout, logs, describe |
-| `image.*` | Containers | build, push, inspect |
-| `conn.*` | Connections | profile discovery |
-| `nats.*` `kafka.*` `rabbit.*` | Messaging | governed publish/subscribe |
-| `redis.*` `mongo.*` | Data | governed queries |
-| `artifact.*` | Storage | upload, download |
+| Family | Count | Examples |
+|--------|------:|---------|
+| `fs.*` | 10 | read, write, search, patch, stat, copy, move, delete |
+| `git.*` | 11 | status, diff, commit, push, log, branch, checkout, apply_patch |
+| `repo.*` | 14 | detect, build, test, coverage, symbols, static_analysis, package |
+| `k8s.*` | 8 | get_pods, apply_manifest, rollout, logs, services, deployments |
+| `redis.*` | 7 | get, set, del, scan, mget, exists, ttl |
+| `node.*` | 5 | build, install, lint, test, typecheck |
+| `container.*` | 4 | run, exec, logs, ps |
+| `go.*` | 4 | build, test, generate, mod.tidy |
+| `rust.*` | 4 | build, test, clippy, format |
+| `security.*` | 4 | scan_dependencies, scan_secrets, scan_container, license_check |
+| `artifact.*` | 3 | upload, download, list |
+| `image.*` | 3 | build, push, inspect |
+| `kafka.*` | 3 | produce, consume, topic_metadata |
+| `nats.*` | 3 | publish, request, subscribe_pull |
+| `python.*` | 3 | test, install_deps, validate |
+| `rabbit.*` | 3 | publish, consume, queue_info |
+| `c.*` | 2 | build, test |
+| `conn.*` | 2 | list_profiles, describe_profile |
+| `mongo.*` | 2 | find, aggregate |
+| `api.*` | 1 | benchmark |
+| `ci.*` | 1 | run_pipeline |
+| `quality.*` | 1 | gate |
+| `sbom.*` | 1 | generate |
 
 Each tool carries metadata: scope, side_effects, risk_level, requires_approval, idempotency, cost_hint.
 
