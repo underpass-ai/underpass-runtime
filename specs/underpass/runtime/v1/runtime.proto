@@ -1,8 +1,9 @@
 syntax = "proto3";
 
-package runtime.v1;
+// Ajuste 1: package scoped to org to avoid collision.
+package underpass.runtime.v1;
 
-option go_package = "github.com/underpass-ai/underpass-runtime/gen/runtime/v1;runtimev1";
+option go_package = "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1;runtimev1";
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -144,21 +145,45 @@ message Constraints {
   int32           output_limit_kb = 4;
 }
 
-// Tool is a full capability definition. input_schema and output_schema are
-// JSON Schema strings — kept as data, not proto types, because schemas are
-// per-tool and evolve independently of the API contract.
+// PolicyMetadata holds per-tool policy configuration (path validation, etc).
+message PolicyMetadata {
+  repeated PathField path_fields = 1;
+}
+
+message PathField {
+  string field              = 1;
+  bool   workspace_relative = 2;
+}
+
+// Observability holds per-tool observability configuration.
+message Observability {
+  bool log_output    = 1;
+  bool log_input     = 2;
+  bool trace_enabled = 3;
+}
+
+// Tool is a full capability definition.
+// Ajuste 2: input_schema and output_schema as bytes (JSON-encoded JSON Schema).
+// Avoids double-serialization; clients parse as needed.
+// Ajuste 4: includes preconditions, postconditions, policy, observability,
+// examples for full parity with HTTP discovery.
 message Tool {
-  string      name              = 1;
-  string      description       = 2;
-  string      input_schema      = 3;
-  string      output_schema     = 4;
-  Scope       scope             = 5;
-  SideEffects side_effects      = 6;
-  RiskLevel   risk_level        = 7;
-  bool        requires_approval = 8;
-  Idempotency idempotency       = 9;
-  Constraints constraints       = 10;
-  string      cost_hint         = 11;
+  string          name              = 1;
+  string          description       = 2;
+  bytes           input_schema      = 3;  // JSON Schema, JSON-encoded
+  bytes           output_schema     = 4;  // JSON Schema, JSON-encoded
+  Scope           scope             = 5;
+  SideEffects     side_effects      = 6;
+  RiskLevel       risk_level        = 7;
+  bool            requires_approval = 8;
+  Idempotency     idempotency       = 9;
+  Constraints     constraints       = 10;
+  string          cost_hint         = 11;
+  repeated string preconditions     = 12;
+  repeated string postconditions    = 13;
+  PolicyMetadata  policy            = 14;
+  Observability   observability     = 15;
+  repeated bytes  examples          = 16;  // JSON-encoded example args
 }
 
 // CompactTool is an LLM-optimized summary (~30% of full Tool size).
@@ -215,6 +240,8 @@ message Artifact {
   google.protobuf.Timestamp created_at   = 7;
 }
 
+// Ajuste 3: output as Value (not Struct) — tools can return string, array,
+// number, not just objects.
 message Invocation {
   string                    id             = 1;
   string                    session_id     = 2;
@@ -227,7 +254,7 @@ message Invocation {
   string                    trace_name     = 9;
   string                    span_name      = 10;
   int32                     exit_code      = 11;
-  google.protobuf.Struct    output         = 12;
+  google.protobuf.Value     output         = 12;
   string                    output_ref     = 13;
   repeated LogLine          logs           = 14;
   string                    logs_ref       = 15;
@@ -290,11 +317,22 @@ message DiscoverToolsRequest {
   repeated string cost         = 7;
 }
 
+// Ajuste 5: oneof for discovery results — cleaner than "only one list populated".
 message DiscoverToolsResponse {
-  repeated CompactTool compact_tools = 1;
-  repeated FullTool    full_tools    = 2;
-  int32                total         = 3;
-  int32                filtered      = 4;
+  oneof tools {
+    CompactToolList compact = 1;
+    FullToolList    full    = 2;
+  }
+  int32 total    = 3;
+  int32 filtered = 4;
+}
+
+message CompactToolList {
+  repeated CompactTool tools = 1;
+}
+
+message FullToolList {
+  repeated FullTool tools = 1;
 }
 
 message RecommendToolsRequest {
