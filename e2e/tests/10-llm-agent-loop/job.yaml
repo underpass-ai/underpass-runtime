@@ -51,7 +51,7 @@ spec:
                   key: shared_token
                   optional: true
             - name: LLM_PROVIDER
-              value: "vllm"
+              value: "vllm-qwen35"
             # --- Claude ---
             - name: ANTHROPIC_API_KEY
               valueFrom:
@@ -72,9 +72,9 @@ spec:
               value: "gpt-4o-mini"
             # --- vLLM (Qwen) ---
             - name: VLLM_URL
-              value: "http://vllm-server.underpass-runtime.svc.cluster.local:8000"
+              value: "http://vllm-qwen35.underpass-runtime.svc.cluster.local:8000"
             - name: VLLM_MODEL
-              value: "Qwen/Qwen3-8B"
+              value: "Qwen/Qwen3.5-9B"
             # --- Test config ---
             - name: EVIDENCE_FILE
               value: "/tmp/evidence-10-llm-agent-loop.json"
