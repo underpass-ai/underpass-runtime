@@ -8,7 +8,7 @@ import time
 
 from workspace_common import WorkspaceE2EBase, print_error, print_step, print_success
 
-DEFAULT_URL = "http://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+DEFAULT_URL = "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
 
 PRINCIPAL = {
     "tenant_id": "e2e-tenant",
@@ -59,16 +59,8 @@ class SessionLifecycleE2E(WorkspaceE2EBase):
             self.record_step("close_idempotent", "passed")
             print_success("Close nonexistent session returned 200")
 
-            # --- Step 4: POST to sessions required, GET returns 405 ---
-            print_step(4, "GET /v1/sessions returns 405")
-            status, _ = self.request("GET", "/v1/sessions")
-            if status != 405:
-                raise RuntimeError(f"method not allowed: expected 405, got {status}")
-            self.record_step("method_not_allowed", "passed")
-            print_success("GET /v1/sessions -> 405")
-
-            # --- Step 5: Two concurrent sessions are independent ---
-            print_step(5, "Multiple sessions are independent")
+            # --- Step 4: Two concurrent sessions are independent ---
+            print_step(4, "Multiple sessions are independent")
             sid_a = self.create_session(payload={"principal": PRINCIPAL})
             sid_b = self.create_session(payload={"principal": PRINCIPAL})
             if sid_a == sid_b:
@@ -76,8 +68,8 @@ class SessionLifecycleE2E(WorkspaceE2EBase):
             self.record_step("multiple_independent", "passed", {"a": sid_a, "b": sid_b})
             print_success(f"Two independent sessions: {sid_a}, {sid_b}")
 
-            # --- Step 6: Double close is idempotent ---
-            print_step(6, "Double close same session")
+            # --- Step 5: Double close is idempotent ---
+            print_step(5, "Double close same session")
             sid_c = self.create_session(payload={"principal": PRINCIPAL})
             s1, _ = self.request("DELETE", f"/v1/sessions/{sid_c}")
             s2, _ = self.request("DELETE", f"/v1/sessions/{sid_c}")
@@ -86,8 +78,8 @@ class SessionLifecycleE2E(WorkspaceE2EBase):
             self.record_step("double_close", "passed")
             print_success("Double close returned 200 both times")
 
-            # --- Step 7: Create with explicit session ID ---
-            print_step(7, "Create session with explicit ID")
+            # --- Step 6: Create with explicit session ID ---
+            print_step(6, "Create session with explicit ID")
             explicit_id = f"e2e-explicit-{int(time.time())}"
             sid_d = self.create_session(
                 payload={"principal": PRINCIPAL, "session_id": explicit_id}

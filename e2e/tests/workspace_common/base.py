@@ -145,6 +145,30 @@ class WorkspaceE2EBase:
     def now_iso() -> str:
         return datetime.now(timezone.utc).isoformat()
 
+    @staticmethod
+    def _normalize_dict(d: dict[str, Any]) -> dict[str, Any]:
+        """Normalize a protobuf MessageToDict output for backward compatibility.
+
+        - Converts camelCase keys to snake_case (sessionId → session_id)
+        - Strips INVOCATION_STATUS_ prefix from status values
+        - Recurses into nested dicts
+        """
+        import re
+
+        def to_snake(name: str) -> str:
+            return re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", name).lower()
+
+        def normalize_value(v: Any) -> Any:
+            if isinstance(v, dict):
+                return {to_snake(k): normalize_value(val) for k, val in v.items()}
+            if isinstance(v, list):
+                return [normalize_value(item) for item in v]
+            if isinstance(v, str) and v.startswith("INVOCATION_STATUS_"):
+                return v.replace("INVOCATION_STATUS_", "").lower()
+            return v
+
+        return normalize_value(d)  # type: ignore[return-value]
+
     # ─── gRPC call helpers ───────────────────────────────────────────────
 
     def _call(self, method, request, timeout: int = 60):
@@ -209,12 +233,29 @@ class WorkspaceE2EBase:
                               pb.ListToolsRequest(session_id=session_id), timeout)
             return {"tools": [json_format.MessageToDict(t) for t in resp.tools]}
 
-        # GET /v1/sessions/{id}/tools/discovery
+        # GET /v1/sessions/{id}/tools/discovery[?detail=full&risk=low&...]
         if "/tools/discovery" in path:
             session_id = path.split("/v1/sessions/")[1].split("/")[0]
+            # Parse query params from path
+            params: dict[str, str] = {}
+            if "?" in path:
+                qs = path.split("?", 1)[1]
+                for pair in qs.split("&"):
+                    k, _, v = pair.partition("=")
+                    params[k] = v
+            detail_str = params.get("detail", "compact")
+            detail = (
+                pb.DiscoveryDetail.DISCOVERY_DETAIL_FULL
+                if detail_str == "full"
+                else pb.DiscoveryDetail.DISCOVERY_DETAIL_COMPACT
+            )
             req = pb.DiscoverToolsRequest(
                 session_id=session_id,
-                detail=pb.DiscoveryDetail.DISCOVERY_DETAIL_COMPACT,
+                detail=detail,
+                risk=[params["risk"]] if "risk" in params else [],
+                cost=[params["cost"]] if "cost" in params else [],
+                side_effects=[params["side_effects"]] if "side_effects" in params else [],
+                scope=[params["scope"]] if "scope" in params else [],
             )
             resp = self._call(self._catalog_stub.DiscoverTools, req, timeout)
             tools = []
@@ -224,10 +265,18 @@ class WorkspaceE2EBase:
                 tools = [json_format.MessageToDict(t) for t in resp.full.tools]
             return {"tools": tools, "total": resp.total, "filtered": resp.filtered}
 
-        # GET /v1/sessions/{id}/tools/recommendations
+        # GET /v1/sessions/{id}/tools/recommendations[?task_hint=...&top_k=...]
         if "/tools/recommendations" in path:
             session_id = path.split("/v1/sessions/")[1].split("/")[0]
-            req = pb.RecommendToolsRequest(session_id=session_id, task_hint="", top_k=10)
+            params: dict[str, str] = {}
+            if "?" in path:
+                qs = path.split("?", 1)[1]
+                for pair in qs.split("&"):
+                    k, _, v = pair.partition("=")
+                    params[k] = v
+            task_hint = params.get("task_hint", "").replace("+", " ")
+            top_k = int(params.get("top_k", "10"))
+            req = pb.RecommendToolsRequest(session_id=session_id, task_hint=task_hint, top_k=top_k)
             resp = self._call(self._catalog_stub.RecommendTools, req, timeout)
             return {
                 "recommendations": [json_format.MessageToDict(r) for r in resp.recommendations],
@@ -259,7 +308,7 @@ class WorkspaceE2EBase:
 
             resp = self._call(self._invocation_stub.GetInvocation,
                               pb.GetInvocationRequest(invocation_id=inv_id), timeout)
-            return {"invocation": json_format.MessageToDict(resp.invocation)}
+            return {"invocation": self._normalize_dict(json_format.MessageToDict(resp.invocation))}
 
         raise ValueError(f"Unknown route: {method} {path}")
 
@@ -280,7 +329,7 @@ class WorkspaceE2EBase:
             expires_in_seconds=payload.get("expires_in_seconds", 0),
         )
         resp = self._call(self._session_stub.CreateSession, req, timeout)
-        return {"session": json_format.MessageToDict(resp.session)}
+        return {"session": self._normalize_dict(json_format.MessageToDict(resp.session))}
 
     def _rpc_invoke(self, session_id: str, tool_name: str, payload: dict, timeout: int) -> dict:
         args_dict = payload.get("args", {})
@@ -295,7 +344,7 @@ class WorkspaceE2EBase:
             approved=payload.get("approved", False),
         )
         resp = self._call(self._invocation_stub.InvokeTool, req, timeout)
-        result = {"invocation": json_format.MessageToDict(resp.invocation)}
+        result = {"invocation": self._normalize_dict(json_format.MessageToDict(resp.invocation))}
         # Include error at top level if present (for backward compat with HTTP).
         if resp.invocation.HasField("error"):
             result["error"] = {

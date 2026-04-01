@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen35
+  namespace: underpass-runtime
+  labels:
+    app: vllm-qwen35
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-qwen35
+  template:
+    metadata:
+      labels:
+        app: vllm-qwen35
+    spec:
+      containers:
+        - name: vllm
+          image: docker.io/vllm/vllm-openai:v0.18.0-cu130
+          imagePullPolicy: IfNotPresent
+          args:
+            - --model=Qwen/Qwen3.5-9B
+            - --tensor-parallel-size=1
+            - --max-model-len=32768
+            - --gpu-memory-utilization=0.90
+            - --trust-remote-code
+            - --host=0.0.0.0
+            - --reasoning-parser=qwen3
+            - --language-model-only
+          env:
+            - name: HF_HOME
+              value: /tmp/hf-cache
+            - name: LD_LIBRARY_PATH
+              value: /usr/lib
+            - name: VLLM_ATTENTION_BACKEND
+              value: FLASHINFER
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "2"
+              memory: 16Gi
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "4"
+              memory: 24Gi
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /tmp/hf-cache
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: hf-cache
+          emptyDir:
+            sizeLimit: 20Gi
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-qwen35
+  namespace: underpass-runtime
+  labels:
+    app: vllm-qwen35
+spec:
+  type: ClusterIP
+  selector:
+    app: vllm-qwen35
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http

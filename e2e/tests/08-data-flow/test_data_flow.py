@@ -8,7 +8,7 @@ import time
 
 from workspace_common import WorkspaceE2EBase, print_error, print_info, print_step, print_success
 
-DEFAULT_URL = "http://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+DEFAULT_URL = "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
 
 PRINCIPAL = {
     "tenant_id": "e2e-tenant",

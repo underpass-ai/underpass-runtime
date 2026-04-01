@@ -421,7 +421,7 @@ func buildServerTLS(logger *slog.Logger) (*tls.Config, error) {
 
 // buildValkeyTLS builds the TLS configuration for all Valkey connections.
 // Reads VALKEY_TLS_ENABLED, VALKEY_TLS_CA_PATH, VALKEY_TLS_CERT_PATH,
-// VALKEY_TLS_KEY_PATH.
+// VALKEY_TLS_KEY_PATH, VALKEY_TLS_SERVER_NAME.
 // NOTE: The kernel uses URI scheme (rediss://) with query params. The Go
 // runtime uses separate env vars because go-redis accepts addr + TLSConfig.
 // This is a documented divergence from the kernel's Valkey TLS model.
@@ -438,10 +438,11 @@ func buildValkeyTLS(logger *slog.Logger) (*tls.Config, error) {
 		mode = tlsutil.ModeMutual
 	}
 	cfg, err := tlsutil.BuildClientTLSConfig(tlsutil.Config{
-		Mode:     mode,
-		CAPath:   caPath,
-		CertPath: certPath,
-		KeyPath:  keyPath,
+		Mode:       mode,
+		CAPath:     caPath,
+		CertPath:   certPath,
+		KeyPath:    keyPath,
+		ServerName: strings.TrimSpace(os.Getenv("VALKEY_TLS_SERVER_NAME")),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("valkey TLS: %w", err)
@@ -452,7 +453,7 @@ func buildValkeyTLS(logger *slog.Logger) (*tls.Config, error) {
 
 // buildNATSTLS builds the TLS configuration for the NATS connection.
 // Reads NATS_TLS_MODE, NATS_TLS_CA_PATH, NATS_TLS_CERT_PATH,
-// NATS_TLS_KEY_PATH, NATS_TLS_FIRST.
+// NATS_TLS_KEY_PATH, NATS_TLS_SERVER_NAME, NATS_TLS_FIRST.
 // NOTE: NATS_TLS_FIRST is read for env-var consistency with the kernel (Rust),
 // but the Go NATS client (nats.go) does not support a TLS-first handshake.
 // If the NATS server requires TLS-first, the connection will fail.
@@ -468,10 +469,11 @@ func buildNATSTLS(logger *slog.Logger) (*tls.Config, error) {
 		logger.Warn("NATS_TLS_FIRST=true requested but Go nats.go client does not support TLS-first handshake; flag ignored")
 	}
 	cfg, err := tlsutil.BuildClientTLSConfig(tlsutil.Config{
-		Mode:     mode,
-		CAPath:   strings.TrimSpace(os.Getenv("NATS_TLS_CA_PATH")),
-		CertPath: strings.TrimSpace(os.Getenv("NATS_TLS_CERT_PATH")),
-		KeyPath:  strings.TrimSpace(os.Getenv("NATS_TLS_KEY_PATH")),
+		Mode:       mode,
+		CAPath:     strings.TrimSpace(os.Getenv("NATS_TLS_CA_PATH")),
+		CertPath:   strings.TrimSpace(os.Getenv("NATS_TLS_CERT_PATH")),
+		KeyPath:    strings.TrimSpace(os.Getenv("NATS_TLS_KEY_PATH")),
+		ServerName: strings.TrimSpace(os.Getenv("NATS_TLS_SERVER_NAME")),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("nats TLS: %w", err)
@@ -695,9 +697,21 @@ func buildArtifactStore(ctx context.Context, localRoot string, logger *slog.Logg
 	case "s3":
 		useSSL := parseBoolOrDefault(os.Getenv("ARTIFACT_S3_USE_SSL"), false)
 		var s3TLS *tls.Config
-		if caPath := strings.TrimSpace(os.Getenv("ARTIFACT_S3_CA_PATH")); caPath != "" {
+		caPath := strings.TrimSpace(os.Getenv("ARTIFACT_S3_CA_PATH"))
+		certPath := strings.TrimSpace(os.Getenv("ARTIFACT_S3_CERT_PATH"))
+		keyPath := strings.TrimSpace(os.Getenv("ARTIFACT_S3_KEY_PATH"))
+		if caPath != "" || (certPath != "" && keyPath != "") {
+			mode := tlsutil.ModeServer
+			if certPath != "" && keyPath != "" {
+				mode = tlsutil.ModeMutual
+			}
 			var tlsErr error
-			s3TLS, tlsErr = tlsutil.BuildClientTLSFromCA(caPath)
+			s3TLS, tlsErr = tlsutil.BuildClientTLSConfig(tlsutil.Config{
+				Mode:     mode,
+				CAPath:   caPath,
+				CertPath: certPath,
+				KeyPath:  keyPath,
+			})
 			if tlsErr != nil {
 				return nil, fmt.Errorf("s3 TLS: %w", tlsErr)
 			}

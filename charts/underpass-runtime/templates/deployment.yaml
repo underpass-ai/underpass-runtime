@@ -5,6 +5,8 @@
 {{- $natsTlsMode := include "underpass-runtime.natsTlsMode" . -}}
 {{- $valkeyTls := default (dict) .Values.valkeyTls -}}
 {{- $valkeyTlsEnabled := default false $valkeyTls.enabled -}}
+{{- $s3Tls := default (dict) .Values.s3Tls -}}
+{{- $s3TlsEnabled := default false $s3Tls.enabled -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -127,6 +129,11 @@ spec:
               mountPath: {{ $valkeyTls.mountPath }}
               readOnly: true
             {{- end }}
+            {{- if and $s3TlsEnabled $s3Tls.existingSecret }}
+            - name: s3-tls
+              mountPath: {{ $s3Tls.mountPath }}
+              readOnly: true
+            {{- end }}
       volumes:
         - name: workspaces
           emptyDir:
@@ -151,6 +158,11 @@ spec:
         - name: valkey-tls
           secret:
             secretName: {{ $valkeyTls.existingSecret }}
+        {{- end }}
+        {{- if and $s3TlsEnabled $s3Tls.existingSecret }}
+        - name: s3-tls
+          secret:
+            secretName: {{ $s3Tls.existingSecret }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

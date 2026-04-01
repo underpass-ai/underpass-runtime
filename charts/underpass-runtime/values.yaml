@@ -104,6 +104,8 @@ natsTls:
   mode: disabled
   # -- Existing Secret containing NATS TLS certificates
   existingSecret: ""
+  # -- Optional SNI / hostname verification override for the NATS server certificate
+  serverName: ""
   # -- Mount path for NATS TLS secrets
   mountPath: /var/run/underpass-runtime/nats-tls
   keys:
@@ -122,8 +124,28 @@ valkeyTls:
   enabled: false
   # -- Existing Secret containing Valkey TLS certificates
   existingSecret: ""
+  # -- Optional SNI / hostname verification override for the Valkey server certificate
+  serverName: ""
   # -- Mount path for Valkey TLS secrets
   mountPath: /var/run/underpass-runtime/valkey-tls
+  keys:
+    # -- Key in the secret for the CA certificate
+    ca: ca.crt
+    # -- Key in the secret for the client certificate (mTLS only)
+    cert: ""
+    # -- Key in the secret for the client private key (mTLS only)
+    key: ""
+
+# -- S3/MinIO client TLS configuration (used by artifact store and tool-learning)
+s3Tls:
+  # -- Enable TLS for S3/MinIO connections
+  enabled: false
+  # -- Existing Secret containing S3 client TLS certificates
+  existingSecret: ""
+  # -- Optional SNI / hostname verification override for the S3 server certificate
+  serverName: ""
+  # -- Mount path for S3 TLS secrets
+  mountPath: /var/run/underpass-runtime/s3-tls
   keys:
     # -- Key in the secret for the CA certificate
     ca: ca.crt
@@ -236,6 +258,23 @@ telemetry:
     insecure: false
     # -- Path to CA certificate for OTLP TLS
     caPath: ""
+
+# -- Optional ingress for an external vLLM service used by some deployments
+vllm:
+  ingress:
+    # -- Enable the vLLM ingress resource
+    enabled: false
+    # -- cert-manager ClusterIssuer used when ingress TLS is enabled
+    clusterIssuer: ""
+    # -- Hostname served by the ingress
+    host: ""
+    # -- TLS secret name for the ingress certificate
+    tlsSecret: ""
+    mtls:
+      # -- Require client certificates at the ingress layer
+      enabled: false
+      # -- Secret containing the client CA bundle for ingress mTLS
+      clientCaSecret: ""
 
 # -- Authentication configuration
 auth:
@@ -445,6 +484,26 @@ toolLearning:
   tolerations: []
   # -- Affinity rules
   affinity: {}
+
+# ---------------------------------------------------------------------------
+# TLS Certificate Generation (pre-install/pre-upgrade hook)
+# ---------------------------------------------------------------------------
+
+certGen:
+  # -- Enable automatic TLS certificate generation via Helm hook Job.
+  # Reads the shared CA from caSecret and generates runtime server + client certs.
+  # Requires the CA secret to exist (deployed by rehydration-kernel or manually).
+  enabled: false
+  # -- Container image with openssl, curl, and jq
+  image: docker.io/alpine:3.19
+  # -- Name of the existing CA Secret (must contain tls.crt and tls.key)
+  caSecret: rehydration-kernel-internal-ca
+  # -- Key algorithm: ec (ECDSA)
+  keyAlgorithm: ec
+  # -- Elliptic curve for ECDSA keys
+  keyCurve: prime256v1
+  # -- Certificate validity in days
+  validityDays: 365
 
 # ---------------------------------------------------------------------------
 # MinIO IAM Setup (TL-008 — bucket isolation)

@@ -1,0 +1,245 @@
+{{- if .Values.certGen.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "underpass-runtime.fullname" . }}-cert-gen
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cert-gen
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 120
+  template:
+    metadata:
+      labels:
+        {{- include "underpass-runtime.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: cert-gen
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "underpass-runtime.fullname" . }}-cert-gen
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cert-gen
+          image: {{ .Values.certGen.image | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: FULLNAME
+              value: {{ include "underpass-runtime.fullname" . | quote }}
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: CA_SECRET
+              value: {{ include "underpass-runtime.certGen.caSecretName" . | quote }}
+            - name: KEY_CURVE
+              value: {{ .Values.certGen.keyCurve | quote }}
+            - name: VALIDITY_DAYS
+              value: {{ .Values.certGen.validityDays | quote }}
+          command:
+            - /bin/sh
+            - -ce
+            - |
+              apk --no-cache add openssl curl jq >/dev/null 2>&1
+
+              APISERVER=https://kubernetes.default.svc
+              TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              API_BASE="${APISERVER}/api/v1/namespaces/${NAMESPACE}/secrets"
+
+              # ── helpers ──────────────────────────────────────────────
+              kube_get() {
+                curl -s -o /tmp/response.json -w "%{http_code}" \
+                  --cacert "$KUBE_CA" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  "${API_BASE}/$1"
+              }
+
+              secret_exists() {
+                [ "$(kube_get "$1")" = "200" ]
+              }
+
+              create_secret() {
+                local name=$1 data=$2
+                local payload
+                payload=$(printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/managed-by":"cert-gen","app.kubernetes.io/part-of":"underpass-runtime"}},"type":"Opaque","data":%s}' \
+                  "$name" "$NAMESPACE" "$data")
+                local code
+                code=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+                  --cacert "$KUBE_CA" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -X POST -d "$payload" "$API_BASE")
+                if [ "$code" != "201" ] && [ "$code" != "409" ]; then
+                  echo "ERROR: failed to create secret $name (HTTP $code)"
+                  cat /tmp/response.json
+                  return 1
+                fi
+                echo "  created secret $name"
+              }
+
+              gen_key() {
+                openssl genpkey -algorithm EC \
+                  -pkeyopt ec_paramgen_curve:"$KEY_CURVE" \
+                  -out "$1" 2>/dev/null
+              }
+
+              # ── 1. read shared CA ───────────────────────────────────
+              echo "Reading CA from secret ${CA_SECRET}..."
+              code=$(kube_get "$CA_SECRET")
+              if [ "$code" != "200" ]; then
+                echo "ERROR: CA secret ${CA_SECRET} not found (HTTP $code)."
+                echo "Deploy rehydration-kernel with certGen.enabled=true first,"
+                echo "or create the CA secret manually."
+                exit 1
+              fi
+              jq -r '.data["tls.crt"]' /tmp/response.json | base64 -d > /tmp/ca.crt
+              jq -r '.data["tls.key"]' /tmp/response.json | base64 -d > /tmp/ca.key
+              CA_CRT_B64=$(jq -r '.data["tls.crt"]' /tmp/response.json)
+              echo "  CA loaded ($(openssl x509 -noout -subject -in /tmp/ca.crt 2>/dev/null || echo 'ok'))"
+
+              # ── 2. runtime gRPC server cert ─────────────────────────
+              SERVER_SECRET="${FULLNAME}-tls"
+              if secret_exists "$SERVER_SECRET"; then
+                echo "Secret $SERVER_SECRET already exists, skipping"
+              else
+                echo "Generating runtime gRPC server certificate..."
+                gen_key /tmp/server.key
+                cat > /tmp/server.ext <<EXTEOF
+              [req]
+              distinguished_name = dn
+              req_extensions = v3_req
+              prompt = no
+              [dn]
+              CN = ${FULLNAME}
+              [v3_req]
+              subjectAltName = DNS:${FULLNAME},DNS:${FULLNAME}.${NAMESPACE}.svc,DNS:${FULLNAME}.${NAMESPACE}.svc.cluster.local
+              extendedKeyUsage = serverAuth,clientAuth
+              EXTEOF
+                openssl req -new -key /tmp/server.key -out /tmp/server.csr \
+                  -config /tmp/server.ext
+                openssl x509 -req -in /tmp/server.csr \
+                  -CA /tmp/ca.crt -CAkey /tmp/ca.key -CAcreateserial \
+                  -out /tmp/server.crt -days "$VALIDITY_DAYS" \
+                  -extfile /tmp/server.ext -extensions v3_req 2>/dev/null
+                CRT_B64=$(base64 -w0 /tmp/server.crt)
+                KEY_B64=$(base64 -w0 /tmp/server.key)
+                create_secret "$SERVER_SECRET" \
+                  "{\"tls.crt\":\"$CRT_B64\",\"tls.key\":\"$KEY_B64\",\"ca.crt\":\"$CA_CRT_B64\"}"
+              fi
+
+              # ── 3. NATS client cert ─────────────────────────────────
+              NATS_SECRET="${FULLNAME}-nats-client-tls"
+              if secret_exists "$NATS_SECRET"; then
+                echo "Secret $NATS_SECRET already exists, skipping"
+              else
+                echo "Generating NATS client certificate..."
+                gen_key /tmp/nats-client.key
+                cat > /tmp/nats-client.ext <<EXTEOF
+              [req]
+              distinguished_name = dn
+              req_extensions = v3_req
+              prompt = no
+              [dn]
+              CN = ${FULLNAME}-nats-client
+              [v3_req]
+              extendedKeyUsage = clientAuth
+              EXTEOF
+                openssl req -new -key /tmp/nats-client.key -out /tmp/nats-client.csr \
+                  -config /tmp/nats-client.ext
+                openssl x509 -req -in /tmp/nats-client.csr \
+                  -CA /tmp/ca.crt -CAkey /tmp/ca.key -CAcreateserial \
+                  -out /tmp/nats-client.crt -days "$VALIDITY_DAYS" \
+                  -extfile /tmp/nats-client.ext -extensions v3_req 2>/dev/null
+                CRT_B64=$(base64 -w0 /tmp/nats-client.crt)
+                KEY_B64=$(base64 -w0 /tmp/nats-client.key)
+                create_secret "$NATS_SECRET" \
+                  "{\"tls.crt\":\"$CRT_B64\",\"tls.key\":\"$KEY_B64\",\"ca.crt\":\"$CA_CRT_B64\"}"
+              fi
+
+              # ── 4. Valkey client cert ───────────────────────────────
+              VALKEY_SECRET="${FULLNAME}-valkey-client-tls"
+              if secret_exists "$VALKEY_SECRET"; then
+                echo "Secret $VALKEY_SECRET already exists, skipping"
+              else
+                echo "Generating Valkey client certificate..."
+                gen_key /tmp/valkey-client.key
+                cat > /tmp/valkey-client.ext <<EXTEOF
+              [req]
+              distinguished_name = dn
+              req_extensions = v3_req
+              prompt = no
+              [dn]
+              CN = ${FULLNAME}-valkey-client
+              [v3_req]
+              extendedKeyUsage = clientAuth
+              EXTEOF
+                openssl req -new -key /tmp/valkey-client.key -out /tmp/valkey-client.csr \
+                  -config /tmp/valkey-client.ext
+                openssl x509 -req -in /tmp/valkey-client.csr \
+                  -CA /tmp/ca.crt -CAkey /tmp/ca.key -CAcreateserial \
+                  -out /tmp/valkey-client.crt -days "$VALIDITY_DAYS" \
+                  -extfile /tmp/valkey-client.ext -extensions v3_req 2>/dev/null
+                CRT_B64=$(base64 -w0 /tmp/valkey-client.crt)
+                KEY_B64=$(base64 -w0 /tmp/valkey-client.key)
+                create_secret "$VALKEY_SECRET" \
+                  "{\"tls.crt\":\"$CRT_B64\",\"tls.key\":\"$KEY_B64\",\"ca.crt\":\"$CA_CRT_B64\"}"
+              fi
+
+              # ── 5. S3/MinIO client cert ─────────────────────────────
+              S3_SECRET="${FULLNAME}-s3-client-tls"
+              if secret_exists "$S3_SECRET"; then
+                echo "Secret $S3_SECRET already exists, skipping"
+              else
+                echo "Generating S3/MinIO client certificate..."
+                gen_key /tmp/s3-client.key
+                cat > /tmp/s3-client.ext <<EXTEOF
+              [req]
+              distinguished_name = dn
+              req_extensions = v3_req
+              prompt = no
+              [dn]
+              CN = ${FULLNAME}-s3-client
+              [v3_req]
+              extendedKeyUsage = clientAuth
+              EXTEOF
+                openssl req -new -key /tmp/s3-client.key -out /tmp/s3-client.csr \
+                  -config /tmp/s3-client.ext
+                openssl x509 -req -in /tmp/s3-client.csr \
+                  -CA /tmp/ca.crt -CAkey /tmp/ca.key -CAcreateserial \
+                  -out /tmp/s3-client.crt -days "$VALIDITY_DAYS" \
+                  -extfile /tmp/s3-client.ext -extensions v3_req 2>/dev/null
+                CRT_B64=$(base64 -w0 /tmp/s3-client.crt)
+                KEY_B64=$(base64 -w0 /tmp/s3-client.key)
+                create_secret "$S3_SECRET" \
+                  "{\"tls.crt\":\"$CRT_B64\",\"tls.key\":\"$KEY_B64\",\"ca.crt\":\"$CA_CRT_B64\"}"
+              fi
+
+              echo "Certificate generation complete"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+{{- end }}

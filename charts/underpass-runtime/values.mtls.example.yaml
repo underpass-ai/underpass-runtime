@@ -1,20 +1,32 @@
 # Example: Mutual TLS on all transports.
 #
-# This file shows how to enable mTLS for HTTP server, NATS, and Valkey.
-# Combine with values.production.yaml:
+# This file shows how to enable mTLS for gRPC server, NATS, and Valkey.
+# Combine with values.shared-infra.yaml for a full mTLS deployment:
 #
 #   helm upgrade --install underpass-runtime charts/underpass-runtime \
-#     -f charts/underpass-runtime/values.yaml \
-#     -f charts/underpass-runtime/values.production.yaml \
+#     -f charts/underpass-runtime/values.shared-infra.yaml \
 #     -f charts/underpass-runtime/values.mtls.example.yaml
 #
-# Prerequisites:
-#   - kubectl create secret generic underpass-runtime-tls \
-#       --from-file=tls.crt --from-file=tls.key --from-file=ca.crt
-#   - kubectl create secret generic underpass-runtime-nats-tls \
-#       --from-file=ca.crt --from-file=tls.crt=client.crt --from-file=tls.key=client.key
-#   - kubectl create secret generic underpass-runtime-valkey-tls \
-#       --from-file=ca.crt --from-file=tls.crt=client.crt --from-file=tls.key=client.key
+# Option A — automatic certificate generation (recommended):
+#   Deploy the rehydration-kernel first with certGen.enabled=true, then:
+#
+#   certGen:
+#     enabled: true
+#
+# Option B — manual prerequisites:
+#   kubectl create secret generic underpass-runtime-tls \
+#     --from-file=tls.crt --from-file=tls.key --from-file=ca.crt
+#   kubectl create secret generic underpass-runtime-nats-client-tls \
+#     --from-file=ca.crt --from-file=tls.crt=client.crt --from-file=tls.key=client.key
+#   kubectl create secret generic underpass-runtime-valkey-client-tls \
+#     --from-file=ca.crt --from-file=tls.crt=client.crt --from-file=tls.key=client.key
+#   kubectl create secret generic underpass-runtime-s3-client-tls \
+#     --from-file=ca.crt --from-file=tls.crt=client.crt --from-file=tls.key=client.key
+
+# Uncomment to enable automatic cert generation from the shared CA:
+# certGen:
+#   enabled: true
+#   caSecret: rehydration-kernel-internal-ca
 
 tls:
   mode: mutual
@@ -27,7 +39,8 @@ tls:
 
 natsTls:
   mode: mutual
-  existingSecret: underpass-runtime-nats-tls
+  existingSecret: underpass-runtime-nats-client-tls
+  serverName: rehydration-kernel-nats
   mountPath: /var/run/underpass-runtime/nats-tls
   keys:
     ca: ca.crt
@@ -36,8 +49,18 @@ natsTls:
 
 valkeyTls:
   enabled: true
-  existingSecret: underpass-runtime-valkey-tls
+  existingSecret: underpass-runtime-valkey-client-tls
+  serverName: rehydration-kernel-valkey
   mountPath: /var/run/underpass-runtime/valkey-tls
+  keys:
+    ca: ca.crt
+    cert: tls.crt
+    key: tls.key
+
+s3Tls:
+  enabled: true
+  existingSecret: underpass-runtime-s3-client-tls
+  mountPath: /var/run/underpass-runtime/s3-tls
   keys:
     ca: ca.crt
     cert: tls.crt

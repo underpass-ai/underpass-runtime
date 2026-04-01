@@ -211,8 +211,9 @@ func TestBuildClientTLSConfig_Server(t *testing.T) {
 	testCA(t, dir)
 
 	cfg, err := BuildClientTLSConfig(Config{
-		Mode:   ModeServer,
-		CAPath: filepath.Join(dir, "ca.crt"),
+		Mode:       ModeServer,
+		CAPath:     filepath.Join(dir, "ca.crt"),
+		ServerName: "rehydration-kernel-nats",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -225,6 +226,9 @@ func TestBuildClientTLSConfig_Server(t *testing.T) {
 	}
 	if cfg.RootCAs == nil {
 		t.Fatal("expected RootCAs pool")
+	}
+	if cfg.ServerName != "rehydration-kernel-nats" {
+		t.Fatalf("expected server name to be propagated, got %q", cfg.ServerName)
 	}
 	if len(cfg.Certificates) != 0 {
 		t.Fatal("server mode should not have client certs")

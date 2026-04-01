@@ -44,6 +44,9 @@ data:
   {{- if and $natsTls.existingSecret $natsTlsKeys.ca }}
   NATS_TLS_CA_PATH: {{ printf "%s/%s" $natsTls.mountPath $natsTlsKeys.ca | quote }}
   {{- end }}
+  {{- if $natsTls.serverName }}
+  NATS_TLS_SERVER_NAME: {{ $natsTls.serverName | quote }}
+  {{- end }}
   {{- if and $natsTlsKeys.cert $natsTlsKeys.key }}
   NATS_TLS_CERT_PATH: {{ printf "%s/%s" $natsTls.mountPath $natsTlsKeys.cert | quote }}
   NATS_TLS_KEY_PATH: {{ printf "%s/%s" $natsTls.mountPath $natsTlsKeys.key | quote }}
@@ -56,6 +59,9 @@ data:
   VALKEY_TLS_ENABLED: "true"
   {{- if and $valkeyTls.existingSecret $valkeyTlsKeys.ca }}
   VALKEY_TLS_CA_PATH: {{ printf "%s/%s" $valkeyTls.mountPath $valkeyTlsKeys.ca | quote }}
+  {{- end }}
+  {{- if $valkeyTls.serverName }}
+  VALKEY_TLS_SERVER_NAME: {{ $valkeyTls.serverName | quote }}
   {{- end }}
   {{- if and $valkeyTlsKeys.cert $valkeyTlsKeys.key }}
   VALKEY_TLS_CERT_PATH: {{ printf "%s/%s" $valkeyTls.mountPath $valkeyTlsKeys.cert | quote }}
@@ -89,11 +95,20 @@ data:
   {{- if .Values.artifacts.s3.endpoint }}
   ARTIFACT_S3_ENDPOINT: {{ .Values.artifacts.s3.endpoint | quote }}
   {{- end }}
-  {{- if .Values.artifacts.s3.useSSL }}
+  {{- if or .Values.artifacts.s3.useSSL (default false .Values.s3Tls.enabled) }}
   ARTIFACT_S3_USE_SSL: "true"
   {{- end }}
-  {{- if .Values.artifacts.s3.caPath }}
+  {{- /* S3 TLS — prefer s3Tls block over legacy caPath */}}
+  {{- $s3Tls := default (dict) .Values.s3Tls }}
+  {{- $s3TlsKeys := default (dict) $s3Tls.keys }}
+  {{- if and (default false $s3Tls.enabled) $s3Tls.existingSecret $s3TlsKeys.ca }}
+  ARTIFACT_S3_CA_PATH: {{ printf "%s/%s" $s3Tls.mountPath $s3TlsKeys.ca | quote }}
+  {{- else if .Values.artifacts.s3.caPath }}
   ARTIFACT_S3_CA_PATH: {{ .Values.artifacts.s3.caPath | quote }}
+  {{- end }}
+  {{- if and (default false $s3Tls.enabled) $s3TlsKeys.cert $s3TlsKeys.key }}
+  ARTIFACT_S3_CERT_PATH: {{ printf "%s/%s" $s3Tls.mountPath $s3TlsKeys.cert | quote }}
+  ARTIFACT_S3_KEY_PATH: {{ printf "%s/%s" $s3Tls.mountPath $s3TlsKeys.key | quote }}
   {{- end }}
   {{- end }}
   {{- /* Telemetry */}}

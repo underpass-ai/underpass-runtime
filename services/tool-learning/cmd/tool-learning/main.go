@@ -210,7 +210,8 @@ func loadConfig(schedule string) (adapterConfig, error) {
 	s3TLS, err := buildClientTLS(
 		envOrDefault("S3_USE_SSL", "false") == "true",
 		os.Getenv("S3_CA_PATH"),
-		"", "",
+		os.Getenv("S3_CERT_PATH"),
+		os.Getenv("S3_KEY_PATH"),
 	)
 	if err != nil {
 		return adapterConfig{}, fmt.Errorf("s3 TLS: %w", err)
