@@ -22,6 +22,12 @@ spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "underpass-runtime.fullname" . }}-cert-gen
       automountServiceAccountToken: true
+      imagePullSecrets:
+        {{- with .Values.imagePullSecrets }}
+        {{- toYaml . | nindent 8 }}
+        {{- else }}
+        - name: ghcr-pull
+        {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -52,8 +58,6 @@ spec:
             - /bin/sh
             - -ce
             - |
-              apk --no-cache add openssl curl jq >/dev/null 2>&1
-
               APISERVER=https://kubernetes.default.svc
               TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
               KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt

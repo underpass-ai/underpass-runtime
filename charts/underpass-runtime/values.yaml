@@ -494,8 +494,8 @@ certGen:
   # Reads the shared CA from caSecret and generates runtime server + client certs.
   # Requires the CA secret to exist (deployed by rehydration-kernel or manually).
   enabled: false
-  # -- Container image with openssl, curl, and jq
-  image: docker.io/alpine:3.19
+  # -- Container image with openssl, curl, and jq (preinstalled)
+  image: ghcr.io/underpass-ai/underpass-runtime/cert-gen:v1.0.0
   # -- Name of the existing CA Secret (must contain tls.crt and tls.key)
   caSecret: rehydration-kernel-internal-ca
   # -- Key algorithm: ec (ECDSA)
