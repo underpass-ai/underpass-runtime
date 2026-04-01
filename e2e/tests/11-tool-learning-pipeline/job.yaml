@@ -21,6 +21,8 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull
 
       containers:
         - name: test-runner
@@ -68,6 +70,14 @@ spec:
               value: "2"
             - name: SEED_PER_HOUR
               value: "50"
+            - name: WORKSPACE_URL
+              value: "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            - name: WORKSPACE_TLS_CA_PATH
+              value: "/var/run/e2e-client-tls/ca.crt"
+            - name: WORKSPACE_TLS_CERT_PATH
+              value: "/var/run/e2e-client-tls/tls.crt"
+            - name: WORKSPACE_TLS_KEY_PATH
+              value: "/var/run/e2e-client-tls/tls.key"
             - name: HOME
               value: "/tmp"
             - name: PYTHONUNBUFFERED
@@ -92,9 +102,15 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: e2e-client-tls
+              mountPath: /var/run/e2e-client-tls
+              readOnly: true
 
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: 256Mi
+        - name: e2e-client-tls
+          secret:
+            secretName: e2e-client-tls
       dnsPolicy: ClusterFirst

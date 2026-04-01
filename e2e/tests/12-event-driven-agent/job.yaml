@@ -26,6 +26,9 @@ spec:
         - name: ca-cert
           configMap:
             name: runtime-ca
+        - name: e2e-client-tls
+          secret:
+            secretName: e2e-client-tls
 
       containers:
         - name: test-runner
@@ -35,9 +38,18 @@ spec:
             - name: ca-cert
               mountPath: /etc/ssl/runtime
               readOnly: true
+            - name: e2e-client-tls
+              mountPath: /var/run/e2e-client-tls
+              readOnly: true
           env:
             - name: WORKSPACE_URL
               value: "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            - name: WORKSPACE_TLS_CA_PATH
+              value: "/var/run/e2e-client-tls/ca.crt"
+            - name: WORKSPACE_TLS_CERT_PATH
+              value: "/var/run/e2e-client-tls/tls.crt"
+            - name: WORKSPACE_TLS_KEY_PATH
+              value: "/var/run/e2e-client-tls/tls.key"
             - name: NATS_URL
               value: "nats://nats.underpass-runtime.svc.cluster.local:4222"
             - name: SSL_CERT_FILE
