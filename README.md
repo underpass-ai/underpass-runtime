@@ -166,8 +166,14 @@ Architecture decisions: [docs/adr/](docs/adr/)
 | [swe-ai-fleet](https://github.com/underpass-ai/swe-ai-fleet) | Multi-agent SWE platform |
 | [underpass-demo](https://github.com/underpass-ai/underpass-demo) | See it working together |
 
-## License
+## Legal
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+Copyright © 2026 Tirso García Ibáñez.
 
-Created by [Tirso Garcia](https://github.com/tgarciai) · [LinkedIn](https://www.linkedin.com/in/tirsogarcia/) · [Underpass AI](https://github.com/underpass-ai)
+This repository is part of the Underpass AI project.
+Licensed under the Apache License, Version 2.0, unless stated otherwise.
+
+Redistributions and derivative works must preserve applicable copyright,
+license, and NOTICE information.
+
+Original author: [Tirso García Ibáñez](https://github.com/tgarciai) · [LinkedIn](https://www.linkedin.com/in/tirsogarcia/) · [Underpass AI](https://github.com/underpass-ai)
