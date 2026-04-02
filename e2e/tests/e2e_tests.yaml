@@ -126,3 +126,11 @@ workspace_tests:
     kind: "learning"
     timeout_override: 300
     tags: ["learning", "policy", "recommendations", "valkey", "online-loop"]
+
+  - id: "19"
+    name: "19-neural-ts-recommendations"
+    job_name: "e2e-neural-ts-recommendations"
+    tier: "core"
+    kind: "learning"
+    timeout_override: 300
+    tags: ["learning", "neural-ts", "contextual-bandit", "valkey", "recommendations"]

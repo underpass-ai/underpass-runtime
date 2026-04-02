@@ -92,6 +92,19 @@ func (r *ValkeyPolicyReader) ReadPoliciesForContext(ctx context.Context, context
 	return policies, nil
 }
 
+// ReadNeuralModel reads a raw value from Valkey by key (e.g., model weights).
+// Implements app.NeuralModelReader.
+func (r *ValkeyPolicyReader) ReadNeuralModel(ctx context.Context, key string) ([]byte, bool, error) {
+	data, err := r.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("read neural model %s: %w", key, err)
+	}
+	return data, true, nil
+}
+
 // Close releases the Valkey connection.
 func (r *ValkeyPolicyReader) Close() error {
 	return r.client.Close()

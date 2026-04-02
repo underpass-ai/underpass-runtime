@@ -159,6 +159,12 @@ type PolicyReader interface {
 	ReadPoliciesForContext(ctx context.Context, contextSig string) (map[string]ToolPolicy, error)
 }
 
+// NeuralModelReader reads a trained neural model from the store.
+// Optional — returns nil if no model is available.
+type NeuralModelReader interface {
+	ReadNeuralModel(ctx context.Context, key string) ([]byte, bool, error)
+}
+
 // RecommendationDecisionStore persists and retrieves recommendation decisions.
 type RecommendationDecisionStore interface {
 	Save(ctx context.Context, decision domain.RecommendationDecision) error

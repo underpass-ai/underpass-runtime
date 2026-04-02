@@ -134,21 +134,34 @@ func (HeuristicPolicyScorer) Score(base float64, policy ToolPolicy) (float64, st
 // ─── Algorithm Selection ───────────────────────────────────────────────────
 
 // SelectScorer picks the best scorer based on available policy data.
-// With sufficient samples (≥100), uses Thompson sampling for explore/exploit.
-// Otherwise falls back to the heuristic policy scorer.
 func SelectScorer(policies map[string]ToolPolicy) RecommendationScorer {
+	return SelectScorerWithModel(policies, nil)
+}
+
+// SelectScorerWithModel picks the best scorer considering a trained neural model.
+// Priority: NeuralTS > Thompson > Heuristic.
+func SelectScorerWithModel(policies map[string]ToolPolicy, model *MLPWeights) RecommendationScorer {
 	if len(policies) == 0 {
-		return nil // no policies → pure heuristic, no learned scorer
+		return nil
 	}
 
-	// If any policy has enough samples for Thompson, use it.
-	const thompsonMinSamples int64 = 50
+	var maxSamples int64
 	for _, p := range policies {
-		if p.NSamples >= thompsonMinSamples {
-			return ThompsonScorer{}
+		if p.NSamples > maxSamples {
+			maxSamples = p.NSamples
 		}
 	}
 
-	// Fallback to heuristic policy scorer for small-sample policies.
+	// NeuralTS when trained model available and sufficient data.
+	if model != nil && model.Valid() && maxSamples >= 100 {
+		return NeuralTSScorer{Model: model}
+	}
+
+	// Thompson sampling for moderate data.
+	if maxSamples >= 50 {
+		return ThompsonScorer{}
+	}
+
+	// Heuristic fallback.
 	return HeuristicPolicyScorer{}
 }
