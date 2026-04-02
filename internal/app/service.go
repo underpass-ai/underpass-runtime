@@ -43,6 +43,7 @@ type Service struct {
 	quotas          *invocationQuotaLimiter
 	metrics         *invocationMetrics
 	qualityObserver QualityObserver
+	policyLearned   PolicyReader
 	tracer          trace.Tracer
 }
 
@@ -102,6 +103,13 @@ func (s *Service) SetTelemetry(rec TelemetryRecorder, q TelemetryQuerier) {
 	}
 	if q != nil {
 		s.telemetryQ = q
+	}
+}
+
+// SetPolicyReader injects an optional learned-policy reader (Valkey).
+func (s *Service) SetPolicyReader(pr PolicyReader) {
+	if pr != nil {
+		s.policyLearned = pr
 	}
 }
 
@@ -1141,15 +1149,24 @@ func (s *Service) recordTelemetry(ctx context.Context, session domain.Session, i
 	if idx := strings.IndexByte(inv.ToolName, '.'); idx > 0 {
 		toolFamily = inv.ToolName[:idx]
 	}
+	// Derive context signal for learning pipeline consumption.
+	digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
+	contextSig := DeriveContextSignature(session, inv.ToolName, digest)
+	approved := inv.Status != domain.InvocationStatusDenied
+
 	rec := TelemetryRecord{
 		InvocationID:  inv.ID,
 		SessionID:     session.ID,
 		ToolName:      inv.ToolName,
 		ToolFamily:    toolFamily,
 		RuntimeKind:   string(session.Runtime.Kind),
+		RepoLanguage:  digest.RepoLanguage,
+		ProjectType:   digest.ProjectType,
 		TenantID:      session.Principal.TenantID,
+		Approved:      approved,
 		Status:        string(inv.Status),
 		ErrorCode:     errorCode,
+		ContextSig:    contextSig,
 		DurationMs:    inv.DurationMS,
 		OutputBytes:   outputBytes,
 		LogsBytes:     logsBytes,

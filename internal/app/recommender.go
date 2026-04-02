@@ -68,6 +68,17 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 	// Load telemetry stats for context-aware scoring
 	allStats, _ := s.telemetryQ.AllToolStats(ctx)
 
+	// Load learned policies for the current context (if available).
+	var learnedPolicies map[string]ToolPolicy
+	if s.policyLearned != nil {
+		session, found, _ := s.workspace.GetSession(ctx, sessionID)
+		if found {
+			digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
+			contextSig := DeriveContextSignature(session, "", digest)
+			learnedPolicies, _ = s.policyLearned.ReadPoliciesForContext(ctx, contextSig)
+		}
+	}
+
 	hintTokens := tokenize(taskHint)
 	recs := make([]Recommendation, 0, len(tools))
 	for i := range tools {
@@ -75,6 +86,10 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		// Apply telemetry-based adjustments if stats exist
 		if allStats != nil {
 			rec = applyTelemetryBoost(rec, allStats[tools[i].Name])
+		}
+		// Apply learned policy scoring if available
+		if p, ok := learnedPolicies[tools[i].Name]; ok {
+			rec = applyLearnedPolicy(rec, p)
 		}
 		recs = append(recs, rec)
 	}
@@ -222,3 +237,45 @@ func tokenize(hint string) []string {
 	}
 	return tokens
 }
+
+const (
+	// Learned policy scoring weights
+	learnedConfidenceBoost    = 0.25 // max boost from Thompson confidence
+	learnedErrorRatePenalty   = 0.20 // penalty for high error rate policies
+	learnedErrorRateThreshold = 0.30 // error rate above this triggers penalty
+	learnedLatencyPenalty     = 0.10 // penalty for slow policies
+	learnedLatencyThreshold   = 15000 // p95 ms above this triggers penalty
+	learnedMinSamples         = 10   // minimum samples before trusting policy
+)
+
+// applyLearnedPolicy adjusts a recommendation score using a learned policy
+// from the tool-learning pipeline. Policies carry Thompson Sampling posterior
+// parameters (Alpha, Beta) and aggregated performance metrics.
+func applyLearnedPolicy(rec Recommendation, policy ToolPolicy) Recommendation {
+	if policy.NSamples < learnedMinSamples {
+		return rec
+	}
+
+	// Thompson confidence boost: higher confidence → higher score
+	boost := learnedConfidenceBoost * policy.Confidence
+	rec.Score += boost
+
+	// Error rate penalty
+	if policy.ErrorRate > learnedErrorRateThreshold {
+		rec.Score -= learnedErrorRatePenalty
+		rec.Why += fmt.Sprintf(", learned: high error rate %.0f%%", policy.ErrorRate*100)
+	}
+
+	// Latency penalty
+	if policy.P95LatencyMs > learnedLatencyThreshold {
+		rec.Score -= learnedLatencyPenalty
+		rec.Why += fmt.Sprintf(", learned: slow p95 %dms", policy.P95LatencyMs)
+	}
+
+	rec.Why += fmt.Sprintf(", learned policy (confidence=%.2f, n=%d)", policy.Confidence, policy.NSamples)
+	rec.Score = math.Round(rec.Score*100) / 100
+	return rec
+}
+
+// deriveCost maps a capability's cost hint to a string label.
+// Moved to the end to maintain method ordering.

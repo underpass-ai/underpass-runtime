@@ -26,7 +26,23 @@ type TelemetryRecord struct {
 	LogsBytes     int64     `json:"logs_bytes"`
 	ArtifactCount int       `json:"artifact_count"`
 	ArtifactBytes int64     `json:"artifact_bytes"`
+	ContextSig    string    `json:"context_sig,omitempty"`
 	Timestamp     time.Time `json:"timestamp"`
+}
+
+// ToolPolicy represents a learned policy from the tool-learning pipeline.
+// Mirror of services/tool-learning/internal/domain.ToolPolicy to avoid import cycle.
+type ToolPolicy struct {
+	ContextSignature string    `json:"context_signature"`
+	ToolID           string    `json:"tool_id"`
+	Alpha            float64   `json:"alpha"`
+	Beta             float64   `json:"beta"`
+	P95LatencyMs     int64     `json:"p95_latency_ms"`
+	P95Cost          float64   `json:"p95_cost"`
+	ErrorRate        float64   `json:"error_rate"`
+	NSamples         int64     `json:"n_samples"`
+	FreshnessTs      time.Time `json:"freshness_ts"`
+	Confidence       float64   `json:"confidence"`
 }
 
 // TelemetryRecorder persists telemetry records for invocations. Implementations
