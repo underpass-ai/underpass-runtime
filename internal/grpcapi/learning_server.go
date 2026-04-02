@@ -87,6 +87,8 @@ func recommendationDecisionToProto(d domain.RecommendationDecision) *lpb.Recomme
 		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_HEURISTIC_WITH_TELEMETRY
 	case app.DecisionSourceHeuristicWithPolicy:
 		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_HYBRID
+	case app.DecisionSourceThompson:
+		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_LEARNED_POLICY_TS
 	}
 
 	// Map string policy_mode to enum.

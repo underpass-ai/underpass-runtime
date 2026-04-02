@@ -96,8 +96,17 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		learnedPolicies, _ = s.policyLearned.ReadPoliciesForContext(ctx, contextSig)
 	}
 
-	// Determine decision source based on what data is available.
+	// Select scoring algorithm based on available policy data.
+	scorer := SelectScorer(learnedPolicies)
+
+	// Derive algorithm metadata from the selected scorer.
+	algorithmID := AlgorithmIDHeuristic
+	algorithmVersion := AlgorithmVersionV1
 	decisionSource := classifyDecisionSource(allStats, learnedPolicies)
+	if scorer != nil {
+		algorithmID = scorer.AlgorithmID()
+		algorithmVersion = scorer.AlgorithmVersion()
+	}
 
 	candidateCount := len(tools)
 	hintTokens := tokenize(taskHint)
@@ -108,12 +117,17 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		if allStats != nil {
 			rec = applyTelemetryBoost(rec, allStats[tools[i].Name])
 		}
-		// Apply learned policy scoring if available
-		if p, ok := learnedPolicies[tools[i].Name]; ok {
-			rec = applyLearnedPolicy(rec, p)
-			rec.PolicyNotes = append(rec.PolicyNotes,
-				fmt.Sprintf("policy:%s:%s confidence=%.2f n=%d", p.ContextSignature, p.ToolID, p.Confidence, p.NSamples),
-			)
+		// Apply learned policy scoring via selected algorithm
+		if p, ok := learnedPolicies[tools[i].Name]; ok && scorer != nil {
+			newScore, why := scorer.Score(rec.Score, p)
+			if why != "" {
+				rec.Score = newScore
+				rec.Why += ", " + why
+				rec.PolicyNotes = append(rec.PolicyNotes,
+					fmt.Sprintf("algorithm:%s policy:%s:%s confidence=%.2f n=%d",
+						algorithmID, p.ContextSignature, p.ToolID, p.Confidence, p.NSamples),
+				)
+			}
 		}
 		recs = append(recs, rec)
 	}
@@ -134,8 +148,6 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 	recID := newID("rec")
 	eventID := newID("evt")
 	eventSubject := string(domain.EventRecommendationEmitted)
-	algorithmID := AlgorithmIDHeuristic
-	algorithmVersion := AlgorithmVersionV1
 	policyMode := PolicyModeNone
 	if len(learnedPolicies) > 0 {
 		policyMode = PolicyModeShadow
@@ -215,6 +227,12 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 // classifyDecisionSource determines the active scoring tier label.
 func classifyDecisionSource(stats map[string]ToolStats, policies map[string]ToolPolicy) string {
 	if len(policies) > 0 {
+		// Check if enough data for Thompson sampling.
+		for _, p := range policies {
+			if p.NSamples >= 50 {
+				return DecisionSourceThompson
+			}
+		}
 		return DecisionSourceHeuristicWithPolicy
 	}
 	if len(stats) > 0 {
@@ -358,6 +376,7 @@ const (
 	DecisionSourceHeuristicOnly          = "heuristic_only"
 	DecisionSourceHeuristicWithTelemetry = "heuristic_with_telemetry"
 	DecisionSourceHeuristicWithPolicy    = "heuristic_with_learned_policy"
+	DecisionSourceThompson               = "learned_policy_thompson"
 )
 
 const (
