@@ -22,12 +22,10 @@ spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "underpass-runtime.fullname" . }}-cert-gen
       automountServiceAccountToken: true
+      {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
-        {{- with .Values.imagePullSecrets }}
         {{- toYaml . | nindent 8 }}
-        {{- else }}
-        - name: ghcr-pull
-        {{- end }}
+      {{- end }}
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
