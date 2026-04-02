@@ -44,6 +44,7 @@ type Service struct {
 	metrics         *invocationMetrics
 	qualityObserver QualityObserver
 	policyLearned   PolicyReader
+	decisionStore   RecommendationDecisionStore
 	tracer          trace.Tracer
 }
 
@@ -78,6 +79,7 @@ func NewService(
 		quotas:          newInvocationQuotaLimiterFromEnv(),
 		metrics:         newInvocationMetrics(),
 		qualityObserver: noopQualityObserver{},
+		decisionStore:   NewInMemoryRecommendationDecisionStore(),
 		tracer:          otel.Tracer("workspace.service"),
 	}
 }
@@ -110,6 +112,13 @@ func (s *Service) SetTelemetry(rec TelemetryRecorder, q TelemetryQuerier) {
 func (s *Service) SetPolicyReader(pr PolicyReader) {
 	if pr != nil {
 		s.policyLearned = pr
+	}
+}
+
+// SetRecommendationDecisionStore replaces the default in-memory decision store.
+func (s *Service) SetRecommendationDecisionStore(store RecommendationDecisionStore) {
+	if store != nil {
+		s.decisionStore = store
 	}
 }
 
@@ -1205,4 +1214,34 @@ func (s *Service) publishInvocationCompleted(ctx context.Context, session domain
 		OutputBytes:   outputBytes,
 		ArtifactCount: len(inv.Artifacts),
 	})
+}
+
+// ─── Learning Evidence P0 ──────────────────────────────────────────────────
+
+// EvidenceBundle is the compact audit package returned by GetEvidenceBundle.
+type EvidenceBundle struct {
+	Recommendation domain.RecommendationDecision `json:"recommendation"`
+}
+
+// GetRecommendationDecision returns a persisted recommendation decision by ID.
+func (s *Service) GetRecommendationDecision(ctx context.Context, recommendationID string) (domain.RecommendationDecision, *ServiceError) {
+	d, found, err := s.decisionStore.Get(ctx, recommendationID)
+	if err != nil {
+		return domain.RecommendationDecision{}, &ServiceError{Code: "internal", Message: "failed to read recommendation decision"}
+	}
+	if !found {
+		return domain.RecommendationDecision{}, &ServiceError{Code: "not_found", Message: "recommendation decision not found"}
+	}
+	return d, nil
+}
+
+// GetEvidenceBundle returns a compact evidence bundle for a recommendation.
+// In P0, the bundle only contains the recommendation decision itself.
+// P1+ will add policy, run, aggregate, and event lineage.
+func (s *Service) GetEvidenceBundle(ctx context.Context, recommendationID string) (EvidenceBundle, *ServiceError) {
+	d, svcErr := s.GetRecommendationDecision(ctx, recommendationID)
+	if svcErr != nil {
+		return EvidenceBundle{}, svcErr
+	}
+	return EvidenceBundle{Recommendation: d}, nil
 }

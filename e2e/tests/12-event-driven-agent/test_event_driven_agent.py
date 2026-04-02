@@ -151,7 +151,8 @@ class EventDrivenAgentE2E(WorkspaceE2EBase):
 
     async def _run_async(self, nats_py) -> int:
         """Full async flow: NATS subscribe → agent work → NATS publish."""
-        nc = await nats_py.connect(self.nats_url)
+        nats_tls = self.build_nats_tls()
+        nc = await nats_py.connect(self.nats_url, tls=nats_tls)
         result_received = asyncio.Event()
         result_data = {}
 

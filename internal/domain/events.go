@@ -14,7 +14,8 @@ const (
 	EventInvocationStarted   EventType = "workspace.invocation.started"
 	EventInvocationCompleted EventType = "workspace.invocation.completed"
 	EventInvocationDenied    EventType = "workspace.invocation.denied"
-	EventArtifactStored      EventType = "workspace.artifact.stored"
+	EventArtifactStored              EventType = "workspace.artifact.stored"
+	EventRecommendationEmitted       EventType = "runtime.learning.recommendation.emitted"
 )
 
 // EventVersion is the schema version for domain events.
@@ -87,6 +88,25 @@ type ArtifactStoredPayload struct {
 	ContentType  string `json:"content_type"`
 	SizeBytes    int64  `json:"size_bytes"`
 	SHA256       string `json:"sha256"`
+}
+
+// RankedToolFact is a tool in a recommendation event payload.
+type RankedToolFact struct {
+	ToolID     string  `json:"tool_id"`
+	Rank       int     `json:"rank"`
+	FinalScore float64 `json:"final_score"`
+}
+
+// RecommendationEmittedPayload is the payload for EventRecommendationEmitted.
+type RecommendationEmittedPayload struct {
+	RecommendationID string           `json:"recommendation_id"`
+	TaskHint         string           `json:"task_hint"`
+	TopK             int              `json:"top_k"`
+	DecisionSource   string           `json:"decision_source"`
+	AlgorithmID      string           `json:"algorithm_id"`
+	AlgorithmVersion string           `json:"algorithm_version"`
+	PolicyMode       string           `json:"policy_mode"`
+	Tools            []RankedToolFact `json:"tools"`
 }
 
 // NewDomainEvent constructs a DomainEvent with a typed payload.

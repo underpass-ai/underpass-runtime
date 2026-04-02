@@ -159,6 +159,12 @@ type PolicyReader interface {
 	ReadPoliciesForContext(ctx context.Context, contextSig string) (map[string]ToolPolicy, error)
 }
 
+// RecommendationDecisionStore persists and retrieves recommendation decisions.
+type RecommendationDecisionStore interface {
+	Save(ctx context.Context, decision domain.RecommendationDecision) error
+	Get(ctx context.Context, recommendationID string) (domain.RecommendationDecision, bool, error)
+}
+
 // SnapshotRef identifies a stored workspace snapshot.
 type SnapshotRef struct {
 	ID        string    `json:"id"`

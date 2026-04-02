@@ -1,21 +1,19 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: e2e-multi-agent-pipeline
+  name: e2e-recommendation-evidence
   namespace: underpass-runtime
   labels:
-    app: e2e-multi-agent-pipeline
+    app: e2e-recommendation-evidence
     test-type: e2e
-    test-suite: workspace
 spec:
   backoffLimit: 1
   ttlSecondsAfterFinished: 7200
   activeDeadlineSeconds: 300
-
   template:
     metadata:
       labels:
-        app: e2e-multi-agent-pipeline
+        app: e2e-recommendation-evidence
         test-type: e2e
     spec:
       restartPolicy: Never
@@ -29,10 +27,9 @@ spec:
         - name: e2e-client-tls
           secret:
             secretName: e2e-client-tls
-
       containers:
         - name: test-runner
-          image: ghcr.io/underpass-ai/underpass-runtime/e2e-multi-agent-pipeline:v1.0.0
+          image: ghcr.io/underpass-ai/underpass-runtime/e2e-16-recommendation-evidence:v1.0.6
           imagePullPolicy: Always
           volumeMounts:
             - name: ca-cert
@@ -57,27 +54,24 @@ spec:
             - name: REQUESTS_CA_BUNDLE
               value: "/etc/ssl/runtime/ca.crt"
             - name: EVIDENCE_FILE
-              value: "/tmp/evidence-13.json"
+              value: "/tmp/evidence-16.json"
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: E2E_DEBUG
               value: "1"
-            - name: E2E_SKIP_CLEANUP
-              value: "0"
           resources:
             requests:
-              cpu: "100m"
-              memory: "128Mi"
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: "500m"
-              memory: "256Mi"
+              cpu: 500m
+              memory: 256Mi
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             capabilities:
-              drop:
-                - ALL
+              drop: ["ALL"]
             seccompProfile:
               type: RuntimeDefault

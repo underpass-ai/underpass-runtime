@@ -51,7 +51,7 @@ spec:
             - name: WORKSPACE_TLS_KEY_PATH
               value: "/var/run/e2e-client-tls/tls.key"
             - name: NATS_URL
-              value: "nats://nats.underpass-runtime.svc.cluster.local:4222"
+              value: "nats://rehydration-kernel-nats.underpass-runtime.svc.cluster.local:4222"
             - name: SSL_CERT_FILE
               value: "/etc/ssl/runtime/ca.crt"
             - name: REQUESTS_CA_BUNDLE

@@ -19,6 +19,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
+	lpb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/learning/v1"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/eventbus"
 	invocationstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/invocationstore"
@@ -162,6 +163,8 @@ func main() {
 	pb.RegisterCapabilityCatalogServiceServer(srv, grpcServer)
 	pb.RegisterInvocationServiceServer(srv, grpcServer)
 	pb.RegisterHealthServiceServer(srv, grpcServer)
+	learningServer := grpcapi.NewLearningEvidenceServer(service)
+	lpb.RegisterLearningEvidenceServiceServer(srv, learningServer)
 	reflection.Register(srv)
 
 	// Prometheus metrics remain on HTTP (separate port).

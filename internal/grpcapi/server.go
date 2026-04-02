@@ -18,6 +18,8 @@ type WorkspaceService interface {
 	ListTools(ctx context.Context, sessionID string) ([]domain.Capability, *app.ServiceError)
 	DiscoverTools(ctx context.Context, sessionID string, detail app.DiscoveryDetail, filter app.DiscoveryFilter) (app.DiscoveryResponse, *app.ServiceError)
 	RecommendTools(ctx context.Context, sessionID string, taskHint string, topK int) (app.RecommendationsResponse, *app.ServiceError)
+	GetRecommendationDecision(ctx context.Context, recommendationID string) (domain.RecommendationDecision, *app.ServiceError)
+	GetEvidenceBundle(ctx context.Context, recommendationID string) (app.EvidenceBundle, *app.ServiceError)
 	InvokeTool(ctx context.Context, sessionID, toolName string, req app.InvokeToolRequest) (domain.Invocation, *app.ServiceError)
 	GetInvocation(ctx context.Context, invocationID string) (domain.Invocation, *app.ServiceError)
 	GetInvocationLogs(ctx context.Context, invocationID string) ([]domain.LogLine, *app.ServiceError)
@@ -135,8 +137,15 @@ func (s *Server) RecommendTools(ctx context.Context, req *pb.RecommendToolsReque
 		return nil, serviceErrorToStatus(svcErr)
 	}
 	resp := &pb.RecommendToolsResponse{
-		TaskHint: result.TaskHint,
-		TopK:     int32(result.TopK),
+		TaskHint:         result.TaskHint,
+		TopK:             int32(result.TopK),
+		RecommendationId: result.RecommendationID,
+		EventId:          result.EventID,
+		EventSubject:     result.EventSubject,
+		DecisionSource:   result.DecisionSource,
+		AlgorithmId:      result.AlgorithmID,
+		AlgorithmVersion: result.AlgorithmVersion,
+		PolicyMode:       result.PolicyMode,
 	}
 	for _, r := range result.Recommendations {
 		resp.Recommendations = append(resp.Recommendations, recommendationToProto(r))

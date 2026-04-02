@@ -2641,12 +2641,19 @@ func (x *RecommendToolsRequest) GetTopK() int32 {
 }
 
 type RecommendToolsResponse struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Recommendations []*Recommendation      `protobuf:"bytes,1,rep,name=recommendations,proto3" json:"recommendations,omitempty"`
-	TaskHint        string                 `protobuf:"bytes,2,opt,name=task_hint,json=taskHint,proto3" json:"task_hint,omitempty"`
-	TopK            int32                  `protobuf:"varint,3,opt,name=top_k,json=topK,proto3" json:"top_k,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Recommendations  []*Recommendation      `protobuf:"bytes,1,rep,name=recommendations,proto3" json:"recommendations,omitempty"`
+	TaskHint         string                 `protobuf:"bytes,2,opt,name=task_hint,json=taskHint,proto3" json:"task_hint,omitempty"`
+	TopK             int32                  `protobuf:"varint,3,opt,name=top_k,json=topK,proto3" json:"top_k,omitempty"`
+	RecommendationId string                 `protobuf:"bytes,4,opt,name=recommendation_id,json=recommendationId,proto3" json:"recommendation_id,omitempty"`
+	EventId          string                 `protobuf:"bytes,5,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	EventSubject     string                 `protobuf:"bytes,6,opt,name=event_subject,json=eventSubject,proto3" json:"event_subject,omitempty"`
+	DecisionSource   string                 `protobuf:"bytes,7,opt,name=decision_source,json=decisionSource,proto3" json:"decision_source,omitempty"`
+	AlgorithmId      string                 `protobuf:"bytes,8,opt,name=algorithm_id,json=algorithmId,proto3" json:"algorithm_id,omitempty"`
+	AlgorithmVersion string                 `protobuf:"bytes,9,opt,name=algorithm_version,json=algorithmVersion,proto3" json:"algorithm_version,omitempty"`
+	PolicyMode       string                 `protobuf:"bytes,10,opt,name=policy_mode,json=policyMode,proto3" json:"policy_mode,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *RecommendToolsResponse) Reset() {
@@ -2698,6 +2705,55 @@ func (x *RecommendToolsResponse) GetTopK() int32 {
 		return x.TopK
 	}
 	return 0
+}
+
+func (x *RecommendToolsResponse) GetRecommendationId() string {
+	if x != nil {
+		return x.RecommendationId
+	}
+	return ""
+}
+
+func (x *RecommendToolsResponse) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *RecommendToolsResponse) GetEventSubject() string {
+	if x != nil {
+		return x.EventSubject
+	}
+	return ""
+}
+
+func (x *RecommendToolsResponse) GetDecisionSource() string {
+	if x != nil {
+		return x.DecisionSource
+	}
+	return ""
+}
+
+func (x *RecommendToolsResponse) GetAlgorithmId() string {
+	if x != nil {
+		return x.AlgorithmId
+	}
+	return ""
+}
+
+func (x *RecommendToolsResponse) GetAlgorithmVersion() string {
+	if x != nil {
+		return x.AlgorithmVersion
+	}
+	return ""
+}
+
+func (x *RecommendToolsResponse) GetPolicyMode() string {
+	if x != nil {
+		return x.PolicyMode
+	}
+	return ""
 }
 
 type InvokeToolRequest struct {
@@ -3374,11 +3430,20 @@ const file_underpass_runtime_v1_runtime_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
 	"\ttask_hint\x18\x02 \x01(\tR\btaskHint\x12\x13\n" +
-	"\x05top_k\x18\x03 \x01(\x05R\x04topK\"\x9a\x01\n" +
+	"\x05top_k\x18\x03 \x01(\x05R\x04topK\"\xa1\x03\n" +
 	"\x16RecommendToolsResponse\x12N\n" +
 	"\x0frecommendations\x18\x01 \x03(\v2$.underpass.runtime.v1.RecommendationR\x0frecommendations\x12\x1b\n" +
 	"\ttask_hint\x18\x02 \x01(\tR\btaskHint\x12\x13\n" +
-	"\x05top_k\x18\x03 \x01(\x05R\x04topK\"\xbf\x01\n" +
+	"\x05top_k\x18\x03 \x01(\x05R\x04topK\x12+\n" +
+	"\x11recommendation_id\x18\x04 \x01(\tR\x10recommendationId\x12\x19\n" +
+	"\bevent_id\x18\x05 \x01(\tR\aeventId\x12#\n" +
+	"\revent_subject\x18\x06 \x01(\tR\feventSubject\x12'\n" +
+	"\x0fdecision_source\x18\a \x01(\tR\x0edecisionSource\x12!\n" +
+	"\falgorithm_id\x18\b \x01(\tR\valgorithmId\x12+\n" +
+	"\x11algorithm_version\x18\t \x01(\tR\x10algorithmVersion\x12\x1f\n" +
+	"\vpolicy_mode\x18\n" +
+	" \x01(\tR\n" +
+	"policyMode\"\xbf\x01\n" +
 	"\x11InvokeToolRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +

@@ -369,6 +369,13 @@ message RecommendToolsResponse {
   repeated Recommendation recommendations = 1;
   string                  task_hint       = 2;
   int32                   top_k           = 3;
+  string                  recommendation_id = 4;
+  string                  event_id          = 5;
+  string                  event_subject     = 6;
+  string                  decision_source   = 7;
+  string                  algorithm_id      = 8;
+  string                  algorithm_version = 9;
+  string                  policy_mode       = 10;
 }
 
 // InvocationService

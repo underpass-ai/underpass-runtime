@@ -110,3 +110,11 @@ workspace_tests:
     kind: "research"
     timeout_override: 900
     tags: ["vllm", "learning-loop", "recommendations", "telemetry", "beta-swts", "research"]
+
+  - id: "16"
+    name: "16-recommendation-evidence"
+    job_name: "e2e-recommendation-evidence"
+    tier: "core"
+    kind: "learning"
+    timeout_override: 300
+    tags: ["learning", "evidence", "recommendations", "nats", "decision", "audit", "bridge-fields"]

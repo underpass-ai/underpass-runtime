@@ -1,0 +1,173 @@
+asyncapi: 3.0.0
+info:
+  title: Underpass Runtime - Learning Domain Events
+  version: 0.1.0
+  description: |
+    Domain events for recommendation evidence, policy lineage, and
+    tool-learning auditability.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+
+servers:
+  development:
+    host: nats://localhost:4222
+    protocol: nats
+    description: Local NATS server
+  kubernetes:
+    host: nats://nats:4222
+    protocol: nats
+    description: In-cluster NATS
+
+defaultContentType: application/json
+
+channels:
+  discoveryRecorded:
+    address: runtime.learning.discovery.recorded
+    messages:
+      discoveryRecorded:
+        $ref: "#/components/messages/LearningEvent"
+
+  recommendationEmitted:
+    address: runtime.learning.recommendation.emitted
+    messages:
+      recommendationEmitted:
+        $ref: "#/components/messages/LearningEvent"
+
+  recommendationAccepted:
+    address: runtime.learning.recommendation.accepted
+    messages:
+      recommendationAccepted:
+        $ref: "#/components/messages/LearningEvent"
+
+  recommendationRejected:
+    address: runtime.learning.recommendation.rejected
+    messages:
+      recommendationRejected:
+        $ref: "#/components/messages/LearningEvent"
+
+  runStarted:
+    address: tool_learning.run.started
+    messages:
+      runStarted:
+        $ref: "#/components/messages/LearningEvent"
+
+  runCompleted:
+    address: tool_learning.run.completed
+    messages:
+      runCompleted:
+        $ref: "#/components/messages/LearningEvent"
+
+  runFailed:
+    address: tool_learning.run.failed
+    messages:
+      runFailed:
+        $ref: "#/components/messages/LearningEvent"
+
+  policyComputed:
+    address: tool_learning.policy.computed
+    messages:
+      policyComputed:
+        $ref: "#/components/messages/LearningEvent"
+
+  policyUpdated:
+    address: tool_learning.policy.updated
+    messages:
+      policyUpdated:
+        $ref: "#/components/messages/LearningEvent"
+
+  policyDegraded:
+    address: tool_learning.policy.degraded
+    messages:
+      policyDegraded:
+        $ref: "#/components/messages/LearningEvent"
+
+  snapshotPublished:
+    address: tool_learning.snapshot.published
+    messages:
+      snapshotPublished:
+        $ref: "#/components/messages/LearningEvent"
+
+operations:
+  publishDiscoveryRecorded:
+    action: send
+    channel:
+      $ref: "#/channels/discoveryRecorded"
+  publishRecommendationEmitted:
+    action: send
+    channel:
+      $ref: "#/channels/recommendationEmitted"
+  publishRecommendationAccepted:
+    action: send
+    channel:
+      $ref: "#/channels/recommendationAccepted"
+  publishRecommendationRejected:
+    action: send
+    channel:
+      $ref: "#/channels/recommendationRejected"
+  publishRunStarted:
+    action: send
+    channel:
+      $ref: "#/channels/runStarted"
+  publishRunCompleted:
+    action: send
+    channel:
+      $ref: "#/channels/runCompleted"
+  publishRunFailed:
+    action: send
+    channel:
+      $ref: "#/channels/runFailed"
+  publishPolicyComputed:
+    action: send
+    channel:
+      $ref: "#/channels/policyComputed"
+  publishPolicyUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/policyUpdated"
+  publishPolicyDegraded:
+    action: send
+    channel:
+      $ref: "#/channels/policyDegraded"
+  publishSnapshotPublished:
+    action: send
+    channel:
+      $ref: "#/channels/snapshotPublished"
+
+components:
+  messages:
+    LearningEvent:
+      name: LearningEvent
+      title: Learning Event
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/LearningEventEnvelope"
+
+  schemas:
+    LearningEventEnvelope:
+      type: object
+      required: [id, type, version, timestamp, correlation_id, payload]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        version:
+          type: string
+          enum: [v1]
+        timestamp:
+          type: string
+          format: date-time
+        session_id:
+          type: string
+        tenant_id:
+          type: string
+        actor_id:
+          type: string
+        correlation_id:
+          type: string
+        causation_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true

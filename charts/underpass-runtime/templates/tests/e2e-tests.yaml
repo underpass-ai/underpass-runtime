@@ -1,0 +1,81 @@
+{{- if .Values.e2e.enabled }}
+{{- $fullName := include "underpass-runtime.fullname" . }}
+{{- $labels := include "underpass-runtime.labels" . }}
+{{- $e2e := .Values.e2e }}
+{{- $imageRepo := $e2e.image.repository }}
+{{- $imageTag := $e2e.image.tag | default .Chart.AppVersion }}
+{{- $imagePull := $e2e.image.pullPolicy }}
+{{- $tlsSecret := $e2e.clientTlsSecret }}
+{{- $natsURL := .Values.eventBus.nats.url }}
+{{- range $e2e.tests }}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ $fullName }}-e2e-{{ .name }}"
+  labels:
+    {{- $labels | nindent 4 }}
+    test-type: e2e
+    test-id: {{ .id | quote }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  restartPolicy: Never
+  activeDeadlineSeconds: {{ .timeout | default 300 }}
+  automountServiceAccountToken: false
+  {{- with $.Values.imagePullSecrets }}
+  imagePullSecrets:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  volumes:
+    - name: e2e-tls
+      secret:
+        secretName: {{ $tlsSecret }}
+  containers:
+    - name: runner
+      image: "{{ $imageRepo }}:{{ $imageTag }}"
+      imagePullPolicy: {{ $imagePull }}
+      volumeMounts:
+        - name: e2e-tls
+          mountPath: /var/run/e2e-tls
+          readOnly: true
+      env:
+        - name: TEST_ID
+          value: {{ .id | quote }}
+        - name: WORKSPACE_URL
+          value: "https://{{ $fullName }}.{{ $.Release.Namespace }}.svc.cluster.local:{{ $.Values.service.port }}"
+        - name: WORKSPACE_TLS_CA_PATH
+          value: "/var/run/e2e-tls/ca.crt"
+        - name: WORKSPACE_TLS_CERT_PATH
+          value: "/var/run/e2e-tls/tls.crt"
+        - name: WORKSPACE_TLS_KEY_PATH
+          value: "/var/run/e2e-tls/tls.key"
+        - name: NATS_URL
+          value: {{ $natsURL | quote }}
+        - name: SSL_CERT_FILE
+          value: "/var/run/e2e-tls/ca.crt"
+        - name: REQUESTS_CA_BUNDLE
+          value: "/var/run/e2e-tls/ca.crt"
+        - name: EVIDENCE_FILE
+          value: "/tmp/evidence-{{ .id }}.json"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+{{- end }}
+{{- end }}

@@ -1,0 +1,347 @@
+syntax = "proto3";
+
+package underpass.runtime.learning.v1;
+
+option go_package = "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/learning/v1;learningv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+service LearningEvidenceService {
+  rpc GetLearningStatus(GetLearningStatusRequest) returns (GetLearningStatusResponse);
+  rpc ListEventFacts(ListEventFactsRequest) returns (ListEventFactsResponse);
+  rpc GetEventFact(GetEventFactRequest) returns (GetEventFactResponse);
+  rpc GetRecommendationDecision(GetRecommendationDecisionRequest) returns (GetRecommendationDecisionResponse);
+  rpc ListRecommendationEvents(ListRecommendationEventsRequest) returns (ListRecommendationEventsResponse);
+  rpc GetDiscoverySnapshot(GetDiscoverySnapshotRequest) returns (GetDiscoverySnapshotResponse);
+  rpc ListDiscoveryEvents(ListDiscoveryEventsRequest) returns (ListDiscoveryEventsResponse);
+  rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
+  rpc GetPolicy(GetPolicyRequest) returns (GetPolicyResponse);
+  rpc ListPolicyRuns(ListPolicyRunsRequest) returns (ListPolicyRunsResponse);
+  rpc GetPolicyRun(GetPolicyRunRequest) returns (GetPolicyRunResponse);
+  rpc ListPolicyRunEvents(ListPolicyRunEventsRequest) returns (ListPolicyRunEventsResponse);
+  rpc GetAggregate(GetAggregateRequest) returns (GetAggregateResponse);
+  rpc GetEvidenceBundle(GetEvidenceBundleRequest) returns (GetEvidenceBundleResponse);
+}
+
+enum DecisionSource {
+  DECISION_SOURCE_UNSPECIFIED = 0;
+  DECISION_SOURCE_HEURISTIC_ONLY = 1;
+  DECISION_SOURCE_HEURISTIC_WITH_TELEMETRY = 2;
+  DECISION_SOURCE_LEARNED_POLICY_TS = 3;
+  DECISION_SOURCE_LEARNED_POLICY_SWTS = 4;
+  DECISION_SOURCE_LEARNED_POLICY_TSLLM = 5;
+  DECISION_SOURCE_CONTEXTUAL_BANDIT_HYLINUCB = 6;
+  DECISION_SOURCE_HYBRID = 7;
+}
+
+enum PolicyMode {
+  POLICY_MODE_UNSPECIFIED = 0;
+  POLICY_MODE_NONE = 1;
+  POLICY_MODE_SHADOW = 2;
+  POLICY_MODE_ASSIST = 3;
+  POLICY_MODE_ENFORCED = 4;
+}
+
+enum EventMode {
+  EVENT_MODE_UNSPECIFIED = 0;
+  EVENT_MODE_SYNC_RESPONSE_WITH_EVENT_FACT = 1;
+  EVENT_MODE_ASYNC_DECISION_FACT = 2;
+  EVENT_MODE_REPLAYED_FROM_EVENT_LOG = 3;
+}
+
+enum RunStatus {
+  RUN_STATUS_UNSPECIFIED = 0;
+  RUN_STATUS_PENDING = 1;
+  RUN_STATUS_RUNNING = 2;
+  RUN_STATUS_COMPLETED = 3;
+  RUN_STATUS_FAILED = 4;
+  RUN_STATUS_DEGRADED = 5;
+}
+
+message TraceContext {
+  string trace_id = 1;
+  string span_id = 2;
+}
+
+message EventFact {
+  string                    event_id       = 1;
+  string                    subject        = 2;
+  string                    type           = 3;
+  string                    version        = 4;
+  google.protobuf.Timestamp timestamp      = 5;
+  string                    tenant_id      = 6;
+  string                    actor_id       = 7;
+  string                    session_id     = 8;
+  string                    correlation_id = 9;
+  string                    causation_id   = 10;
+  google.protobuf.Struct    payload        = 11;
+}
+
+message ScoreComponent {
+  string name      = 1;
+  double value     = 2;
+  string rationale = 3;
+}
+
+message RecommendationItem {
+  string          tool_id         = 1;
+  int32           rank            = 2;
+  double          final_score     = 3;
+  repeated ScoreComponent score_breakdown = 4;
+  string          why             = 5;
+  string          estimated_cost  = 6;
+  repeated string policy_notes    = 7;
+  string          policy_ref      = 8;
+  string          telemetry_ref   = 9;
+}
+
+message RecommendationDecision {
+  string                    recommendation_id    = 1;
+  string                    session_id           = 2;
+  string                    tenant_id            = 3;
+  string                    actor_id             = 4;
+  string                    task_hint            = 5;
+  int32                     top_k                = 6;
+  string                    context_signature    = 7;
+  DecisionSource            decision_source      = 8;
+  string                    algorithm_id         = 9;
+  string                    algorithm_version    = 10;
+  string                    feature_schema_version = 11;
+  PolicyMode                policy_mode          = 12;
+  EventMode                 event_mode           = 13;
+  string                    policy_snapshot_ref  = 14;
+  string                    policy_run_id        = 15;
+  int32                     candidate_count      = 16;
+  repeated RecommendationItem recommendations    = 17;
+  google.protobuf.Timestamp created_at           = 18;
+  EventFact                 event                = 19;
+  TraceContext              trace                = 20;
+}
+
+message DiscoveredTool {
+  string tool_id  = 1;
+  string title    = 2;
+  string summary  = 3;
+  string risk     = 4;
+  string cost     = 5;
+}
+
+message DiscoverySnapshot {
+  string                    discovery_id   = 1;
+  string                    session_id     = 2;
+  string                    detail         = 3;
+  google.protobuf.Struct    filters        = 4;
+  int32                     total_tools    = 5;
+  int32                     filtered_tools = 6;
+  repeated DiscoveredTool   tools          = 7;
+  google.protobuf.Timestamp created_at     = 8;
+  EventFact                 event          = 9;
+}
+
+message ToolPolicy {
+  string                    policy_id          = 1;
+  string                    context_signature  = 2;
+  string                    tool_id            = 3;
+  string                    algorithm_id       = 4;
+  string                    algorithm_version  = 5;
+  double                    alpha              = 6;
+  double                    beta               = 7;
+  double                    confidence         = 8;
+  int64                     p95_latency_ms     = 9;
+  string                    p95_cost           = 10;
+  double                    error_rate         = 11;
+  int64                     n_samples          = 12;
+  google.protobuf.Timestamp freshness_ts       = 13;
+  string                    run_id             = 14;
+  string                    snapshot_ref       = 15;
+  EventFact                 event              = 16;
+}
+
+message PolicyRun {
+  string                    run_id                 = 1;
+  string                    schedule               = 2;
+  RunStatus                 status                 = 3;
+  string                    algorithm_id           = 4;
+  string                    algorithm_version      = 5;
+  string                    feature_schema_version = 6;
+  string                    window                 = 7;
+  repeated string           constraints            = 8;
+  google.protobuf.Timestamp started_at             = 9;
+  google.protobuf.Timestamp completed_at           = 10;
+  int64                     aggregates_read        = 11;
+  int64                     policies_written       = 12;
+  int64                     policies_filtered      = 13;
+  int64                     duration_ms            = 14;
+  string                    lake_ref               = 15;
+  string                    snapshot_ref           = 16;
+  string                    event_ref              = 17;
+  repeated string           input_event_refs       = 18;
+  repeated string           output_event_refs      = 19;
+}
+
+message TelemetryAggregate {
+  string                    aggregate_id      = 1;
+  string                    tool_id           = 2;
+  string                    context_signature = 3;
+  string                    window            = 4;
+  int64                     total             = 5;
+  int64                     successes         = 6;
+  int64                     failures          = 7;
+  int64                     deny_count        = 8;
+  double                    success_rate      = 9;
+  double                    deny_rate         = 10;
+  int64                     p50_duration_ms   = 11;
+  int64                     p95_duration_ms   = 12;
+  string                    p95_cost          = 13;
+  string                    source_ref        = 14;
+  google.protobuf.Timestamp computed_at       = 15;
+}
+
+message EvidenceBundle {
+  RecommendationDecision    recommendation   = 1;
+  ToolPolicy                policy           = 2;
+  PolicyRun                 run              = 3;
+  TelemetryAggregate        aggregate        = 4;
+  repeated EventFact        lineage          = 5;
+  map<string, string>       snapshot_metadata = 6;
+}
+
+message GetLearningStatusRequest {}
+
+message GetLearningStatusResponse {
+  string                    status                           = 1;
+  google.protobuf.Timestamp as_of                            = 2;
+  repeated string           active_algorithms                = 3;
+  bool                      runtime_recommendation_events    = 4;
+  bool                      tool_learning_events             = 5;
+  bool                      evidence_projection_enabled      = 6;
+}
+
+message ListEventFactsRequest {
+  string subject_prefix = 1;
+  string type           = 2;
+  string session_id     = 3;
+  string correlation_id = 4;
+  string causation_id   = 5;
+  google.protobuf.Timestamp from_ts = 6;
+  google.protobuf.Timestamp to_ts   = 7;
+  int32  page_size       = 8;
+  string page_token      = 9;
+}
+
+message ListEventFactsResponse {
+  repeated EventFact events          = 1;
+  string             next_page_token = 2;
+}
+
+message GetEventFactRequest {
+  string event_id = 1;
+}
+
+message GetRecommendationDecisionRequest {
+  string recommendation_id = 1;
+}
+
+message ListRecommendationEventsRequest {
+  string recommendation_id = 1;
+}
+
+message GetDiscoverySnapshotRequest {
+  string discovery_id = 1;
+}
+
+message ListDiscoveryEventsRequest {
+  string discovery_id = 1;
+}
+
+message ListPoliciesRequest {
+  string context_signature = 1;
+  string tool_id           = 2;
+  int32  page_size         = 3;
+  string page_token        = 4;
+}
+
+message ListPoliciesResponse {
+  repeated ToolPolicy policies        = 1;
+  string              next_page_token = 2;
+}
+
+message GetPolicyRequest {
+  string context_signature = 1;
+  string tool_id           = 2;
+}
+
+message ListPolicyRunsRequest {
+  string algorithm_id = 1;
+  RunStatus status    = 2;
+  int32  page_size    = 3;
+  string page_token   = 4;
+}
+
+message ListPolicyRunsResponse {
+  repeated PolicyRun runs            = 1;
+  string             next_page_token = 2;
+}
+
+message GetPolicyRunRequest {
+  string run_id = 1;
+}
+
+message ListPolicyRunEventsRequest {
+  string run_id = 1;
+}
+
+message GetAggregateRequest {
+  string context_signature = 1;
+  string tool_id           = 2;
+}
+
+message GetEvidenceBundleRequest {
+  string recommendation_id = 1;
+}
+
+// Wrapper responses required by buf STANDARD lint rules.
+
+message GetEventFactResponse {
+  EventFact event = 1;
+}
+
+message GetRecommendationDecisionResponse {
+  RecommendationDecision decision = 1;
+}
+
+message ListRecommendationEventsResponse {
+  repeated EventFact events          = 1;
+  string             next_page_token = 2;
+}
+
+message GetDiscoverySnapshotResponse {
+  DiscoverySnapshot snapshot = 1;
+}
+
+message ListDiscoveryEventsResponse {
+  repeated EventFact events          = 1;
+  string             next_page_token = 2;
+}
+
+message GetPolicyResponse {
+  ToolPolicy policy = 1;
+}
+
+message GetPolicyRunResponse {
+  PolicyRun run = 1;
+}
+
+message ListPolicyRunEventsResponse {
+  repeated EventFact events          = 1;
+  string             next_page_token = 2;
+}
+
+message GetAggregateResponse {
+  TelemetryAggregate aggregate = 1;
+}
+
+message GetEvidenceBundleResponse {
+  EvidenceBundle bundle = 1;
+}

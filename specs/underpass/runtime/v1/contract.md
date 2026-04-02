@@ -185,6 +185,19 @@ Current scoring inputs include:
 - deny rate
 - p95 duration
 
+Target traceability additions:
+
+- every recommendation response returns a stable `recommendation_id`
+- every recommendation response returns the `event_id` and `event_subject` of
+  the emitted decision fact
+- every recommendation response declares `decision_source`,
+  `algorithm_id`, `algorithm_version`, and `policy_mode`
+- the same `recommendation_id` must resolve in the
+  `underpass.runtime.learning.v1` evidence plane
+
+These additions are intentionally additive. They do not change the ranking
+semantics of `RecommendTools`; they make those semantics auditable.
+
 ## InvocationService
 
 Responsibilities:
