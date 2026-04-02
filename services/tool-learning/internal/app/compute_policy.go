@@ -6,7 +6,13 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/underpass-ai/underpass-runtime/services/tool-learning/internal/domain"
+)
+
+const (
+	AlgorithmIDThompson = "beta_thompson_sampling"
+	AlgorithmVersionV1  = "1.0.0"
 )
 
 // ComputePolicyUseCase reads telemetry from the lake, computes tool
@@ -59,6 +65,7 @@ func NewComputePolicyUseCase(cfg ComputePolicyConfig) *ComputePolicyUseCase {
 
 // ComputeResult holds the output metrics of a policy computation run.
 type ComputeResult struct {
+	RunID            string
 	AggregatesRead   int
 	PoliciesWritten  int
 	PoliciesFiltered int
@@ -86,15 +93,50 @@ func (uc *ComputePolicyUseCase) RunWindow(ctx context.Context, from, to time.Tim
 
 func (uc *ComputePolicyUseCase) run(ctx context.Context, from, to time.Time, schedule string) (ComputeResult, error) {
 	start := time.Now()
+
+	// Build PolicyRun for lifecycle tracking.
+	run := domain.PolicyRun{
+		RunID:            uuid.NewString(),
+		Schedule:         schedule,
+		Status:           domain.RunStatusRunning,
+		AlgorithmID:      AlgorithmIDThompson,
+		AlgorithmVersion: AlgorithmVersionV1,
+		Window:           schedule,
+		StartedAt:        uc.clock.Now().UTC(),
+	}
+
 	uc.logger.Info("policy computation started",
+		"run_id", run.RunID,
 		"schedule", schedule,
 		"from", from.Format(time.RFC3339),
 		"to", to.Format(time.RFC3339),
 	)
 
+	// Emit run.started.
+	if uc.publisher != nil {
+		if err := uc.publisher.PublishRunStarted(ctx, run); err != nil {
+			uc.logger.Warn("publish run.started failed", "error", err)
+		}
+	}
+
+	// Helper to emit run.failed and return error.
+	failRun := func(err error, code string) (ComputeResult, error) {
+		run.Status = domain.RunStatusFailed
+		run.CompletedAt = uc.clock.Now().UTC()
+		run.DurationMs = time.Since(start).Milliseconds()
+		run.ErrorCode = code
+		run.ErrorMessage = err.Error()
+		if uc.publisher != nil {
+			if pubErr := uc.publisher.PublishRunFailed(ctx, run); pubErr != nil {
+				uc.logger.Warn("publish run.failed failed", "error", pubErr)
+			}
+		}
+		return ComputeResult{}, err
+	}
+
 	aggregates, err := uc.lake.QueryAggregates(ctx, from, to)
 	if err != nil {
-		return ComputeResult{}, fmt.Errorf("query aggregates: %w", err)
+		return failRun(fmt.Errorf("query aggregates: %w", err), "lake_query_error")
 	}
 
 	var policies []domain.ToolPolicy
@@ -113,19 +155,50 @@ func (uc *ComputePolicyUseCase) run(ctx context.Context, from, to time.Time, sch
 
 	if len(policies) > 0 {
 		if err := uc.store.WritePolicies(ctx, policies); err != nil {
-			return ComputeResult{}, fmt.Errorf("write policies: %w", err)
+			return failRun(fmt.Errorf("write policies: %w", err), "store_write_error")
 		}
 	}
 
+	run.AggregatesRead = len(aggregates)
+	run.PoliciesWritten = len(policies)
+	run.PoliciesFiltered = filtered
+
+	// Emit policy.computed for the batch.
+	if uc.publisher != nil && len(policies) > 0 {
+		if err := uc.publisher.PublishPolicyComputed(ctx, run, policies); err != nil {
+			uc.logger.Warn("publish policy.computed failed", "error", err)
+		}
+	}
+
+	// Write audit snapshot.
 	if uc.audit != nil && len(policies) > 0 {
 		if err := uc.audit.WriteSnapshot(ctx, uc.clock.Now().UTC(), policies); err != nil {
 			uc.logger.Warn("audit snapshot failed", "error", err)
+		} else if uc.publisher != nil {
+			// Emit snapshot.published only if audit succeeded.
+			snapshotRef := fmt.Sprintf("audit/%s/%s", schedule, run.RunID)
+			run.SnapshotRef = snapshotRef
+			if err := uc.publisher.PublishSnapshotPublished(ctx, run, snapshotRef); err != nil {
+				uc.logger.Warn("publish snapshot.published failed", "error", err)
+			}
 		}
 	}
 
+	// Emit policy.updated (legacy, kept for backward compat).
 	if uc.publisher != nil && len(policies) > 0 {
 		if err := uc.publisher.PublishPolicyUpdated(ctx, policies, filtered); err != nil {
-			uc.logger.Warn("publish policy update failed", "error", err)
+			uc.logger.Warn("publish policy.updated failed", "error", err)
+		}
+	}
+
+	// Emit run.completed.
+	run.Status = domain.RunStatusCompleted
+	run.CompletedAt = uc.clock.Now().UTC()
+	run.DurationMs = time.Since(start).Milliseconds()
+
+	if uc.publisher != nil {
+		if err := uc.publisher.PublishRunCompleted(ctx, run); err != nil {
+			uc.logger.Warn("publish run.completed failed", "error", err)
 		}
 	}
 
@@ -134,9 +207,11 @@ func (uc *ComputePolicyUseCase) run(ctx context.Context, from, to time.Time, sch
 		PoliciesWritten:  len(policies),
 		PoliciesFiltered: filtered,
 		Duration:         time.Since(start),
+		RunID:            run.RunID,
 	}
 
 	uc.logger.Info("policy computation completed",
+		"run_id", run.RunID,
 		"schedule", schedule,
 		"aggregates_read", result.AggregatesRead,
 		"policies_written", result.PoliciesWritten,
