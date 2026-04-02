@@ -159,7 +159,7 @@ class PolicyDrivenRecommendationsE2E(WorkspaceE2EBase):
         print_step(3, "RecommendTools — verifying learned policy consumption")
         status, body = self.request(
             "GET",
-            f"/v1/sessions/{session_id}/tools/recommendations?task_hint=read+file&top_k=10",
+            f"/v1/sessions/{session_id}/tools/recommendations?task_hint=read+file&top_k=50",
         )
         if status != 200:
             raise RuntimeError(f"RecommendTools: expected 200, got {status}")
