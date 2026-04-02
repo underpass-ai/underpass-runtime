@@ -431,7 +431,8 @@ class MultiAgentPipelineE2E(WorkspaceE2EBase):
 
     async def _run_pipeline(self, nats_py) -> int:
         """Full async pipeline with NATS event chain."""
-        self.nc = await nats_py.connect(self.nats_url)
+        nats_tls = self.build_nats_tls()
+        self.nc = await nats_py.connect(self.nats_url, tls=nats_tls)
 
         # Create shared session
         print_step(1, "Creating shared workspace session")

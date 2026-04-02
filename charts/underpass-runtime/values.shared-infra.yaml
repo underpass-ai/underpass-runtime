@@ -1,0 +1,31 @@
+# Shared infrastructure — use NATS and Valkey deployed by rehydration-kernel.
+#
+# Usage:
+#   helm install underpass-runtime charts/underpass-runtime \
+#     -f charts/underpass-runtime/values.shared-infra.yaml \
+#     -n underpass-runtime
+#
+# Prerequisites:
+#   - rehydration-kernel deployed in the same namespace with:
+#       nats.enabled: true
+#       valkey.enabled: true
+#
+# Service names follow kernel's naming convention:
+#   {release}-rehydration-kernel-nats:4222
+#   {release}-rehydration-kernel-valkey:6379
+
+stores:
+  backend: valkey
+
+valkey:
+  enabled: true
+  # Point to kernel's Valkey service.
+  host: rehydration-kernel-valkey
+  port: 6379
+  db: 0
+
+eventBus:
+  type: nats
+  nats:
+    # Point to kernel's NATS service.
+    url: nats://rehydration-kernel-nats:4222

@@ -1,0 +1,84 @@
+# E2E job template — instantiated by run-e2e.sh per test.
+# Placeholders: __TEST_ID__, __JOB_NAME__, __TIMEOUT__, __IMAGE__
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+  namespace: underpass-runtime
+  labels:
+    app: __JOB_NAME__
+    test-type: e2e
+    test-id: "__TEST_ID__"
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  activeDeadlineSeconds: __TIMEOUT__
+  template:
+    metadata:
+      labels:
+        app: __JOB_NAME__
+        test-type: e2e
+        test-id: "__TEST_ID__"
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      volumes:
+        - name: e2e-tls
+          secret:
+            secretName: e2e-client-tls
+      containers:
+        - name: runner
+          image: __IMAGE__
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: e2e-tls
+              mountPath: /var/run/e2e-tls
+              readOnly: true
+          env:
+            # Which test to run.
+            - name: TEST_ID
+              value: "__TEST_ID__"
+            # Runtime gRPC endpoint (cluster-internal).
+            - name: WORKSPACE_URL
+              value: "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            # gRPC + NATS mTLS — same certs, same CA.
+            - name: WORKSPACE_TLS_CA_PATH
+              value: "/var/run/e2e-tls/ca.crt"
+            - name: WORKSPACE_TLS_CERT_PATH
+              value: "/var/run/e2e-tls/tls.crt"
+            - name: WORKSPACE_TLS_KEY_PATH
+              value: "/var/run/e2e-tls/tls.key"
+            # NATS URL from runtime ConfigMap.
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: underpass-runtime
+                  key: EVENT_BUS_NATS_URL
+            # System CA for Python SSL verification.
+            - name: SSL_CERT_FILE
+              value: "/var/run/e2e-tls/ca.crt"
+            - name: REQUESTS_CA_BUNDLE
+              value: "/var/run/e2e-tls/ca.crt"
+            # Evidence output.
+            - name: EVIDENCE_FILE
+              value: "/tmp/evidence-__TEST_ID__.json"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: E2E_DEBUG
+              value: "1"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault

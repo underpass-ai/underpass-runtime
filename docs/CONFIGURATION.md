@@ -40,6 +40,7 @@ The Go runtime uses explicit env vars (not the `rediss://` URI scheme used by th
 |---|---|---|
 | `VALKEY_TLS_ENABLED` | `false` | Enable TLS for Valkey connections. Accepts `true`/`false`/`1`/`0`/`yes`/`no`. |
 | `VALKEY_TLS_CA_PATH` | _(none)_ | Path to PEM CA bundle for verifying the Valkey server certificate. |
+| `VALKEY_TLS_SERVER_NAME` | _(empty)_ | Optional SNI / hostname verification override for the Valkey server certificate. Use this when the service DNS name used for connection does not match the certificate SAN you want to verify. |
 | `VALKEY_TLS_CERT_PATH` | _(none)_ | Path to PEM client certificate for mutual TLS. Optional -- when both cert and key are set, mode upgrades from `server` to `mutual`. |
 | `VALKEY_TLS_KEY_PATH` | _(none)_ | Path to PEM client private key for mutual TLS. |
 
@@ -53,6 +54,7 @@ Controls TLS for the NATS event-bus connection.
 |---|---|---|
 | `NATS_TLS_MODE` | `disabled` | TLS mode for the NATS client. Values: `disabled` / `plaintext`, `server` / `tls`, `mutual` / `mtls`. |
 | `NATS_TLS_CA_PATH` | _(none)_ | Path to PEM CA bundle for verifying the NATS server certificate. |
+| `NATS_TLS_SERVER_NAME` | _(empty)_ | Optional SNI / hostname verification override for the NATS server certificate. Use this when the runtime connects through a service name or alias that differs from the certificate SAN to verify. |
 | `NATS_TLS_CERT_PATH` | _(none)_ | Path to PEM client certificate (mutual TLS). |
 | `NATS_TLS_KEY_PATH` | _(none)_ | Path to PEM client private key (mutual TLS). |
 | `NATS_TLS_FIRST` | `false` | Env-var parity with the Rust kernel. The Go `nats.go` client does **not** support TLS-first handshake; if set to `true`, a warning is logged and the flag is ignored. |

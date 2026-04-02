@@ -4,6 +4,8 @@
 .devcontainer
 docs
 e2e
+!e2e/tests
+!e2e/gen
 e2e-images
 logs
 k8s

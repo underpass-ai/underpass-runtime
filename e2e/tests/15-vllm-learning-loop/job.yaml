@@ -19,6 +19,8 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -31,6 +33,12 @@ spec:
           env:
             - name: WORKSPACE_URL
               value: "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            - name: WORKSPACE_TLS_CA_PATH
+              value: "/var/run/e2e-client-tls/ca.crt"
+            - name: WORKSPACE_TLS_CERT_PATH
+              value: "/var/run/e2e-client-tls/tls.crt"
+            - name: WORKSPACE_TLS_KEY_PATH
+              value: "/var/run/e2e-client-tls/tls.key"
             - name: VLLM_URL
               value: "http://vllm-server:8000"
             - name: VLLM_MODEL
@@ -64,6 +72,9 @@ spec:
             - name: tls-ca
               mountPath: /etc/ssl/runtime
               readOnly: true
+            - name: e2e-client-tls
+              mountPath: /var/run/e2e-client-tls
+              readOnly: true
       volumes:
         - name: tls-ca
           secret:
@@ -72,3 +83,6 @@ spec:
               - key: ca.crt
                 path: ca.crt
             optional: true
+        - name: e2e-client-tls
+          secret:
+            secretName: e2e-client-tls

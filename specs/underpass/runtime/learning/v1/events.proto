@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package underpass.runtime.learning.v1;
+
+option go_package = "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/learning/v1;learningv1";
+
+import "google/protobuf/timestamp.proto";
+
+// Domain events for recommendation evidence and tool-learning lineage.
+//
+// Transport: NATS JetStream.
+// Payload encoding on the wire: JSON.
+
+enum LearningEventType {
+  LEARNING_EVENT_TYPE_UNSPECIFIED             = 0;
+  LEARNING_EVENT_TYPE_DISCOVERY_RECORDED      = 1;
+  LEARNING_EVENT_TYPE_RECOMMENDATION_EMITTED  = 2;
+  LEARNING_EVENT_TYPE_RECOMMENDATION_ACCEPTED = 3;
+  LEARNING_EVENT_TYPE_RECOMMENDATION_REJECTED = 4;
+  LEARNING_EVENT_TYPE_RUN_STARTED             = 5;
+  LEARNING_EVENT_TYPE_RUN_COMPLETED           = 6;
+  LEARNING_EVENT_TYPE_RUN_FAILED              = 7;
+  LEARNING_EVENT_TYPE_POLICY_COMPUTED         = 8;
+  LEARNING_EVENT_TYPE_POLICY_UPDATED          = 9;
+  LEARNING_EVENT_TYPE_POLICY_DEGRADED         = 10;
+  LEARNING_EVENT_TYPE_SNAPSHOT_PUBLISHED      = 11;
+}
+
+message LearningEvent {
+  string                    id             = 1;
+  string                    type           = 2;
+  string                    version        = 3;
+  google.protobuf.Timestamp timestamp      = 4;
+  string                    session_id     = 5;
+  string                    tenant_id      = 6;
+  string                    actor_id       = 7;
+  string                    correlation_id = 8;
+  string                    causation_id   = 9;
+
+  oneof payload {
+    DiscoveryRecordedPayload      discovery_recorded      = 10;
+    RecommendationEmittedPayload  recommendation_emitted  = 11;
+    RecommendationAcceptedPayload recommendation_accepted = 12;
+    RecommendationRejectedPayload recommendation_rejected = 13;
+    PolicyRunStartedPayload       run_started             = 14;
+    PolicyRunCompletedPayload     run_completed           = 15;
+    PolicyRunFailedPayload        run_failed              = 16;
+    PolicyComputedPayload         policy_computed         = 17;
+    PolicyUpdatedPayload          policy_updated          = 18;
+    PolicyDegradedPayload         policy_degraded         = 19;
+    SnapshotPublishedPayload      snapshot_published      = 20;
+  }
+}
+
+message RankedTool {
+  string tool_id     = 1;
+  int32  rank        = 2;
+  double final_score = 3;
+}
+
+message DiscoveryRecordedPayload {
+  string          discovery_id   = 1;
+  string          detail         = 2;
+  int32           total_tools    = 3;
+  int32           filtered_tools = 4;
+  repeated string tool_ids       = 5;
+}
+
+message RecommendationEmittedPayload {
+  string             recommendation_id = 1;
+  string             task_hint         = 2;
+  int32              top_k             = 3;
+  string             decision_source   = 4;
+  string             algorithm_id      = 5;
+  string             algorithm_version = 6;
+  string             policy_mode       = 7;
+  repeated RankedTool tools            = 8;
+}
+
+message RecommendationAcceptedPayload {
+  string recommendation_id = 1;
+  string selected_tool_id  = 2;
+}
+
+message RecommendationRejectedPayload {
+  string recommendation_id = 1;
+  string reason            = 2;
+}
+
+message PolicyRunStartedPayload {
+  string run_id             = 1;
+  string schedule           = 2;
+  string algorithm_id       = 3;
+  string algorithm_version  = 4;
+  string feature_schema_version = 5;
+  string window             = 6;
+}
+
+message PolicyRunCompletedPayload {
+  string run_id            = 1;
+  int64  aggregates_read   = 2;
+  int64  policies_written  = 3;
+  int64  policies_filtered = 4;
+  string snapshot_ref      = 5;
+  int64  duration_ms       = 6;
+}
+
+message PolicyRunFailedPayload {
+  string run_id      = 1;
+  string error_code  = 2;
+  string message     = 3;
+  int64  duration_ms = 4;
+}
+
+message PolicyComputedPayload {
+  string policy_id          = 1;
+  string run_id             = 2;
+  string context_signature  = 3;
+  string tool_id            = 4;
+  string algorithm_id       = 5;
+  string algorithm_version  = 6;
+  double confidence         = 7;
+  string snapshot_ref       = 8;
+}
+
+message PolicyUpdatedPayload {
+  string policy_id         = 1;
+  string run_id            = 2;
+  string context_signature = 3;
+  string tool_id           = 4;
+  string store_ref         = 5;
+}
+
+message PolicyDegradedPayload {
+  string policy_id         = 1;
+  string context_signature = 2;
+  string tool_id           = 3;
+  string reason            = 4;
+}
+
+message SnapshotPublishedPayload {
+  string run_id       = 1;
+  string snapshot_ref = 2;
+  string checksum     = 3;
+}

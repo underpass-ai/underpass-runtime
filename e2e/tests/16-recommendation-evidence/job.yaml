@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-recommendation-evidence
+  namespace: underpass-runtime
+  labels:
+    app: e2e-recommendation-evidence
+    test-type: e2e
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 7200
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app: e2e-recommendation-evidence
+        test-type: e2e
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull
+      volumes:
+        - name: ca-cert
+          configMap:
+            name: runtime-ca
+        - name: e2e-client-tls
+          secret:
+            secretName: e2e-client-tls
+      containers:
+        - name: test-runner
+          image: ghcr.io/underpass-ai/underpass-runtime/e2e-16-recommendation-evidence:v1.0.6
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: ca-cert
+              mountPath: /etc/ssl/runtime
+              readOnly: true
+            - name: e2e-client-tls
+              mountPath: /var/run/e2e-client-tls
+              readOnly: true
+          env:
+            - name: WORKSPACE_URL
+              value: "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            - name: WORKSPACE_TLS_CA_PATH
+              value: "/var/run/e2e-client-tls/ca.crt"
+            - name: WORKSPACE_TLS_CERT_PATH
+              value: "/var/run/e2e-client-tls/tls.crt"
+            - name: WORKSPACE_TLS_KEY_PATH
+              value: "/var/run/e2e-client-tls/tls.key"
+            - name: NATS_URL
+              value: "nats://rehydration-kernel-nats.underpass-runtime.svc.cluster.local:4222"
+            - name: SSL_CERT_FILE
+              value: "/etc/ssl/runtime/ca.crt"
+            - name: REQUESTS_CA_BUNDLE
+              value: "/etc/ssl/runtime/ca.crt"
+            - name: EVIDENCE_FILE
+              value: "/tmp/evidence-16.json"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: E2E_DEBUG
+              value: "1"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault

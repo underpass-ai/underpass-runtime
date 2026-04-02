@@ -2,8 +2,10 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: e2e-llm-agent-loop
+  namespace: underpass-runtime
   labels:
     app: e2e-llm-agent-loop
+    test-type: e2e
     tier: llm
 spec:
   backoffLimit: 1
@@ -12,9 +14,12 @@ spec:
     metadata:
       labels:
         app: e2e-llm-agent-loop
+        test-type: e2e
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -32,7 +37,13 @@ spec:
                 - ALL
           env:
             - name: WORKSPACE_URL
-              value: "http://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+              value: "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+            - name: WORKSPACE_TLS_CA_PATH
+              value: "/var/run/e2e-client-tls/ca.crt"
+            - name: WORKSPACE_TLS_CERT_PATH
+              value: "/var/run/e2e-client-tls/tls.crt"
+            - name: WORKSPACE_TLS_KEY_PATH
+              value: "/var/run/e2e-client-tls/tls.key"
             - name: WORKSPACE_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -40,7 +51,7 @@ spec:
                   key: shared_token
                   optional: true
             - name: LLM_PROVIDER
-              value: "claude"   # claude | openai | vllm
+              value: "vllm-qwen35"
             # --- Claude ---
             - name: ANTHROPIC_API_KEY
               valueFrom:
@@ -61,16 +72,16 @@ spec:
               value: "gpt-4o-mini"
             # --- vLLM (Qwen) ---
             - name: VLLM_URL
-              value: "http://vllm-server.underpass-runtime.svc.cluster.local:8000"
+              value: "http://vllm-qwen35.underpass-runtime.svc.cluster.local:8000"
             - name: VLLM_MODEL
-              value: "Qwen/Qwen3-8B"
+              value: "Qwen/Qwen3.5-9B"
             # --- Test config ---
             - name: EVIDENCE_FILE
               value: "/tmp/evidence-10-llm-agent-loop.json"
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: E2E_DEBUG
-              value: "0"
+              value: "1"
             - name: E2E_SKIP_CLEANUP
               value: "0"
           resources:
@@ -82,3 +93,11 @@ spec:
               cpu: 500m
               memory: 256Mi
               ephemeral-storage: 128Mi
+          volumeMounts:
+            - name: e2e-client-tls
+              mountPath: /var/run/e2e-client-tls
+              readOnly: true
+      volumes:
+        - name: e2e-client-tls
+          secret:
+            secretName: e2e-client-tls

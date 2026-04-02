@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from workspace_common import WorkspaceE2EBase, print_error, print_info, print_step, print_success, print_warning
 
-DEFAULT_URL = "http://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+DEFAULT_URL = "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
 VLLM_URL = os.getenv("VLLM_URL", "http://vllm-server:8000")
 VLLM_MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen3-8B")
 VLLM_API_KEY = os.getenv("VLLM_API_KEY", "")

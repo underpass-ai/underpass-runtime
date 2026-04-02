@@ -66,6 +66,12 @@ func (f *fakeService) ValidateSessionAccess(_ context.Context, _ string, _ domai
 func (f *fakeService) ValidateInvocationAccess(_ context.Context, _ string, _ domain.Principal) *app.ServiceError {
 	return f.accessErr
 }
+func (f *fakeService) GetRecommendationDecision(_ context.Context, _ string) (domain.RecommendationDecision, *app.ServiceError) {
+	return domain.RecommendationDecision{}, f.svcErr
+}
+func (f *fakeService) GetEvidenceBundle(_ context.Context, _ string) (app.EvidenceBundle, *app.ServiceError) {
+	return app.EvidenceBundle{}, f.svcErr
+}
 func (f *fakeService) PrometheusMetrics() string { return "" }
 
 func newTestServer(fake *fakeService) *Server {

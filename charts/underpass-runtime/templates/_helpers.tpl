@@ -149,3 +149,10 @@ Mirrors rehydration-kernel _helpers.tpl validation pattern.
 {{- fail "valkeyTls.keys.cert and valkeyTls.keys.key must be configured together" -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Resolve the CA secret name used by the cert-gen hook Job.
+*/}}
+{{- define "underpass-runtime.certGen.caSecretName" -}}
+{{- default "rehydration-kernel-internal-ca" .Values.certGen.caSecret -}}
+{{- end -}}

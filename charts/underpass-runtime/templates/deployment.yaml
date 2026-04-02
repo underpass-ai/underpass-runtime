@@ -5,6 +5,8 @@
 {{- $natsTlsMode := include "underpass-runtime.natsTlsMode" . -}}
 {{- $valkeyTls := default (dict) .Values.valkeyTls -}}
 {{- $valkeyTlsEnabled := default false $valkeyTls.enabled -}}
+{{- $s3Tls := default (dict) .Values.s3Tls -}}
+{{- $s3TlsEnabled := default false $s3Tls.enabled -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -80,33 +82,24 @@ spec:
                   key: {{ .Values.artifacts.s3.secretKeyKey }}
             {{- end }}
           livenessProbe:
-            {{- if eq $tlsMode "mutual" }}
-            {{- /* mTLS: kubelet cannot present a client cert — use tcpSocket */}}
+            {{- if ne $tlsMode "disabled" }}
             tcpSocket:
               port: {{ .Values.service.port }}
             {{- else }}
-            httpGet:
-              path: /healthz
-              port: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
-              {{- if eq $tlsMode "server" }}
-              scheme: HTTPS
-              {{- end }}
+            grpc:
+              port: {{ .Values.service.port }}
             {{- end }}
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 3
             failureThreshold: 3
           readinessProbe:
-            {{- if eq $tlsMode "mutual" }}
+            {{- if ne $tlsMode "disabled" }}
             tcpSocket:
               port: {{ .Values.service.port }}
             {{- else }}
-            httpGet:
-              path: /healthz
-              port: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
-              {{- if eq $tlsMode "server" }}
-              scheme: HTTPS
-              {{- end }}
+            grpc:
+              port: {{ .Values.service.port }}
             {{- end }}
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -136,6 +129,11 @@ spec:
               mountPath: {{ $valkeyTls.mountPath }}
               readOnly: true
             {{- end }}
+            {{- if and $s3TlsEnabled $s3Tls.existingSecret }}
+            - name: s3-tls
+              mountPath: {{ $s3Tls.mountPath }}
+              readOnly: true
+            {{- end }}
       volumes:
         - name: workspaces
           emptyDir:
@@ -160,6 +158,11 @@ spec:
         - name: valkey-tls
           secret:
             secretName: {{ $valkeyTls.existingSecret }}
+        {{- end }}
+        {{- if and $s3TlsEnabled $s3Tls.existingSecret }}
+        - name: s3-tls
+          secret:
+            secretName: {{ $s3Tls.existingSecret }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

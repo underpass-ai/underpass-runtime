@@ -151,6 +151,20 @@ type EventPublisher interface {
 	Publish(ctx context.Context, event domain.DomainEvent) error
 }
 
+// PolicyReader reads learned tool policies from the policy store (Valkey).
+// Policies are computed offline by the tool-learning pipeline and keyed by
+// context signature + tool ID.
+type PolicyReader interface {
+	ReadPolicy(ctx context.Context, contextSig, toolID string) (ToolPolicy, bool, error)
+	ReadPoliciesForContext(ctx context.Context, contextSig string) (map[string]ToolPolicy, error)
+}
+
+// RecommendationDecisionStore persists and retrieves recommendation decisions.
+type RecommendationDecisionStore interface {
+	Save(ctx context.Context, decision domain.RecommendationDecision) error
+	Get(ctx context.Context, recommendationID string) (domain.RecommendationDecision, bool, error)
+}
+
 // SnapshotRef identifies a stored workspace snapshot.
 type SnapshotRef struct {
 	ID        string    `json:"id"`

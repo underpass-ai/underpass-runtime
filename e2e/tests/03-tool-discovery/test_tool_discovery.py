@@ -8,7 +8,7 @@ import time
 
 from workspace_common import WorkspaceE2EBase, print_error, print_info, print_step, print_success
 
-DEFAULT_URL = "http://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+DEFAULT_URL = "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
 
 PRINCIPAL = {
     "tenant_id": "e2e-tenant",
@@ -79,12 +79,16 @@ class ToolDiscoveryE2E(WorkspaceE2EBase):
             if status != 200:
                 raise RuntimeError(f"discovery full: expected 200, got {status}")
             full_tools = body.get("tools", [])
-            # Find fs.list and check it has input_schema
-            fs_list = next((t for t in full_tools if t.get("name") == "fs.list"), None)
+            # FullTool wraps Tool at field "tool", so name is at t["tool"]["name"]
+            def tool_name(t: dict) -> str:
+                return t.get("name", "") or t.get("tool", {}).get("name", "")
+            fs_list = next((t for t in full_tools if tool_name(t) == "fs.list"), None)
             if fs_list is None:
-                raise RuntimeError("fs.list not found in full discovery")
-            if "input_schema" not in fs_list and "inputSchema" not in fs_list:
-                raise RuntimeError(f"fs.list missing input_schema in full detail: {list(fs_list.keys())}")
+                raise RuntimeError(f"fs.list not found in full discovery ({len(full_tools)} tools)")
+            # input_schema may be nested under tool.inputSchema (protobuf camelCase)
+            inner = fs_list.get("tool", fs_list)
+            if "input_schema" not in inner and "inputSchema" not in inner:
+                raise RuntimeError(f"fs.list missing input_schema in full detail: {list(inner.keys())}")
             self.record_step("discovery_full", "passed")
             print_success("Full detail includes input_schema")
 

@@ -33,10 +33,11 @@ func ParseMode(raw string) (Mode, error) {
 
 // Config carries paths and mode for building a *tls.Config.
 type Config struct {
-	Mode     Mode
-	CertPath string // path to PEM-encoded certificate
-	KeyPath  string // path to PEM-encoded private key
-	CAPath   string // path to PEM-encoded CA certificate(s)
+	Mode       Mode
+	CertPath   string // path to PEM-encoded certificate
+	KeyPath    string // path to PEM-encoded private key
+	CAPath     string // path to PEM-encoded CA certificate(s)
+	ServerName string // optional SNI / hostname verification override for clients
 }
 
 // BuildServerTLSConfig creates a *tls.Config suitable for an HTTP/gRPC server.
@@ -84,6 +85,9 @@ func BuildClientTLSConfig(cfg Config) (*tls.Config, error) {
 
 	tlsCfg := &tls.Config{
 		MinVersion: tls.VersionTLS13,
+	}
+	if cfg.ServerName != "" {
+		tlsCfg.ServerName = cfg.ServerName
 	}
 
 	if cfg.CAPath != "" {

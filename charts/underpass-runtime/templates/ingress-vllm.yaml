@@ -1,0 +1,37 @@
+{{- if .Values.vllm.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "underpass-runtime.fullname" . }}-vllm
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+    app.kubernetes.io/component: vllm
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.vllm.ingress.clusterIssuer | quote }}
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    {{- if .Values.vllm.ingress.mtls.enabled }}
+    nginx.ingress.kubernetes.io/auth-tls-verify-client: "on"
+    nginx.ingress.kubernetes.io/auth-tls-secret: {{ printf "%s/%s" .Release.Namespace .Values.vllm.ingress.mtls.clientCaSecret | quote }}
+    nginx.ingress.kubernetes.io/auth-tls-verify-depth: "1"
+    {{- end }}
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - {{ .Values.vllm.ingress.host | quote }}
+      secretName: {{ .Values.vllm.ingress.tlsSecret }}
+  rules:
+    - host: {{ .Values.vllm.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vllm-server
+                port:
+                  number: 8000
+{{- end }}

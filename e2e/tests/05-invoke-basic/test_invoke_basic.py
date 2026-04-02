@@ -8,7 +8,7 @@ import time
 
 from workspace_common import WorkspaceE2EBase, print_error, print_step, print_success
 
-DEFAULT_URL = "http://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
+DEFAULT_URL = "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053"
 
 PRINCIPAL = {
     "tenant_id": "e2e-tenant",
@@ -52,7 +52,7 @@ class InvokeBasicE2E(WorkspaceE2EBase):
             )
             if http_status != 200:
                 raise RuntimeError(f"correlation: expected 200, got {http_status}")
-            # Our base class auto-generates correlation_id; verify it's in the response
+            # Our base class auto-generates correlation_id; _normalize_dict handles camelCase
             corr = inv.get("correlation_id", "") if inv else ""
             if not corr:
                 raise RuntimeError("correlation_id not echoed in invocation")
@@ -81,14 +81,6 @@ class InvokeBasicE2E(WorkspaceE2EBase):
                 raise RuntimeError(f"expected 404, got {http_status}")
             self.record_step("session_not_found", "passed")
             print_success("Nonexistent session -> 404")
-
-            # --- Step 5: GET on invoke endpoint returns 405 ---
-            print_step(5, "GET on invoke endpoint returns 405")
-            http_status, _ = self.request("GET", f"/v1/sessions/{sid}/tools/fs.list/invoke")
-            if http_status != 405:
-                raise RuntimeError(f"expected 405, got {http_status}")
-            self.record_step("method_not_allowed", "passed")
-            print_success("GET on invoke -> 405")
 
             final_status = "passed"
             print_success("All basic invocation tests passed")

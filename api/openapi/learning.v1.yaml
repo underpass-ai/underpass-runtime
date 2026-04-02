@@ -1,0 +1,644 @@
+openapi: 3.1.0
+info:
+  title: Underpass Runtime - Learning Evidence API
+  version: 0.1.0
+  description: |
+    Read-only evidence API for recommendation traceability, tool learning,
+    policy lineage, and auditability.
+    This surface complements the runtime control plane and assumes an
+    event-driven architecture.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  contact:
+    name: Underpass AI
+    url: https://github.com/underpass-ai/underpass-runtime
+
+servers:
+  - url: http://localhost:50053
+    description: Local development
+  - url: https://underpass-runtime.underpass-runtime.svc.cluster.local:50053
+    description: Kubernetes in-cluster
+
+tags:
+  - name: learning
+    description: Learning evidence and auditability
+  - name: events
+    description: Event facts and lineage
+  - name: recommendations
+    description: Recommendation evidence
+  - name: policies
+    description: Policy evidence and runs
+
+paths:
+  /v1/learning/status:
+    get:
+      operationId: getLearningStatus
+      tags: [learning]
+      summary: Get learning evidence status
+      responses:
+        "200":
+          description: Learning evidence status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningStatus"
+
+  /v1/learning/events:
+    get:
+      operationId: listLearningEvents
+      tags: [events]
+      summary: List learning event facts
+      parameters:
+        - $ref: "#/components/parameters/SubjectPrefix"
+        - $ref: "#/components/parameters/EventType"
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/CausationId"
+        - $ref: "#/components/parameters/FromTs"
+        - $ref: "#/components/parameters/ToTs"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Event facts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventFactList"
+
+  /v1/learning/events/{event_id}:
+    get:
+      operationId: getLearningEvent
+      tags: [events]
+      summary: Get a single learning event fact
+      parameters:
+        - $ref: "#/components/parameters/EventId"
+      responses:
+        "200":
+          description: Event fact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventFact"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/learning/recommendations/{recommendation_id}:
+    get:
+      operationId: getRecommendationDecision
+      tags: [recommendations]
+      summary: Get recommendation evidence
+      parameters:
+        - $ref: "#/components/parameters/RecommendationId"
+      responses:
+        "200":
+          description: Recommendation evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationDecision"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/learning/recommendations/{recommendation_id}/events:
+    get:
+      operationId: listRecommendationEvents
+      tags: [recommendations, events]
+      summary: List events related to a recommendation
+      parameters:
+        - $ref: "#/components/parameters/RecommendationId"
+      responses:
+        "200":
+          description: Recommendation event lineage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventFactList"
+
+  /v1/learning/discovery/{discovery_id}:
+    get:
+      operationId: getDiscoverySnapshot
+      tags: [learning]
+      summary: Get discovery evidence snapshot
+      parameters:
+        - $ref: "#/components/parameters/DiscoveryId"
+      responses:
+        "200":
+          description: Discovery snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscoverySnapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/learning/policies/{context_signature}/{tool_id}:
+    get:
+      operationId: getPolicy
+      tags: [policies]
+      summary: Get policy evidence for a context and tool
+      parameters:
+        - $ref: "#/components/parameters/ContextSignature"
+        - $ref: "#/components/parameters/ToolId"
+      responses:
+        "200":
+          description: Policy evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolPolicy"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/learning/runs/{run_id}:
+    get:
+      operationId: getPolicyRun
+      tags: [policies]
+      summary: Get a tool-learning policy run
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Policy run evidence
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/learning/runs/{run_id}/events:
+    get:
+      operationId: listPolicyRunEvents
+      tags: [policies, events]
+      summary: List event lineage for a policy run
+      parameters:
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: Policy run event lineage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventFactList"
+
+  /v1/learning/evidence/recommendations/{recommendation_id}:
+    get:
+      operationId: getRecommendationEvidenceBundle
+      tags: [recommendations]
+      summary: Get compact evidence bundle for a recommendation
+      parameters:
+        - $ref: "#/components/parameters/RecommendationId"
+      responses:
+        "200":
+          description: Evidence bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvidenceBundle"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    EventId:
+      name: event_id
+      in: path
+      required: true
+      schema:
+        type: string
+    RecommendationId:
+      name: recommendation_id
+      in: path
+      required: true
+      schema:
+        type: string
+    DiscoveryId:
+      name: discovery_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ContextSignature:
+      name: context_signature
+      in: path
+      required: true
+      schema:
+        type: string
+    ToolId:
+      name: tool_id
+      in: path
+      required: true
+      schema:
+        type: string
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        type: string
+    SubjectPrefix:
+      name: subject_prefix
+      in: query
+      schema:
+        type: string
+    EventType:
+      name: type
+      in: query
+      schema:
+        type: string
+    SessionId:
+      name: session_id
+      in: query
+      schema:
+        type: string
+    CorrelationId:
+      name: correlation_id
+      in: query
+      schema:
+        type: string
+    CausationId:
+      name: causation_id
+      in: query
+      schema:
+        type: string
+    FromTs:
+      name: from_ts
+      in: query
+      schema:
+        type: string
+        format: date-time
+    ToTs:
+      name: to_ts
+      in: query
+      schema:
+        type: string
+        format: date-time
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+    PageToken:
+      name: page_token
+      in: query
+      schema:
+        type: string
+
+  schemas:
+    LearningStatus:
+      type: object
+      required: [status, as_of]
+      properties:
+        status:
+          type: string
+        as_of:
+          type: string
+          format: date-time
+        active_algorithms:
+          type: array
+          items:
+            type: string
+        runtime_recommendation_events:
+          type: boolean
+        tool_learning_events:
+          type: boolean
+        evidence_projection_enabled:
+          type: boolean
+
+    TraceContext:
+      type: object
+      properties:
+        trace_id:
+          type: string
+        span_id:
+          type: string
+
+    EventFact:
+      type: object
+      required: [event_id, subject, type, version, timestamp]
+      properties:
+        event_id:
+          type: string
+        subject:
+          type: string
+        type:
+          type: string
+        version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        tenant_id:
+          type: string
+        actor_id:
+          type: string
+        session_id:
+          type: string
+        correlation_id:
+          type: string
+        causation_id:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+
+    EventFactList:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventFact"
+        next_page_token:
+          type: string
+
+    ScoreComponent:
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+        rationale:
+          type: string
+
+    RecommendationItem:
+      type: object
+      required: [tool_id, rank, final_score]
+      properties:
+        tool_id:
+          type: string
+        rank:
+          type: integer
+        final_score:
+          type: number
+        score_breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreComponent"
+        why:
+          type: string
+        estimated_cost:
+          type: string
+        policy_notes:
+          type: array
+          items:
+            type: string
+        policy_ref:
+          type: string
+        telemetry_ref:
+          type: string
+
+    RecommendationDecision:
+      type: object
+      required: [recommendation_id, algorithm_id, algorithm_version, recommendations]
+      properties:
+        recommendation_id:
+          type: string
+        session_id:
+          type: string
+        tenant_id:
+          type: string
+        actor_id:
+          type: string
+        task_hint:
+          type: string
+        top_k:
+          type: integer
+        context_signature:
+          type: string
+        decision_source:
+          type: string
+        algorithm_id:
+          type: string
+        algorithm_version:
+          type: string
+        feature_schema_version:
+          type: string
+        policy_mode:
+          type: string
+        event_mode:
+          type: string
+        policy_snapshot_ref:
+          type: string
+        policy_run_id:
+          type: string
+        candidate_count:
+          type: integer
+        recommendations:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecommendationItem"
+        created_at:
+          type: string
+          format: date-time
+        event:
+          $ref: "#/components/schemas/EventFact"
+        trace:
+          $ref: "#/components/schemas/TraceContext"
+
+    DiscoveredTool:
+      type: object
+      properties:
+        tool_id:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        risk:
+          type: string
+        cost:
+          type: string
+
+    DiscoverySnapshot:
+      type: object
+      properties:
+        discovery_id:
+          type: string
+        session_id:
+          type: string
+        detail:
+          type: string
+        filters:
+          type: object
+          additionalProperties: true
+        total_tools:
+          type: integer
+        filtered_tools:
+          type: integer
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiscoveredTool"
+        created_at:
+          type: string
+          format: date-time
+        event:
+          $ref: "#/components/schemas/EventFact"
+
+    ToolPolicy:
+      type: object
+      properties:
+        policy_id:
+          type: string
+        context_signature:
+          type: string
+        tool_id:
+          type: string
+        algorithm_id:
+          type: string
+        algorithm_version:
+          type: string
+        alpha:
+          type: number
+        beta:
+          type: number
+        confidence:
+          type: number
+        p95_latency_ms:
+          type: integer
+        p95_cost:
+          type: string
+        error_rate:
+          type: number
+        n_samples:
+          type: integer
+        freshness_ts:
+          type: string
+          format: date-time
+        run_id:
+          type: string
+        snapshot_ref:
+          type: string
+        event:
+          $ref: "#/components/schemas/EventFact"
+
+    PolicyRun:
+      type: object
+      properties:
+        run_id:
+          type: string
+        schedule:
+          type: string
+        status:
+          type: string
+        algorithm_id:
+          type: string
+        algorithm_version:
+          type: string
+        feature_schema_version:
+          type: string
+        window:
+          type: string
+        constraints:
+          type: array
+          items:
+            type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        aggregates_read:
+          type: integer
+        policies_written:
+          type: integer
+        policies_filtered:
+          type: integer
+        duration_ms:
+          type: integer
+        lake_ref:
+          type: string
+        snapshot_ref:
+          type: string
+        event_ref:
+          type: string
+        input_event_refs:
+          type: array
+          items:
+            type: string
+        output_event_refs:
+          type: array
+          items:
+            type: string
+
+    TelemetryAggregate:
+      type: object
+      properties:
+        aggregate_id:
+          type: string
+        tool_id:
+          type: string
+        context_signature:
+          type: string
+        window:
+          type: string
+        total:
+          type: integer
+        successes:
+          type: integer
+        failures:
+          type: integer
+        deny_count:
+          type: integer
+        success_rate:
+          type: number
+        deny_rate:
+          type: number
+        p50_duration_ms:
+          type: integer
+        p95_duration_ms:
+          type: integer
+        p95_cost:
+          type: string
+        source_ref:
+          type: string
+        computed_at:
+          type: string
+          format: date-time
+
+    EvidenceBundle:
+      type: object
+      properties:
+        recommendation:
+          $ref: "#/components/schemas/RecommendationDecision"
+        policy:
+          $ref: "#/components/schemas/ToolPolicy"
+        run:
+          $ref: "#/components/schemas/PolicyRun"
+        aggregate:
+          $ref: "#/components/schemas/TelemetryAggregate"
+        lineage:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventFact"
+        snapshot_metadata:
+          type: object
+          additionalProperties:
+            type: string
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                $ref: "#/components/schemas/Error"

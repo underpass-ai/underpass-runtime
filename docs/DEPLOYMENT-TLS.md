@@ -7,16 +7,17 @@ storage, and OTLP telemetry export.
 ## Table of Contents
 
 1. [Overview](#1-overview)
-2. [Generate Self-Signed Certificates](#2-generate-self-signed-certificates)
-3. [Create Kubernetes Secrets](#3-create-kubernetes-secrets)
-4. [Deploy with Server TLS (tls.mode=server)](#4-deploy-with-server-tls)
-5. [Deploy with Mutual TLS (tls.mode=mutual)](#5-deploy-with-mutual-tls)
-6. [Valkey TLS Setup](#6-valkey-tls-setup)
-7. [NATS TLS Setup](#7-nats-tls-setup)
-8. [S3/MinIO TLS](#8-s3minio-tls)
-9. [OTLP TLS](#9-otlp-tls)
-10. [Verification](#10-verification)
-11. [Troubleshooting](#11-troubleshooting)
+2. [Automated Certificate Generation (Recommended)](#2-automated-certificate-generation-recommended)
+3. [Manual Certificate Generation](#3-manual-certificate-generation)
+4. [Create Kubernetes Secrets](#4-create-kubernetes-secrets)
+5. [Deploy with Server TLS (tls.mode=server)](#5-deploy-with-server-tls)
+6. [Deploy with Mutual TLS (tls.mode=mutual)](#6-deploy-with-mutual-tls)
+7. [Valkey TLS Setup](#7-valkey-tls-setup)
+8. [NATS TLS Setup](#8-nats-tls-setup)
+9. [S3/MinIO TLS](#9-s3minio-tls)
+10. [OTLP TLS](#10-otlp-tls)
+11. [Verification](#11-verification)
+12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
@@ -45,14 +46,80 @@ clients that do not support TLS 1.3 will be rejected.
 | Transport   | Variables                                                                                      |
 |-------------|-----------------------------------------------------------------------------------------------|
 | HTTP server | `WORKSPACE_TLS_MODE`, `WORKSPACE_TLS_CERT_PATH`, `WORKSPACE_TLS_KEY_PATH`, `WORKSPACE_TLS_CLIENT_CA_PATH` |
-| Valkey      | `VALKEY_TLS_ENABLED`, `VALKEY_TLS_CA_PATH`, `VALKEY_TLS_CERT_PATH`, `VALKEY_TLS_KEY_PATH`    |
-| NATS        | `NATS_TLS_MODE`, `NATS_TLS_CA_PATH`, `NATS_TLS_CERT_PATH`, `NATS_TLS_KEY_PATH`, `NATS_TLS_FIRST` |
+| Valkey      | `VALKEY_TLS_ENABLED`, `VALKEY_TLS_CA_PATH`, `VALKEY_TLS_SERVER_NAME`, `VALKEY_TLS_CERT_PATH`, `VALKEY_TLS_KEY_PATH` |
+| NATS        | `NATS_TLS_MODE`, `NATS_TLS_CA_PATH`, `NATS_TLS_SERVER_NAME`, `NATS_TLS_CERT_PATH`, `NATS_TLS_KEY_PATH`, `NATS_TLS_FIRST` |
 | S3/MinIO    | `ARTIFACT_S3_USE_SSL`, `ARTIFACT_S3_CA_PATH`                                                  |
 | OTLP        | `WORKSPACE_OTEL_TLS_CA_PATH`                                                                  |
 
 ---
 
-## 2. Generate Self-Signed Certificates
+## 2. Automated Certificate Generation (Recommended)
+
+The runtime Helm chart includes a pre-install/pre-upgrade hook Job that
+automatically generates all required TLS certificates from a shared CA.
+
+### Prerequisites
+
+The shared CA secret must exist in the namespace before deploying the runtime.
+It is created by the `rehydration-kernel` chart (with `certGen.enabled: true`)
+or manually:
+
+```bash
+# Manual CA creation (if not using the kernel's cert-gen)
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:prime256v1 -out ca.key
+openssl req -new -x509 -key ca.key -out ca.crt -days 3650 \
+  -subj "/CN=rehydration-kernel-internal-ca"
+kubectl create secret generic rehydration-kernel-internal-ca \
+  --from-file=tls.crt=ca.crt --from-file=tls.key=ca.key --from-file=ca.crt \
+  -n underpass-runtime
+```
+
+### Enable cert-gen
+
+```yaml
+# In your values override:
+certGen:
+  enabled: true
+  caSecret: rehydration-kernel-internal-ca  # default
+```
+
+The Job creates three secrets (idempotent — skips if they already exist):
+
+| Secret | Purpose | Key Usage |
+|--------|---------|-----------|
+| `{fullname}-tls` | Runtime gRPC server cert | serverAuth, clientAuth |
+| `{fullname}-nats-client-tls` | NATS client cert | clientAuth |
+| `{fullname}-valkey-client-tls` | Valkey client cert | clientAuth |
+
+Each secret contains `tls.crt`, `tls.key`, and `ca.crt`. Certificates use
+ECDSA P-256 keys with 365-day validity by default.
+
+### Rotation
+
+To rotate a certificate, delete the target secret and run `helm upgrade`. The
+Job detects the missing secret and regenerates only that one, signed by the
+same CA:
+
+```bash
+kubectl delete secret underpass-runtime-nats-client-tls -n underpass-runtime
+helm upgrade underpass-runtime charts/underpass-runtime ...
+```
+
+### Configuration Reference
+
+| Value | Default | Description |
+|-------|---------|-------------|
+| `certGen.enabled` | `false` | Enable the cert-gen hook Job |
+| `certGen.image` | `docker.io/alpine:3.19` | Container image (needs openssl, curl, jq) |
+| `certGen.caSecret` | `rehydration-kernel-internal-ca` | Name of the CA secret to read |
+| `certGen.keyCurve` | `prime256v1` | ECDSA curve for generated keys |
+| `certGen.validityDays` | `365` | Certificate validity in days |
+
+---
+
+## 3. Manual Certificate Generation
+
+> **Note:** If you enabled `certGen` in section 2, skip to section 5.
 
 The commands below create a self-signed CA and a server certificate with a
 Subject Alternative Name (SAN). Adjust the SAN values to match your cluster's
@@ -243,6 +310,18 @@ What changes compared to `server` mode:
   present a client certificate for HTTP probes.
 - The helm test uses `nc` (netcat) TCP connectivity check instead of `curl`.
 
+### Client-side server name verification
+
+For NATS and Valkey, the runtime can override the TLS server name used for SNI
+and certificate hostname verification:
+
+- `NATS_TLS_SERVER_NAME`
+- `VALKEY_TLS_SERVER_NAME`
+
+This is useful when the runtime connects through one Kubernetes service name or
+alias, but must verify a certificate issued for a different SAN, for example a
+dependency managed by another Helm release.
+
 ### Helm Validation Guards
 
 The chart includes fail-fast validation in `_helpers.tpl`. If you set
@@ -259,12 +338,35 @@ will fail immediately with a descriptive error. For example:
 
 Valkey TLS uses a boolean enable flag rather than a mode string.
 
+Example:
+
+```yaml
+valkeyTls:
+  enabled: true
+  existingSecret: underpass-runtime-valkey-tls
+  serverName: rehydration-kernel-valkey
+  mountPath: /var/run/underpass-runtime/valkey-tls
+  keys:
+    ca: ca.crt
+    cert: tls.crt
+    key: tls.key
+```
+
+This renders:
+
+- `VALKEY_TLS_ENABLED=true`
+- `VALKEY_TLS_CA_PATH=/var/run/underpass-runtime/valkey-tls/ca.crt`
+- `VALKEY_TLS_SERVER_NAME=rehydration-kernel-valkey`
+- `VALKEY_TLS_CERT_PATH=/var/run/underpass-runtime/valkey-tls/tls.crt`
+- `VALKEY_TLS_KEY_PATH=/var/run/underpass-runtime/valkey-tls/tls.key`
+
 ### Environment Variables
 
 | Variable              | Description                                    |
 |-----------------------|------------------------------------------------|
 | `VALKEY_TLS_ENABLED`  | Set to `true` to enable TLS for Valkey.        |
 | `VALKEY_TLS_CA_PATH`  | Path to CA certificate for server verification.|
+| `VALKEY_TLS_SERVER_NAME` | Optional SNI / hostname verification override for the Valkey certificate. |
 | `VALKEY_TLS_CERT_PATH`| Path to client certificate (mTLS only).        |
 | `VALKEY_TLS_KEY_PATH` | Path to client private key (mTLS only).        |
 
@@ -316,6 +418,7 @@ Validation guards enforce:
 |---------------------|----------------------------------------------------------|
 | `NATS_TLS_MODE`     | `disabled`, `server`, or `mutual`.                       |
 | `NATS_TLS_CA_PATH`  | Path to CA certificate for NATS server verification.     |
+| `NATS_TLS_SERVER_NAME` | Optional SNI / hostname verification override for the NATS certificate. |
 | `NATS_TLS_CERT_PATH`| Path to client certificate (mutual only).                |
 | `NATS_TLS_KEY_PATH` | Path to client private key (mutual only).                |
 | `NATS_TLS_FIRST`    | **Not supported.** See limitation below.                 |
@@ -331,6 +434,7 @@ eventBus:
 natsTls:
   mode: server
   existingSecret: underpass-runtime-nats-tls
+  serverName: rehydration-kernel-nats
   mountPath: /var/run/underpass-runtime/nats-tls
   keys:
     ca: ca.crt
@@ -344,6 +448,7 @@ natsTls:
 natsTls:
   mode: mutual
   existingSecret: underpass-runtime-nats-tls
+  serverName: rehydration-kernel-nats
   mountPath: /var/run/underpass-runtime/nats-tls
   keys:
     ca: ca.crt

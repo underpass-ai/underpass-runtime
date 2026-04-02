@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
@@ -35,9 +36,16 @@ type Recommendation struct {
 
 // RecommendationsResponse is returned by the recommendations endpoint.
 type RecommendationsResponse struct {
-	Recommendations []Recommendation `json:"recommendations"`
-	TaskHint        string           `json:"task_hint"`
-	TopK            int              `json:"top_k"`
+	Recommendations  []Recommendation `json:"recommendations"`
+	TaskHint         string           `json:"task_hint"`
+	TopK             int              `json:"top_k"`
+	RecommendationID string           `json:"recommendation_id"`
+	EventID          string           `json:"event_id"`
+	EventSubject     string           `json:"event_subject"`
+	DecisionSource   string           `json:"decision_source"`
+	AlgorithmID      string           `json:"algorithm_id"`
+	AlgorithmVersion string           `json:"algorithm_version"`
+	PolicyMode       string           `json:"policy_mode"`
 }
 
 const (
@@ -52,6 +60,10 @@ const (
 // RecommendTools returns ranked tool recommendations based on static heuristics
 // enhanced with telemetry-based scoring when available (WS-TEL-003).
 // Policy-denied and runtime-unsupported tools are already excluded by ListTools.
+//
+// P0 evidence: each call generates a RecommendationDecision, emits an event
+// on runtime.learning.recommendation.emitted, and returns bridge fields so the
+// caller can resolve the evidence through the learning evidence API.
 func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint string, topK int) (RecommendationsResponse, *ServiceError) {
 	tools, serviceErr := s.ListTools(ctx, sessionID)
 	if serviceErr != nil {
@@ -65,9 +77,28 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		topK = maxTopK
 	}
 
+	// Load session for context signature and event metadata.
+	session, found, _ := s.workspace.GetSession(ctx, sessionID)
+	if !found {
+		return RecommendationsResponse{}, &ServiceError{Code: "not_found", Message: sessionNotFound}
+	}
+
 	// Load telemetry stats for context-aware scoring
 	allStats, _ := s.telemetryQ.AllToolStats(ctx)
 
+	// Load learned policies for the current context (if available).
+	var learnedPolicies map[string]ToolPolicy
+	var contextSig string
+	if s.policyLearned != nil {
+		digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
+		contextSig = DeriveContextSignature(session, "", digest)
+		learnedPolicies, _ = s.policyLearned.ReadPoliciesForContext(ctx, contextSig)
+	}
+
+	// Determine decision source based on what data is available.
+	decisionSource := classifyDecisionSource(allStats, learnedPolicies)
+
+	candidateCount := len(tools)
 	hintTokens := tokenize(taskHint)
 	recs := make([]Recommendation, 0, len(tools))
 	for i := range tools {
@@ -75,6 +106,10 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		// Apply telemetry-based adjustments if stats exist
 		if allStats != nil {
 			rec = applyTelemetryBoost(rec, allStats[tools[i].Name])
+		}
+		// Apply learned policy scoring if available
+		if p, ok := learnedPolicies[tools[i].Name]; ok {
+			rec = applyLearnedPolicy(rec, p)
 		}
 		recs = append(recs, rec)
 	}
@@ -90,11 +125,98 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		recs = recs[:topK]
 	}
 
+	// --- P0 evidence: build decision, persist, emit event ---
+
+	recID := newID("rec")
+	eventID := newID("evt")
+	eventSubject := string(domain.EventRecommendationEmitted)
+	algorithmID := AlgorithmIDHeuristic
+	algorithmVersion := AlgorithmVersionV1
+	policyMode := PolicyModeNone
+	if len(learnedPolicies) > 0 {
+		policyMode = PolicyModeShadow
+	}
+
+	// Build ranked evidence.
+	rankedEvidence := make([]domain.RankedToolEvidence, len(recs))
+	rankedFacts := make([]domain.RankedToolFact, len(recs))
+	for i, r := range recs {
+		rankedEvidence[i] = domain.RankedToolEvidence{
+			ToolID:        r.Name,
+			Rank:          i + 1,
+			FinalScore:    r.Score,
+			Why:           r.Why,
+			EstimatedCost: r.EstimatedCost,
+		}
+		rankedFacts[i] = domain.RankedToolFact{
+			ToolID:     r.Name,
+			Rank:       i + 1,
+			FinalScore: r.Score,
+		}
+	}
+
+	decision := domain.RecommendationDecision{
+		RecommendationID: recID,
+		SessionID:        sessionID,
+		TenantID:         session.Principal.TenantID,
+		ActorID:          session.Principal.ActorID,
+		TaskHint:         taskHint,
+		TopK:             topK,
+		ContextSignature: contextSig,
+		DecisionSource:   decisionSource,
+		AlgorithmID:      algorithmID,
+		AlgorithmVersion: algorithmVersion,
+		PolicyMode:       policyMode,
+		CandidateCount:   candidateCount,
+		EventID:          eventID,
+		EventSubject:     eventSubject,
+		CreatedAt:        time.Now().UTC(),
+		Recommendations:  rankedEvidence,
+	}
+
+	// Persist decision (non-blocking on error).
+	_ = s.decisionStore.Save(ctx, decision)
+
+	// Emit recommendation event.
+	payload := domain.RecommendationEmittedPayload{
+		RecommendationID: recID,
+		TaskHint:         taskHint,
+		TopK:             topK,
+		DecisionSource:   decisionSource,
+		AlgorithmID:      algorithmID,
+		AlgorithmVersion: algorithmVersion,
+		PolicyMode:       policyMode,
+		Tools:            rankedFacts,
+	}
+	evt, err := domain.NewDomainEvent(eventID, domain.EventRecommendationEmitted,
+		sessionID, session.Principal.TenantID, session.Principal.ActorID, payload)
+	if err == nil {
+		_ = s.events.Publish(ctx, evt)
+	}
+
 	return RecommendationsResponse{
-		Recommendations: recs,
-		TaskHint:        taskHint,
-		TopK:            topK,
+		Recommendations:  recs,
+		TaskHint:         taskHint,
+		TopK:             topK,
+		RecommendationID: recID,
+		EventID:          eventID,
+		EventSubject:     eventSubject,
+		DecisionSource:   decisionSource,
+		AlgorithmID:      algorithmID,
+		AlgorithmVersion: algorithmVersion,
+		PolicyMode:       policyMode,
 	}, nil
+}
+
+// classifyDecisionSource determines the active scoring tier label.
+func classifyDecisionSource(stats map[string]ToolStats, policies map[string]ToolPolicy) string {
+	if len(policies) > 0 {
+		return DecisionSourceHeuristicWithPolicy
+	}
+	if len(stats) > 0 {
+		return DecisionSourceHeuristicWithTelemetry
+	}
+	return DecisionSourceHeuristicOnly
 }
 
 // applyTelemetryBoost adjusts a recommendation score using historical telemetry.
@@ -222,3 +344,56 @@ func tokenize(hint string) []string {
 	}
 	return tokens
 }
+
+const (
+	// Evidence metadata constants
+	AlgorithmIDHeuristic                 = "heuristic_v1"
+	AlgorithmVersionV1                   = "1.0.0"
+	PolicyModeNone                       = "none"
+	PolicyModeShadow                     = "shadow"
+	DecisionSourceHeuristicOnly          = "heuristic_only"
+	DecisionSourceHeuristicWithTelemetry = "heuristic_with_telemetry"
+	DecisionSourceHeuristicWithPolicy    = "heuristic_with_learned_policy"
+)
+
+const (
+	// Learned policy scoring weights
+	learnedConfidenceBoost    = 0.25  // max boost from Thompson confidence
+	learnedErrorRatePenalty   = 0.20  // penalty for high error rate policies
+	learnedErrorRateThreshold = 0.30  // error rate above this triggers penalty
+	learnedLatencyPenalty     = 0.10  // penalty for slow policies
+	learnedLatencyThreshold   = 15000 // p95 ms above this triggers penalty
+	learnedMinSamples         = 10    // minimum samples before trusting policy
+)
+
+// applyLearnedPolicy adjusts a recommendation score using a learned policy
+// from the tool-learning pipeline. Policies carry Thompson Sampling posterior
+// parameters (Alpha, Beta) and aggregated performance metrics.
+func applyLearnedPolicy(rec Recommendation, policy ToolPolicy) Recommendation {
+	if policy.NSamples < learnedMinSamples {
+		return rec
+	}
+
+	// Thompson confidence boost: higher confidence → higher score
+	boost := learnedConfidenceBoost * policy.Confidence
+	rec.Score += boost
+
+	// Error rate penalty
+	if policy.ErrorRate > learnedErrorRateThreshold {
+		rec.Score -= learnedErrorRatePenalty
+		rec.Why += fmt.Sprintf(", learned: high error rate %.0f%%", policy.ErrorRate*100)
+	}
+
+	// Latency penalty
+	if policy.P95LatencyMs > learnedLatencyThreshold {
+		rec.Score -= learnedLatencyPenalty
+		rec.Why += fmt.Sprintf(", learned: slow p95 %dms", policy.P95LatencyMs)
+	}
+
+	rec.Why += fmt.Sprintf(", learned policy (confidence=%.2f, n=%d)", policy.Confidence, policy.NSamples)
+	rec.Score = math.Round(rec.Score*100) / 100
+	return rec
+}
+
+// deriveCost maps a capability's cost hint to a string label.
+// Moved to the end to maintain method ordering.

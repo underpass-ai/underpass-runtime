@@ -78,7 +78,7 @@ spec:
                 - name: S3_REGION
                   value: {{ $.Values.toolLearning.s3.region | quote }}
                 - name: S3_USE_SSL
-                  value: {{ $.Values.toolLearning.s3.useSSL | quote }}
+                  value: {{ or $.Values.toolLearning.s3.useSSL (default false $.Values.s3Tls.enabled) | quote }}
                 - name: LAKE_BUCKET
                   value: {{ $.Values.toolLearning.s3.lakeBucket | quote }}
                 - name: AUDIT_BUCKET
@@ -94,6 +94,19 @@ spec:
                     secretKeyRef:
                       name: {{ $.Values.toolLearning.s3.existingSecret }}
                       key: {{ $.Values.toolLearning.s3.secretKeyKey }}
+                {{- end }}
+                {{- /* S3 TLS */}}
+                {{- if default false $.Values.s3Tls.enabled }}
+                {{- if and $.Values.s3Tls.existingSecret $.Values.s3Tls.keys.ca }}
+                - name: S3_CA_PATH
+                  value: {{ printf "%s/%s" $.Values.s3Tls.mountPath $.Values.s3Tls.keys.ca | quote }}
+                {{- end }}
+                {{- if and $.Values.s3Tls.keys.cert $.Values.s3Tls.keys.key }}
+                - name: S3_CERT_PATH
+                  value: {{ printf "%s/%s" $.Values.s3Tls.mountPath $.Values.s3Tls.keys.cert | quote }}
+                - name: S3_KEY_PATH
+                  value: {{ printf "%s/%s" $.Values.s3Tls.mountPath $.Values.s3Tls.keys.key | quote }}
+                {{- end }}
                 {{- end }}
                 {{- /* Valkey */}}
                 - name: VALKEY_ADDR
@@ -129,8 +142,18 @@ spec:
                   value: {{ printf "%s/%s" $.Values.valkeyTls.mountPath $.Values.valkeyTls.keys.key | quote }}
                 {{- end }}
                 {{- end }}
-                {{- /* DuckDB/libcurl custom CA: set SSL_CERT_FILE for S3 TLS with custom CA */}}
-                {{- if and $.Values.valkeyTls.enabled $.Values.valkeyTls.existingSecret $.Values.valkeyTls.keys.ca }}
+                {{- /* DuckDB/libcurl custom CA + client cert for S3 mTLS */}}
+                {{- if and (default false $.Values.s3Tls.enabled) $.Values.s3Tls.existingSecret $.Values.s3Tls.keys.ca }}
+                - name: SSL_CERT_FILE
+                  value: {{ printf "%s/%s" $.Values.s3Tls.mountPath $.Values.s3Tls.keys.ca | quote }}
+                {{- if and $.Values.s3Tls.keys.cert $.Values.s3Tls.keys.key }}
+                - name: CURL_SSLCERT
+                  value: {{ printf "%s/%s" $.Values.s3Tls.mountPath $.Values.s3Tls.keys.cert | quote }}
+                - name: CURL_SSLKEY
+                  value: {{ printf "%s/%s" $.Values.s3Tls.mountPath $.Values.s3Tls.keys.key | quote }}
+                {{- end }}
+                {{- else if and $.Values.valkeyTls.enabled $.Values.valkeyTls.existingSecret $.Values.valkeyTls.keys.ca }}
+                {{- /* Fallback: reuse Valkey CA for DuckDB/libcurl when s3Tls is not configured */}}
                 - name: SSL_CERT_FILE
                   value: {{ printf "%s/%s" $.Values.valkeyTls.mountPath $.Values.valkeyTls.keys.ca | quote }}
                 {{- end }}
@@ -149,6 +172,11 @@ spec:
                   mountPath: {{ $.Values.natsTls.mountPath }}
                   readOnly: true
                 {{- end }}
+                {{- if and (default false $.Values.s3Tls.enabled) $.Values.s3Tls.existingSecret }}
+                - name: s3-tls
+                  mountPath: {{ $.Values.s3Tls.mountPath }}
+                  readOnly: true
+                {{- end }}
           volumes:
             - name: tmp
               emptyDir:
@@ -162,6 +190,11 @@ spec:
             - name: nats-tls
               secret:
                 secretName: {{ $.Values.natsTls.existingSecret }}
+            {{- end }}
+            {{- if and (default false $.Values.s3Tls.enabled) $.Values.s3Tls.existingSecret }}
+            - name: s3-tls
+              secret:
+                secretName: {{ $.Values.s3Tls.existingSecret }}
             {{- end }}
           {{- with $.Values.toolLearning.nodeSelector }}
           nodeSelector:
