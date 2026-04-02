@@ -23,10 +23,20 @@ type PolicyStore interface {
 	ReadPolicy(ctx context.Context, contextSig, toolID string) (domain.ToolPolicy, bool, error)
 }
 
-// PolicyEventPublisher publishes policy update events.
+// PolicyEventPublisher publishes lifecycle and policy events.
 type PolicyEventPublisher interface {
 	// PublishPolicyUpdated notifies downstream consumers that policies have been recomputed.
 	PublishPolicyUpdated(ctx context.Context, policies []domain.ToolPolicy, filtered int) error
+	// PublishRunStarted emits tool_learning.run.started at pipeline start.
+	PublishRunStarted(ctx context.Context, run domain.PolicyRun) error
+	// PublishRunCompleted emits tool_learning.run.completed after successful pipeline.
+	PublishRunCompleted(ctx context.Context, run domain.PolicyRun) error
+	// PublishRunFailed emits tool_learning.run.failed on pipeline error.
+	PublishRunFailed(ctx context.Context, run domain.PolicyRun) error
+	// PublishPolicyComputed emits tool_learning.policy.computed per policy batch.
+	PublishPolicyComputed(ctx context.Context, run domain.PolicyRun, policies []domain.ToolPolicy) error
+	// PublishSnapshotPublished emits tool_learning.snapshot.published after audit write.
+	PublishSnapshotPublished(ctx context.Context, run domain.PolicyRun, snapshotRef string) error
 }
 
 // SnapshotWriter writes policy snapshots for audit trail.
