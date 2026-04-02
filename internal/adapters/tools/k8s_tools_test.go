@@ -40,7 +40,7 @@ func TestK8sGetPodsHandler_ListPods(t *testing.T) {
 			},
 			Status: corev1.PodStatus{
 				Phase:    corev1.PodRunning,
-				PodIP:    "10.0.0.2",  //NOSONAR — fake pod IP
+				PodIP:    "10.0.0.2",    //NOSONAR — fake pod IP
 				HostIP:   "192.168.1.2", //NOSONAR — fake host IP
 				QOSClass: corev1.PodQOSBestEffort,
 				ContainerStatuses: []corev1.ContainerStatus{
@@ -64,7 +64,7 @@ func TestK8sGetPodsHandler_ListPods(t *testing.T) {
 			},
 			Status: corev1.PodStatus{
 				Phase:    corev1.PodRunning,
-				PodIP:    "10.0.0.1",  //NOSONAR — fake pod IP
+				PodIP:    "10.0.0.1",    //NOSONAR — fake pod IP
 				HostIP:   "192.168.1.1", //NOSONAR — fake host IP
 				QOSClass: corev1.PodQOSBurstable,
 				ContainerStatuses: []corev1.ContainerStatus{

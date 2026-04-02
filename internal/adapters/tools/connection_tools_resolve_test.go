@@ -208,8 +208,8 @@ func TestHostMatchesAllowRule(t *testing.T) {
 		{"sub.example.com", testHostWildcardExample, true},
 		{testHostExampleCom, testHostWildcardExample, true},
 		{"notexample.com", testHostWildcardExample, false},
-		{"10.0.0.5", testCIDR10Network, true},   //NOSONAR — test IP
-		{"10.0.1.5", testCIDR10Network, false},  //NOSONAR — test IP
+		{"10.0.0.5", testCIDR10Network, true},  //NOSONAR — test IP
+		{"10.0.1.5", testCIDR10Network, false}, //NOSONAR — test IP
 		{"not-an-ip", testCIDR10Network, false},
 	}
 	for _, tt := range tests {
