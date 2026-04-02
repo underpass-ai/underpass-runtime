@@ -95,6 +95,20 @@ Shared by all Valkey-backed subsystems (session store, invocation store, telemet
 
 ---
 
+## Learned Policy Reader
+
+Activated automatically when `INVOCATION_STORE_BACKEND=valkey`. Reads
+offline-computed policies from Valkey for online recommendation scoring.
+
+| Variable | Default | Description |
+|---|---|---|
+| `POLICY_KEY_PREFIX` | `tool_policy` | Valkey key prefix for learned policies. Keys follow `{prefix}:{context_sig}:{tool_id}`. |
+
+The neural model (NeuralTS) is loaded from Valkey key `neural_ts:model:v1`
+using the same connection. No additional configuration needed.
+
+---
+
 ## Event Bus
 
 | Variable | Default | Description |

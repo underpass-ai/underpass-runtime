@@ -10,6 +10,25 @@ It is intentionally transport-aware:
 
 This contract is read-only by design.
 
+## Implementation Status (2026-04-02)
+
+| RPC | Status |
+|-----|--------|
+| GetRecommendationDecision | **Implemented** |
+| GetEvidenceBundle | **Implemented** (recommendation only; policy/run/aggregate fields are roadmap) |
+| GetLearningStatus | Specified |
+| ListEventFacts | Specified |
+| GetEventFact | Specified |
+| ListRecommendationEvents | Specified |
+| GetDiscoverySnapshot | Specified |
+| ListDiscoveryEvents | Specified |
+| ListPolicies | Specified |
+| GetPolicy | Specified |
+| ListPolicyRuns | Specified |
+| GetPolicyRun | Specified |
+| ListPolicyRunEvents | Specified |
+| GetAggregate | Specified |
+
 ## Bounded Context
 
 `underpass-runtime` remains the owner of:

@@ -1,7 +1,7 @@
-# ADR-003: Thompson Sampling for Tool Recommendations
+# ADR-003: Adaptive Tool Recommendations
 
-**Status**: Accepted
-**Date**: 2026-01-10
+**Status**: Accepted, **Updated 2026-04-02** (P0-P4 implemented)
+**Date**: 2026-01-10 (original), 2026-04-02 (update)
 **Deciders**: Tirso (architect)
 
 ## Context
@@ -90,6 +90,52 @@ TTL:    2h (configurable)
 - DuckDB requires CGO_ENABLED=1 for the tool-learning binary, preventing
   static compilation. Mitigated by using `distroless/cc-debian12` (includes
   C runtime) instead of `distroless/static`.
+
+## Update: 2026-04-02 — P0 through P4 Implemented
+
+The original design has been fully implemented and extended:
+
+### What changed
+
+1. **Online policy consumption is active** (P2). The runtime reads learned
+   policies from Valkey on every `RecommendTools` call via `ValkeyPolicyReader`.
+   This was originally described as "offline only" — it is now a closed loop.
+
+2. **Thompson Sampling runs online** (P3). When policy data has n >= 50 samples,
+   the runtime draws from Beta(alpha, beta) posteriors for explore/exploit.
+   This replaces the original heuristic-only scorer.
+
+3. **Neural Thompson Sampling added** (P4). A 2-layer MLP (17-dim input, 32
+   hidden, 1 output) with last-layer weight perturbation. Activates when
+   n >= 100 and a trained model exists in Valkey. Captures non-linear feature
+   interactions that the linear Thompson scorer misses.
+
+4. **Algorithm selection is automatic** (P3). `SelectScorerWithModel()` picks:
+   NeuralTS > Thompson > Heuristic Policy > Pure Heuristic.
+
+5. **Every recommendation is auditable** (P0). Each call emits a NATS event,
+   persists a `RecommendationDecision`, and returns bridge fields (`algorithm_id`,
+   `decision_source`, `policy_mode`, `recommendation_id`, `event_id`).
+
+6. **Tool-learning emits lifecycle events** (P1). The pipeline now emits
+   `run.started`, `run.completed`, `run.failed`, `policy.computed`, and
+   `snapshot.published` — making offline learning auditable.
+
+7. **Contextual bandits implemented** (originally "rejected for now"). LinUCB
+   was replaced by HyLinUCB (hybrid linear UCB) in tool-learning, and NeuralTS
+   in the runtime. The "feature engineering per invocation context" concern was
+   resolved via `context_signature` (task_family:language:constraints_class).
+
+### What did NOT change
+
+- Beta-Binomial posteriors remain the core statistical model.
+- Hard constraints (policy engine) still override statistical recommendations.
+- DuckDB + Parquet lake architecture for offline aggregation is unchanged.
+- CronJob-based offline computation is unchanged.
+- Cold start behavior is unchanged (heuristic scorer covers it).
+
+See [Algorithm Architecture](ARCHITECTURE_ALGORITHMS.md) for the full
+current implementation.
 
 ## Alternatives Considered
 
