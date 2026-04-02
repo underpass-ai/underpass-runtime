@@ -122,6 +122,63 @@ func TestLearningServer_GetEvidenceBundle(t *testing.T) {
 	}
 }
 
+func TestLearningServer_DecisionSourceMapping(t *testing.T) {
+	tests := []struct {
+		source string
+		want   lpb.DecisionSource
+	}{
+		{app.DecisionSourceHeuristicOnly, lpb.DecisionSource_DECISION_SOURCE_HEURISTIC_ONLY},
+		{app.DecisionSourceHeuristicWithTelemetry, lpb.DecisionSource_DECISION_SOURCE_HEURISTIC_WITH_TELEMETRY},
+		{app.DecisionSourceHeuristicWithPolicy, lpb.DecisionSource_DECISION_SOURCE_HYBRID},
+	}
+	for _, tt := range tests {
+		t.Run(tt.source, func(t *testing.T) {
+			d := domain.RecommendationDecision{
+				RecommendationID: "rec-x",
+				DecisionSource:   tt.source,
+				PolicyMode:       app.PolicyModeNone,
+			}
+			srv := NewLearningEvidenceServer(&fakeLearningService{decision: d})
+			resp, err := srv.GetRecommendationDecision(context.Background(),
+				&lpb.GetRecommendationDecisionRequest{RecommendationId: "rec-x"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.GetDecision().GetDecisionSource() != tt.want {
+				t.Fatalf("expected %v, got %v", tt.want, resp.GetDecision().GetDecisionSource())
+			}
+		})
+	}
+}
+
+func TestLearningServer_PolicyModeMapping(t *testing.T) {
+	tests := []struct {
+		mode string
+		want lpb.PolicyMode
+	}{
+		{app.PolicyModeNone, lpb.PolicyMode_POLICY_MODE_NONE},
+		{app.PolicyModeShadow, lpb.PolicyMode_POLICY_MODE_SHADOW},
+	}
+	for _, tt := range tests {
+		t.Run(tt.mode, func(t *testing.T) {
+			d := domain.RecommendationDecision{
+				RecommendationID: "rec-x",
+				DecisionSource:   app.DecisionSourceHeuristicOnly,
+				PolicyMode:       tt.mode,
+			}
+			srv := NewLearningEvidenceServer(&fakeLearningService{decision: d})
+			resp, err := srv.GetRecommendationDecision(context.Background(),
+				&lpb.GetRecommendationDecisionRequest{RecommendationId: "rec-x"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.GetDecision().GetPolicyMode() != tt.want {
+				t.Fatalf("expected %v, got %v", tt.want, resp.GetDecision().GetPolicyMode())
+			}
+		})
+	}
+}
+
 func TestLearningServer_GetEvidenceBundle_NotFound(t *testing.T) {
 	srv := NewLearningEvidenceServer(&fakeLearningService{
 		svcErr: &app.ServiceError{Code: "not_found", Message: "not found"},
