@@ -2,11 +2,10 @@
 #
 # UnderPass Runtime — Execution plane for tool-driven agents
 #
-# Standalone build:
-#   docker build -t underpass-runtime .
-#
-# Monorepo build (from swe-ai-fleet root):
-#   docker build -f services/workspace/Dockerfile -t underpass-runtime services/workspace
+# The runtime server is a static binary that manages sessions, policies,
+# and invocations. Tool execution happens in separate runner pods (K8s
+# backend) or in-process (local backend). Runner images with git, bash,
+# etc. live in runner-images/.
 
 FROM docker.io/library/golang:1.26-alpine AS builder
 WORKDIR /src
@@ -17,7 +16,8 @@ COPY go.mod go.sum* ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/underpass-runtime ./cmd/workspace
+ARG BUILD_TAGS="k8s"
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "${BUILD_TAGS}" -o /out/underpass-runtime ./cmd/workspace
 
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
