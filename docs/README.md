@@ -8,6 +8,9 @@
 | [ADR-001: Hexagonal Architecture](adr/ADR-001-hexagonal-architecture-in-go.md) | Package layout, port/adapter design, dependency injection |
 | [ADR-002: YAML Tool Catalog](adr/ADR-002-yaml-tool-catalog.md) | Why tool metadata lives in embedded YAML |
 | [ADR-003: Thompson Sampling](adr/ADR-003-thompson-sampling-tool-recommendations.md) | Online heuristic + offline learning pipeline |
+| [Runtime Tool Learning Audit](RUNTIME_TOOL_LEARNING_AUDIT.md) | Code-based audit of the current recommendation and learning path |
+| [Runtime Tool Learning Traceability API](RUNTIME_TOOL_LEARNING_TRACEABILITY_API.md) | Event-first evidence plane and audit API proposal |
+| [Runtime Tool Learning Agent Handoff](RUNTIME_TOOL_LEARNING_AGENT_HANDOFF_2026-04-02.md) | Implementation brief and execution order for the runtime agent |
 
 ## Operations
 
@@ -39,6 +42,8 @@
 |---|---|
 | [OpenAPI 3.1 — Workspace API](../api/openapi/workspace.v1.yaml) | HTTP API contract (sessions, tools, invocations) |
 | [AsyncAPI 3.0 — Domain Events](../api/asyncapi/workspace-events.v1.yaml) | NATS event contract (6 event types) |
+| [OpenAPI 3.1 — Learning Evidence API](../api/openapi/learning.v1.yaml) | Read-only evidence and auditability API |
+| [AsyncAPI 3.0 — Learning Events](../api/asyncapi/learning-events.v1.yaml) | Recommendation and tool-learning event contract |
 
 ## Reference
 

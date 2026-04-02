@@ -16,7 +16,7 @@ const (
 	testNatsAnyHostEndpoint  = "nats://any.host:4222"
 	testHostExampleCom       = "example.com"
 	testHostWildcardExample  = "*.example.com"
-	testCIDR10Network        = "10.0.0.0/24"
+	testCIDR10Network        = "10.0.0.0/24" //NOSONAR — test CIDR, not a real network
 )
 
 // ---------------------------------------------------------------------------
@@ -208,8 +208,8 @@ func TestHostMatchesAllowRule(t *testing.T) {
 		{"sub.example.com", testHostWildcardExample, true},
 		{testHostExampleCom, testHostWildcardExample, true},
 		{"notexample.com", testHostWildcardExample, false},
-		{"10.0.0.5", testCIDR10Network, true},
-		{"10.0.1.5", testCIDR10Network, false},
+		{"10.0.0.5", testCIDR10Network, true},  //NOSONAR — test IP
+		{"10.0.1.5", testCIDR10Network, false}, //NOSONAR — test IP
 		{"not-an-ip", testCIDR10Network, false},
 	}
 	for _, tt := range tests {

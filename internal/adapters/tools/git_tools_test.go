@@ -359,7 +359,7 @@ func initBareGitRepo(t *testing.T) string {
 
 func runGit(t *testing.T, cwd string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", args...) //NOSONAR — test helper, git is a known binary
 	cmd.Dir = cwd
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v failed: %v (%s)", args, err, string(output))
