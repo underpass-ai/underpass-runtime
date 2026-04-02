@@ -86,12 +86,13 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 	// Load telemetry stats for context-aware scoring
 	allStats, _ := s.telemetryQ.AllToolStats(ctx)
 
+	// Always compute context signature — needed for evidence and policy lookup.
+	digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
+	contextSig := DeriveContextSignature(session, "", digest)
+
 	// Load learned policies for the current context (if available).
 	var learnedPolicies map[string]ToolPolicy
-	var contextSig string
 	if s.policyLearned != nil {
-		digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
-		contextSig = DeriveContextSignature(session, "", digest)
 		learnedPolicies, _ = s.policyLearned.ReadPoliciesForContext(ctx, contextSig)
 	}
 
@@ -110,6 +111,9 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		// Apply learned policy scoring if available
 		if p, ok := learnedPolicies[tools[i].Name]; ok {
 			rec = applyLearnedPolicy(rec, p)
+			rec.PolicyNotes = append(rec.PolicyNotes,
+				fmt.Sprintf("policy:%s:%s confidence=%.2f n=%d", p.ContextSignature, p.ToolID, p.Confidence, p.NSamples),
+			)
 		}
 		recs = append(recs, rec)
 	}

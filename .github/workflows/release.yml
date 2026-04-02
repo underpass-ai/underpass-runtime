@@ -86,13 +86,49 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build and push container image
+      - name: Build & push — runtime
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
             ${{ env.REGISTRY }}:${{ env.VERSION }}
+            ${{ env.REGISTRY }}:grpc-latest
             ${{ env.REGISTRY }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=runtime
+          cache-to: type=gha,scope=runtime,mode=max
+
+      - name: Build & push — e2e-runner
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: e2e/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/e2e-runner:${{ env.VERSION }}
+            ${{ env.REGISTRY }}/e2e-runner:e2e-latest
+          cache-from: type=gha,scope=e2e
+          cache-to: type=gha,scope=e2e,mode=max
+
+      - name: Build & push — tool-learning
+        uses: docker/build-push-action@v6
+        with:
+          context: services/tool-learning
+          file: services/tool-learning/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/tool-learning:${{ env.VERSION }}
+            ${{ env.REGISTRY }}/tool-learning:latest
+          cache-from: type=gha,scope=tool-learning
+          cache-to: type=gha,scope=tool-learning,mode=max
+
+      - name: Build & push — cert-gen
+        uses: docker/build-push-action@v6
+        with:
+          context: images/cert-gen
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/cert-gen:${{ env.VERSION }}
+            ${{ env.REGISTRY }}/cert-gen:v1.0.0
+          cache-from: type=gha,scope=certgen
+          cache-to: type=gha,scope=certgen,mode=max

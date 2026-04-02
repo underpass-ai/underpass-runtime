@@ -57,6 +57,12 @@ spec:
           value: "/var/run/e2e-tls/ca.crt"
         - name: REQUESTS_CA_BUNDLE
           value: "/var/run/e2e-tls/ca.crt"
+        - name: VALKEY_HOST
+          value: {{ $.Values.valkey.host | default "valkey" | quote }}
+        - name: VALKEY_PORT
+          value: {{ $.Values.valkey.port | default 6379 | quote }}
+        - name: VALKEY_DB
+          value: {{ $.Values.valkey.db | default 0 | quote }}
         - name: EVIDENCE_FILE
           value: "/tmp/evidence-{{ .id }}.json"
         - name: PYTHONUNBUFFERED
