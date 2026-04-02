@@ -347,10 +347,10 @@ func tokenize(hint string) []string {
 
 const (
 	// Evidence metadata constants
-	AlgorithmIDHeuristic = "heuristic_v1"
-	AlgorithmVersionV1   = "1.0.0"
-	PolicyModeNone       = "none"
-	PolicyModeShadow     = "shadow"
+	AlgorithmIDHeuristic                 = "heuristic_v1"
+	AlgorithmVersionV1                   = "1.0.0"
+	PolicyModeNone                       = "none"
+	PolicyModeShadow                     = "shadow"
 	DecisionSourceHeuristicOnly          = "heuristic_only"
 	DecisionSourceHeuristicWithTelemetry = "heuristic_with_telemetry"
 	DecisionSourceHeuristicWithPolicy    = "heuristic_with_learned_policy"
@@ -358,12 +358,12 @@ const (
 
 const (
 	// Learned policy scoring weights
-	learnedConfidenceBoost    = 0.25 // max boost from Thompson confidence
-	learnedErrorRatePenalty   = 0.20 // penalty for high error rate policies
-	learnedErrorRateThreshold = 0.30 // error rate above this triggers penalty
-	learnedLatencyPenalty     = 0.10 // penalty for slow policies
+	learnedConfidenceBoost    = 0.25  // max boost from Thompson confidence
+	learnedErrorRatePenalty   = 0.20  // penalty for high error rate policies
+	learnedErrorRateThreshold = 0.30  // error rate above this triggers penalty
+	learnedLatencyPenalty     = 0.10  // penalty for slow policies
 	learnedLatencyThreshold   = 15000 // p95 ms above this triggers penalty
-	learnedMinSamples         = 10   // minimum samples before trusting policy
+	learnedMinSamples         = 10    // minimum samples before trusting policy
 )
 
 // applyLearnedPolicy adjusts a recommendation score using a learned policy

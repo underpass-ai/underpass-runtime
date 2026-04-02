@@ -18,8 +18,8 @@ import (
 	dockerclient "github.com/docker/docker/client"
 	"github.com/nats-io/nats.go"
 
-	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
 	lpb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/learning/v1"
+	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/eventbus"
 	invocationstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/invocationstore"

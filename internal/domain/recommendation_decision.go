@@ -28,9 +28,9 @@ type RecommendationDecision struct {
 
 // RankedToolEvidence captures per-tool scoring evidence within a decision.
 type RankedToolEvidence struct {
-	ToolID       string  `json:"tool_id"`
-	Rank         int     `json:"rank"`
-	FinalScore   float64 `json:"final_score"`
-	Why          string  `json:"why"`
-	EstimatedCost string `json:"estimated_cost"`
+	ToolID        string  `json:"tool_id"`
+	Rank          int     `json:"rank"`
+	FinalScore    float64 `json:"final_score"`
+	Why           string  `json:"why"`
+	EstimatedCost string  `json:"estimated_cost"`
 }
