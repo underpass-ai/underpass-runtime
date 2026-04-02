@@ -8,7 +8,7 @@ ENV PYTHONPATH=/app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir grpcio protobuf nats-py==2.9.0
+    && pip install --no-cache-dir grpcio protobuf nats-py==2.9.0 redis==5.2.1
 
 # Shared harness + generated proto stubs.
 COPY e2e/tests/workspace_common /app/workspace_common
@@ -30,6 +30,7 @@ COPY e2e/tests/13-multi-agent-pipeline/test_multi_agent_pipeline.py         /app
 COPY e2e/tests/14-full-infra-stack/test_full_infra.py                       /app/tests/14/test.py
 COPY e2e/tests/15-vllm-learning-loop/test_vllm_learning_loop.py            /app/tests/15/test.py
 COPY e2e/tests/16-recommendation-evidence/test_recommendation_evidence.py   /app/tests/16/test.py
+COPY e2e/tests/18-policy-driven-recommendations/test_policy_driven_recommendations.py /app/tests/18/test.py
 
 RUN groupadd -r testuser && useradd -r -m -g testuser -u 1000 testuser && \
     chown -R testuser:testuser /app

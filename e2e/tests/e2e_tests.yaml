@@ -118,3 +118,11 @@ workspace_tests:
     kind: "learning"
     timeout_override: 300
     tags: ["learning", "evidence", "recommendations", "nats", "decision", "audit", "bridge-fields"]
+
+  - id: "18"
+    name: "18-policy-driven-recommendations"
+    job_name: "e2e-policy-driven-recommendations"
+    tier: "core"
+    kind: "learning"
+    timeout_override: 300
+    tags: ["learning", "policy", "recommendations", "valkey", "online-loop"]

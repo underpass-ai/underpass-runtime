@@ -144,7 +144,11 @@ func main() {
 	service.SetEventPublisher(eventPub)
 	telRecorder, telQuerier, telStop := buildTelemetry(context.Background(), logger, valkeyTLS)
 	service.SetTelemetry(telRecorder, telQuerier)
+	if policyReader := buildPolicyReader(logger, valkeyTLS); policyReader != nil {
+		service.SetPolicyReader(policyReader)
+	}
 	service.SetKPIMetrics(app.NewKPIMetrics())
+	subscribePolicyUpdated(natsConn, logger)
 	authConfig, err := grpcapi.AuthConfigFromEnv()
 	if err != nil {
 		logger.Error("failed to initialize auth configuration", "error", err)
@@ -685,6 +689,51 @@ func buildTelemetry(ctx context.Context, logger *slog.Logger, valkeyTLS *tls.Con
 		agg := telemetryadapter.NewInMemoryAggregator()
 		return telemetryadapter.NoopRecorder{}, agg, nil
 	}
+}
+
+// subscribePolicyUpdated listens for tool_learning.policy.updated events
+// and logs them. This is the observable proof that the runtime is connected
+// to the learning loop. Policies are read fresh from Valkey on each
+// RecommendTools call, so no cache invalidation is needed.
+func subscribePolicyUpdated(conn *nats.Conn, logger *slog.Logger) {
+	if conn == nil {
+		return
+	}
+	_, err := conn.Subscribe("tool_learning.policy.updated", func(msg *nats.Msg) {
+		logger.Info("learned policies updated (tool-learning pipeline)",
+			"subject", msg.Subject,
+			"bytes", len(msg.Data),
+		)
+	})
+	if err != nil {
+		logger.Warn("subscribe to tool_learning.policy.updated failed", "error", err)
+	}
+}
+
+// buildPolicyReader creates a learned-policy reader when Valkey stores are enabled.
+// Returns nil when the store backend is not valkey (memory/none).
+func buildPolicyReader(logger *slog.Logger, valkeyTLS *tls.Config) app.PolicyReader {
+	backend := strings.ToLower(strings.TrimSpace(envOrDefault("INVOCATION_STORE_BACKEND", "memory")))
+	if backend != "valkey" {
+		return nil
+	}
+	address := strings.TrimSpace(os.Getenv("VALKEY_ADDR"))
+	if address == "" {
+		host := strings.TrimSpace(envOrDefault("VALKEY_HOST", "localhost"))
+		port := strings.TrimSpace(envOrDefault("VALKEY_PORT", "6379"))
+		address = host + ":" + port
+	}
+	password := os.Getenv("VALKEY_PASSWORD")
+	db := parseIntOrDefault(os.Getenv("VALKEY_DB"), 0)
+	prefix := strings.TrimSpace(envOrDefault("POLICY_KEY_PREFIX", "tool_policy"))
+
+	reader, err := policy.NewValkeyPolicyReader(address, password, db, prefix, valkeyTLS)
+	if err != nil {
+		logger.Warn("policy reader initialization failed, learned policies disabled", "error", err)
+		return nil
+	}
+	logger.Info("policy reader initialized", "backend", "valkey", "address", address, "prefix", prefix)
+	return reader
 }
 
 // buildArtifactStore creates the artifact store based on ARTIFACT_BACKEND env var.
