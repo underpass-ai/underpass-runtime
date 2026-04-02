@@ -146,6 +146,9 @@ func main() {
 	service.SetTelemetry(telRecorder, telQuerier)
 	if policyReader := buildPolicyReader(logger, valkeyTLS); policyReader != nil {
 		service.SetPolicyReader(policyReader)
+		if nmr, ok := policyReader.(app.NeuralModelReader); ok {
+			service.SetNeuralModelReader(nmr)
+		}
 	}
 	service.SetKPIMetrics(app.NewKPIMetrics())
 	subscribePolicyUpdated(natsConn, logger)

@@ -31,6 +31,7 @@ COPY e2e/tests/14-full-infra-stack/test_full_infra.py                       /app
 COPY e2e/tests/15-vllm-learning-loop/test_vllm_learning_loop.py            /app/tests/15/test.py
 COPY e2e/tests/16-recommendation-evidence/test_recommendation_evidence.py   /app/tests/16/test.py
 COPY e2e/tests/18-policy-driven-recommendations/test_policy_driven_recommendations.py /app/tests/18/test.py
+COPY e2e/tests/19-neural-ts-recommendations/test_neural_ts_recommendations.py /app/tests/19/test.py
 
 RUN groupadd -r testuser && useradd -r -m -g testuser -u 1000 testuser && \
     chown -R testuser:testuser /app
