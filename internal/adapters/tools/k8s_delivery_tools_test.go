@@ -20,7 +20,7 @@ const (
 	testK8sNamespaceSandbox = "sandbox"
 	testK8sNamespaceDefault = "default"
 	testK8sRoleDevops       = "devops"
-	testK8sClusterIP        = "10.0.0.1"
+	testK8sClusterIP        = "10.0.0.1" //NOSONAR — fake K8s cluster IP for tests
 )
 
 func TestK8sApplyManifestHandler_ConfigMapCreateAndUpdate(t *testing.T) {
