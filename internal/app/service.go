@@ -44,6 +44,7 @@ type Service struct {
 	metrics         *invocationMetrics
 	qualityObserver QualityObserver
 	policyLearned   PolicyReader
+	neuralModel     NeuralModelReader
 	decisionStore   RecommendationDecisionStore
 	tracer          trace.Tracer
 }
@@ -66,16 +67,16 @@ func NewService(
 		resolvedInvocationStore = invStore[0]
 	}
 	return &Service{
-		workspace:  workspace,
-		catalog:    catalog,
-		policy:     policy,
-		tools:      tools,
-		invStore:   resolvedInvocationStore,
-		artifacts:  artifacts,
-		audit:      audit,
-		events:     &noopEventPublisher{},
-		telemetry:  noopTelemetryRecorder{},
-		telemetryQ: noopTelemetryQuerier{},
+		workspace:       workspace,
+		catalog:         catalog,
+		policy:          policy,
+		tools:           tools,
+		invStore:        resolvedInvocationStore,
+		artifacts:       artifacts,
+		audit:           audit,
+		events:          &noopEventPublisher{},
+		telemetry:       noopTelemetryRecorder{},
+		telemetryQ:      noopTelemetryQuerier{},
 		quotas:          newInvocationQuotaLimiterFromEnv(),
 		metrics:         newInvocationMetrics(),
 		qualityObserver: noopQualityObserver{},
@@ -116,6 +117,13 @@ func (s *Service) SetPolicyReader(pr PolicyReader) {
 }
 
 // SetRecommendationDecisionStore replaces the default in-memory decision store.
+// SetNeuralModelReader injects an optional neural model reader.
+func (s *Service) SetNeuralModelReader(r NeuralModelReader) {
+	if r != nil {
+		s.neuralModel = r
+	}
+}
+
 func (s *Service) SetRecommendationDecisionStore(store RecommendationDecisionStore) {
 	if store != nil {
 		s.decisionStore = store

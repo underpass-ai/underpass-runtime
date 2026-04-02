@@ -96,8 +96,16 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		learnedPolicies, _ = s.policyLearned.ReadPoliciesForContext(ctx, contextSig)
 	}
 
-	// Select scoring algorithm based on available policy data.
-	scorer := SelectScorer(learnedPolicies)
+	// Load trained neural model (if available).
+	var neuralWeights *MLPWeights
+	if s.neuralModel != nil {
+		if data, found, err := s.neuralModel.ReadNeuralModel(ctx, NeuralModelValkeyKey); err == nil && found {
+			neuralWeights, _ = UnmarshalMLPWeights(data)
+		}
+	}
+
+	// Select scoring algorithm based on available policy data + neural model.
+	scorer := SelectScorerWithModel(learnedPolicies, neuralWeights)
 
 	// Derive algorithm metadata from the selected scorer.
 	algorithmID := AlgorithmIDHeuristic
@@ -106,6 +114,13 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 	if scorer != nil {
 		algorithmID = scorer.AlgorithmID()
 		algorithmVersion = scorer.AlgorithmVersion()
+		// Override decision source based on actual scorer.
+		switch scorer.(type) {
+		case NeuralTSScorer:
+			decisionSource = DecisionSourceNeuralTS
+		case ThompsonScorer:
+			decisionSource = DecisionSourceThompson
+		}
 	}
 
 	candidateCount := len(tools)
@@ -377,6 +392,7 @@ const (
 	DecisionSourceHeuristicWithTelemetry = "heuristic_with_telemetry"
 	DecisionSourceHeuristicWithPolicy    = "heuristic_with_learned_policy"
 	DecisionSourceThompson               = "learned_policy_thompson"
+	DecisionSourceNeuralTS               = "neural_thompson_sampling"
 )
 
 const (
