@@ -225,6 +225,13 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		_ = s.events.Publish(ctx, evt)
 	}
 
+	// Track recommended tools for KPI metrics (recommendation acceptance).
+	toolIDs := make([]string, len(recs))
+	for i := range recs {
+		toolIDs[i] = recs[i].Name
+	}
+	s.sessionLastRec.Store(sessionID, toolIDs)
+
 	return RecommendationsResponse{
 		Recommendations:  recs,
 		TaskHint:         taskHint,

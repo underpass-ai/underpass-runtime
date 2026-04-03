@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
@@ -47,6 +48,11 @@ type Service struct {
 	neuralModel     NeuralModelReader
 	decisionStore   RecommendationDecisionStore
 	tracer          trace.Tracer
+
+	// sessionInvCount tracks invocation count per session for first-tool metric.
+	sessionInvCount sync.Map // sessionID → *int64
+	// sessionLastRec tracks last recommendation tool IDs per session.
+	sessionLastRec sync.Map // sessionID → []string
 }
 
 // NewService creates a workspace service wired to the given ports.
@@ -513,6 +519,7 @@ func (s *Service) completeToolInvocation(
 	s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
 	s.publishInvocationCompleted(ctx, tc.session, inv)
 	s.recordTelemetry(ctx, tc.session, inv, tc.runResult)
+	s.observeToolKPIs(tc.session.ID, inv.ToolName, inv.Status == domain.InvocationStatusSucceeded)
 	return inv, nil
 }
 
@@ -536,8 +543,42 @@ func (s *Service) denyInvocation(ctx context.Context, invocation domain.Invocati
 			reason = domErr.Message
 		}
 		s.kpiMetrics.ObserveInvocationDenied(reason)
+		s.kpiMetrics.ObservePolicyDenialAfterRecommendation(s.wasRecommended(session.ID, invocation.ToolName))
 	}
 	return invocation
+}
+
+// observeToolKPIs records tool-call and first-tool-result KPI metrics.
+func (s *Service) observeToolKPIs(sessionID, toolName string, succeeded bool) {
+	if s.kpiMetrics == nil {
+		return
+	}
+	s.kpiMetrics.ObserveToolCall(toolName)
+	s.kpiMetrics.ObserveRecommendationUsed(s.wasRecommended(sessionID, toolName))
+
+	// First tool result tracking.
+	countPtr := new(int64)
+	if v, loaded := s.sessionInvCount.LoadOrStore(sessionID, countPtr); loaded {
+		countPtr = v.(*int64)
+	}
+	n := atomic.AddInt64(countPtr, 1)
+	if n == 1 {
+		s.kpiMetrics.ObserveFirstToolResult(succeeded)
+	}
+}
+
+// wasRecommended checks if a tool was in the last recommendation for a session.
+func (s *Service) wasRecommended(sessionID, toolName string) bool {
+	v, ok := s.sessionLastRec.Load(sessionID)
+	if !ok {
+		return false
+	}
+	for _, id := range v.([]string) {
+		if id == toolName {
+			return true
+		}
+	}
+	return false
 }
 
 // finaliseInvocationSpan annotates span with the final invocation state and

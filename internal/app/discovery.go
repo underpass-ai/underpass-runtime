@@ -90,7 +90,13 @@ func (s *Service) DiscoverTools(ctx context.Context, sessionID string, detail Di
 	if detail == DiscoveryDetailFull {
 		return s.discoverFull(tools, total, filter), nil
 	}
-	return discoverCompact(tools, total, filter), nil
+	resp := discoverCompact(tools, total, filter)
+	if s.kpiMetrics != nil {
+		// Compact mode saves bytes by omitting full capability details.
+		// Estimate: ~500 bytes saved per tool vs full detail.
+		s.kpiMetrics.ObserveContextBytesSaved(int64(resp.Filtered) * 500)
+	}
+	return resp, nil
 }
 
 func discoverCompact(tools []domain.Capability, total int, filter DiscoveryFilter) DiscoveryResponse {
