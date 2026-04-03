@@ -185,3 +185,52 @@ sum(rate(invocations_total{status="succeeded"}[5m])) by (tool)
 /
 sum(rate(invocations_total[5m])) by (tool)
 ```
+
+---
+
+## Trace-to-Log Correlation
+
+`TraceLogHandler` (`internal/tlsutil/trace_log_handler.go`) wraps slog and injects
+`trace_id` and `span_id` from the OpenTelemetry span context into every structured
+log record. This enables Grafana's derived fields to link logs to traces:
+
+```json
+{"level":"INFO","msg":"audit.tool_invocation","trace_id":"0af765...","span_id":"00f067...","tool":"fs.read_file"}
+```
+
+Enabled automatically — no configuration needed. Works with any OTLP collector.
+
+---
+
+## Metrics Port
+
+Prometheus metrics are served on `:9090` (configurable via `METRICS_PORT`).
+The port is exposed in both the Kubernetes Deployment and Service resources,
+enabling ServiceMonitor scraping from external namespaces.
+
+---
+
+## Observability Stack
+
+A complete observability stack is available in a separate repository:
+[underpass-ai/underpass-observability](https://github.com/underpass-ai/underpass-observability)
+
+Components: Prometheus, Grafana (with pre-built dashboard), Loki, Promtail,
+OpenTelemetry Collector, and alert-relay (Grafana webhook → NATS domain events).
+
+Deploys in a dedicated namespace (e.g., `observability`) and monitors
+underpass-runtime via cross-namespace ServiceMonitor.
+
+---
+
+## Alert → Agent Remediation
+
+When Grafana fires an alert, the flow is:
+
+```
+Grafana AlertManager → alert-relay webhook → NATS observability.alert.firing
+    → remediation-agent → CreateSession → InvokeTool → AcceptRecommendation → CloseSession
+```
+
+The `remediation-agent` (`cmd/remediation-agent/`) subscribes to NATS alert events
+and runs playbooks against the runtime. See README.md for playbook details.

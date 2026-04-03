@@ -225,4 +225,43 @@ Emit events:
 | `INVOCATION_STORE_BACKEND` | `memory` | Set to `valkey` to enable policy reader |
 
 The policy reader activates automatically when `INVOCATION_STORE_BACKEND=valkey`.
-The neural model is loaded from Valkey on each recommendation call (no cache — always fresh).
+With workspace prewarming (default), policies and model are pre-loaded at session
+creation — the first `RecommendTools` call uses cached data.
+
+---
+
+## Explainability Trace
+
+Every recommendation carries a `score_breakdown` showing each tier's contribution:
+
+```json
+"score_breakdown": [
+  {"name": "heuristic",       "value": 1.0,  "rationale": "low risk, no side effects"},
+  {"name": "telemetry_boost", "value": 0.15, "rationale": "1.00 → 1.15"},
+  {"name": "beta_thompson",   "value": -0.06, "rationale": "thompson(sample=0.87, weight=0.75)"}
+]
+```
+
+---
+
+## Cross-Agent Learning
+
+Agents in the same context signature share telemetry and policies automatically.
+Every response includes a `CrossAgentInsight` with total invocations, tool count,
+confidence level (low/medium/high), and top tools ranked by usage.
+
+---
+
+## Agent Feedback Loop
+
+`AcceptRecommendation` / `RejectRecommendation` RPCs close the outer loop.
+Events are consumed by the tool-learning pipeline for reward shaping — the
+system learns "did it solve the problem?" not just "did the tool succeed?".
+
+---
+
+## Denied Invocation Telemetry
+
+All denials (policy, quota, rate limit, concurrency) generate telemetry records
+with `context_signature` and `Approved=false`, making deny rates visible to the
+learning pipeline.
