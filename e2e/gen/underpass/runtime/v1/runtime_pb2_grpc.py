@@ -171,6 +171,16 @@ class CapabilityCatalogServiceStub(object):
                 request_serializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.RecommendToolsRequest.SerializeToString,
                 response_deserializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.RecommendToolsResponse.FromString,
                 _registered_method=True)
+        self.AcceptRecommendation = channel.unary_unary(
+                '/underpass.runtime.v1.CapabilityCatalogService/AcceptRecommendation',
+                request_serializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.AcceptRecommendationRequest.SerializeToString,
+                response_deserializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.AcceptRecommendationResponse.FromString,
+                _registered_method=True)
+        self.RejectRecommendation = channel.unary_unary(
+                '/underpass.runtime.v1.CapabilityCatalogService/RejectRecommendation',
+                request_serializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.RejectRecommendationRequest.SerializeToString,
+                response_deserializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.RejectRecommendationResponse.FromString,
+                _registered_method=True)
 
 
 class CapabilityCatalogServiceServicer(object):
@@ -198,6 +208,20 @@ class CapabilityCatalogServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def AcceptRecommendation(self, request, context):
+        """AcceptRecommendation records that an agent used a recommended tool and it solved the task.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RejectRecommendation(self, request, context):
+        """RejectRecommendation records that an agent skipped a recommendation (tool didn't help or was wrong).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CapabilityCatalogServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -215,6 +239,16 @@ def add_CapabilityCatalogServiceServicer_to_server(servicer, server):
                     servicer.RecommendTools,
                     request_deserializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.RecommendToolsRequest.FromString,
                     response_serializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.RecommendToolsResponse.SerializeToString,
+            ),
+            'AcceptRecommendation': grpc.unary_unary_rpc_method_handler(
+                    servicer.AcceptRecommendation,
+                    request_deserializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.AcceptRecommendationRequest.FromString,
+                    response_serializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.AcceptRecommendationResponse.SerializeToString,
+            ),
+            'RejectRecommendation': grpc.unary_unary_rpc_method_handler(
+                    servicer.RejectRecommendation,
+                    request_deserializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.RejectRecommendationRequest.FromString,
+                    response_serializer=underpass_dot_runtime_dot_v1_dot_runtime__pb2.RejectRecommendationResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -299,6 +333,60 @@ class CapabilityCatalogService(object):
             '/underpass.runtime.v1.CapabilityCatalogService/RecommendTools',
             underpass_dot_runtime_dot_v1_dot_runtime__pb2.RecommendToolsRequest.SerializeToString,
             underpass_dot_runtime_dot_v1_dot_runtime__pb2.RecommendToolsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def AcceptRecommendation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/underpass.runtime.v1.CapabilityCatalogService/AcceptRecommendation',
+            underpass_dot_runtime_dot_v1_dot_runtime__pb2.AcceptRecommendationRequest.SerializeToString,
+            underpass_dot_runtime_dot_v1_dot_runtime__pb2.AcceptRecommendationResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RejectRecommendation(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/underpass.runtime.v1.CapabilityCatalogService/RejectRecommendation',
+            underpass_dot_runtime_dot_v1_dot_runtime__pb2.RejectRecommendationRequest.SerializeToString,
+            underpass_dot_runtime_dot_v1_dot_runtime__pb2.RejectRecommendationResponse.FromString,
             options,
             channel_credentials,
             insecure,

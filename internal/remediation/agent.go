@@ -181,9 +181,13 @@ func (a *Agent) executePlaybook(ctx context.Context, alert AlertEvent, pb Playbo
 	// 4. Report feedback
 	if usedRecommended && recID != "" {
 		if allSucceeded {
-			_ = a.client.AcceptRecommendation(ctx, sessionID, recID, tools[0])
+			if err := a.client.AcceptRecommendation(ctx, sessionID, recID, tools[0]); err != nil {
+				a.logger.Warn("accept recommendation failed", "recommendation_id", recID, "error", err)
+			}
 		} else {
-			_ = a.client.RejectRecommendation(ctx, sessionID, recID, "remediation partially failed")
+			if err := a.client.RejectRecommendation(ctx, sessionID, recID, "remediation partially failed"); err != nil {
+				a.logger.Warn("reject recommendation failed", "recommendation_id", recID, "error", err)
+			}
 		}
 	}
 
