@@ -551,6 +551,9 @@ e2e:
     - id: "19"
       name: neural-ts-recommendations
       timeout: 300
+    - id: "21"
+      name: agent-feedback-loop
+      timeout: 300
 
 # ---------------------------------------------------------------------------
 # TLS Certificate Generation (pre-install/pre-upgrade hook)
