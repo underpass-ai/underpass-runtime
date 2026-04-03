@@ -15,8 +15,10 @@ data:
   ARTIFACT_BACKEND: {{ .Values.artifacts.backend | quote }}
   SESSION_STORE_BACKEND: {{ .Values.stores.backend | quote }}
   INVOCATION_STORE_BACKEND: {{ .Values.stores.backend | quote }}
+  DECISION_STORE_BACKEND: {{ .Values.stores.backend | quote }}
   SESSION_STORE_TTL_SECONDS: {{ .Values.stores.sessionTTLSeconds | quote }}
   INVOCATION_STORE_TTL_SECONDS: {{ .Values.stores.invocationTTLSeconds | quote }}
+  DECISION_STORE_TTL_SECONDS: {{ .Values.stores.decisionTTLSeconds | quote }}
   EVENT_BUS: {{ .Values.eventBus.type | quote }}
   TELEMETRY_BACKEND: {{ .Values.telemetry.backend | quote }}
   WORKSPACE_AUTH_MODE: {{ .Values.auth.mode | quote }}

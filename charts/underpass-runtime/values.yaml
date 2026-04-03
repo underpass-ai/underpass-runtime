@@ -213,6 +213,8 @@ stores:
   sessionTTLSeconds: 86400
   # -- Invocation TTL in seconds
   invocationTTLSeconds: 86400
+  # -- Decision TTL in seconds (30 days for audit trail)
+  decisionTTLSeconds: 2592000
 
 # -- Valkey (Redis-compatible) configuration
 valkey:
