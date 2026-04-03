@@ -70,15 +70,10 @@ func main() {
 	})
 
 	// NATS connection
-	natsOpts := []nats.Option{nats.Name("remediation-agent")}
-	if natsCaPath := os.Getenv("NATS_TLS_CA_PATH"); natsCaPath != "" {
-		natsTLS, tlsErr := buildTLS(natsCaPath, os.Getenv("NATS_TLS_CERT_PATH"), os.Getenv("NATS_TLS_KEY_PATH"))
-		if tlsErr != nil {
-			logger.Error("NATS TLS failed", "error", tlsErr)
-			conn.Close()
-			os.Exit(1)
-		}
-		natsOpts = append(natsOpts, nats.Secure(natsTLS))
+	natsOpts, natsErr := buildNATSOpts()
+	if natsErr != nil {
+		logger.Error("NATS TLS failed", "error", natsErr)
+		os.Exit(1)
 	}
 
 	nc, err := nats.Connect(natsURL, natsOpts...)
@@ -180,6 +175,18 @@ func (c *grpcRuntimeClient) RejectRecommendation(ctx context.Context, sessionID,
 		SessionId: sessionID, RecommendationId: recID, Reason: reason,
 	})
 	return err
+}
+
+func buildNATSOpts() ([]nats.Option, error) {
+	opts := []nats.Option{nats.Name("remediation-agent")}
+	if caPath := os.Getenv("NATS_TLS_CA_PATH"); caPath != "" {
+		tlsCfg, err := buildTLS(caPath, os.Getenv("NATS_TLS_CERT_PATH"), os.Getenv("NATS_TLS_KEY_PATH"))
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, nats.Secure(tlsCfg))
+	}
+	return opts, nil
 }
 
 func envOrDefault(key, fallback string) string {
