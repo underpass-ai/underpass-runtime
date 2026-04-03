@@ -2,7 +2,6 @@ package decisionstore
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -13,7 +12,6 @@ import (
 )
 
 type valkeyClient interface {
-	Ping(ctx context.Context) *redis.StatusCmd
 	Set(ctx context.Context, key string, value any, expiration time.Duration) *redis.StatusCmd
 	Get(ctx context.Context, key string) *redis.StringCmd
 }
@@ -26,6 +24,7 @@ type ValkeyStore struct {
 	ttl       time.Duration
 }
 
+// NewValkeyStore creates a ValkeyStore from an already-connected client.
 func NewValkeyStore(client valkeyClient, keyPrefix string, ttl time.Duration) *ValkeyStore {
 	prefix := strings.TrimSpace(keyPrefix)
 	if prefix == "" {
@@ -36,27 +35,6 @@ func NewValkeyStore(client valkeyClient, keyPrefix string, ttl time.Duration) *V
 		keyPrefix: prefix,
 		ttl:       ttl,
 	}
-}
-
-func NewValkeyStoreFromAddress(
-	ctx context.Context,
-	address string,
-	password string,
-	db int,
-	keyPrefix string,
-	ttl time.Duration,
-	tlsCfg *tls.Config,
-) (*ValkeyStore, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr:      strings.TrimSpace(address),
-		Password:  password,
-		DB:        db,
-		TLSConfig: tlsCfg,
-	})
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("decision store valkey ping: %w", err)
-	}
-	return NewValkeyStore(client, keyPrefix, ttl), nil
 }
 
 func (s *ValkeyStore) Save(ctx context.Context, decision domain.RecommendationDecision) error {

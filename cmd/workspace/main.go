@@ -17,6 +17,7 @@ import (
 
 	dockerclient "github.com/docker/docker/client"
 	"github.com/nats-io/nats.go"
+	redis "github.com/redis/go-redis/v9"
 
 	lpb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/learning/v1"
 	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
@@ -367,20 +368,17 @@ func buildDecisionStore(logger *slog.Logger, valkeyTLS *tls.Config) (app.Recomme
 		keyPrefix := envOrDefault("DECISION_STORE_KEY_PREFIX", "workspace:decision")
 		ttlSeconds := parseIntOrDefault(os.Getenv("DECISION_STORE_TTL_SECONDS"), 2592000) // 30 days
 
-		store, err := decisionstoreadapter.NewValkeyStoreFromAddress(
-			context.Background(),
-			address,
-			password,
-			db,
-			keyPrefix,
-			time.Duration(ttlSeconds)*time.Second,
-			valkeyTLS,
-		)
-		if err != nil {
-			return nil, err
+		client := redis.NewClient(&redis.Options{
+			Addr:      address,
+			Password:  password,
+			DB:        db,
+			TLSConfig: valkeyTLS,
+		})
+		if err := client.Ping(context.Background()).Err(); err != nil {
+			return nil, fmt.Errorf("decision store valkey ping: %w", err)
 		}
 		logger.Info("decision store initialized", "backend", "valkey", "address", address, "db", db, "ttl_seconds", ttlSeconds)
-		return store, nil
+		return decisionstoreadapter.NewValkeyStore(client, keyPrefix, time.Duration(ttlSeconds)*time.Second), nil
 	default:
 		return nil, fmt.Errorf("unsupported DECISION_STORE_BACKEND: %s", backend)
 	}

@@ -17,10 +17,6 @@ type fakeValkeyClient struct {
 	getErr error
 }
 
-func (f *fakeValkeyClient) Ping(_ context.Context) *redis.StatusCmd {
-	return redis.NewStatusResult("PONG", nil)
-}
-
 func (f *fakeValkeyClient) Set(_ context.Context, key string, value any, _ time.Duration) *redis.StatusCmd {
 	if f.setErr != nil {
 		return redis.NewStatusResult("", f.setErr)
@@ -154,20 +150,5 @@ func TestValkeyStore_Key(t *testing.T) {
 	store := NewValkeyStore(&fakeValkeyClient{}, "workspace:decision", 0)
 	if key := store.key("rec-123"); key != "workspace:decision:rec-123" {
 		t.Fatalf("unexpected key: %s", key)
-	}
-}
-
-func TestNewValkeyStoreFromAddress_InvalidAddress(t *testing.T) {
-	_, err := NewValkeyStoreFromAddress(
-		context.Background(),
-		"127.0.0.1:0",
-		"",
-		0,
-		"",
-		time.Second,
-		nil,
-	)
-	if err == nil {
-		t.Fatal("expected connection error")
 	}
 }
