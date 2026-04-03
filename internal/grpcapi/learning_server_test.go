@@ -241,6 +241,40 @@ func TestLearningServer_ListPolicies(t *testing.T) {
 	}
 }
 
+func TestLearningServer_DecisionWithScoreBreakdown(t *testing.T) {
+	d := domain.RecommendationDecision{
+		RecommendationID: "rec-bd",
+		DecisionSource:   app.DecisionSourceHeuristicOnly,
+		PolicyMode:       app.PolicyModeNone,
+		Recommendations: []domain.RankedToolEvidence{
+			{
+				ToolID: "fs.read_file", Rank: 1, FinalScore: 1.15,
+				ScoreBreakdown: []domain.ScoreComponent{
+					{Name: "heuristic", Value: 1.0, Rationale: "low risk"},
+					{Name: "telemetry_boost", Value: 0.15, Rationale: "success boost"},
+				},
+			},
+		},
+	}
+	srv := NewLearningEvidenceServer(&fakeLearningService{decision: d})
+	resp, err := srv.GetRecommendationDecision(context.Background(),
+		&lpb.GetRecommendationDecisionRequest{RecommendationId: "rec-bd"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := resp.GetDecision().GetRecommendations()
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	bd := items[0].GetScoreBreakdown()
+	if len(bd) != 2 {
+		t.Fatalf("expected 2 score components, got %d", len(bd))
+	}
+	if bd[0].GetName() != "heuristic" || bd[0].GetValue() != 1.0 {
+		t.Fatalf("unexpected first component: %v", bd[0])
+	}
+}
+
 func TestLearningServer_GetAggregate(t *testing.T) {
 	srv := NewLearningEvidenceServer(&fakeLearningService{})
 	resp, err := srv.GetAggregate(context.Background(), &lpb.GetAggregateRequest{ToolId: "fs.read_file"})

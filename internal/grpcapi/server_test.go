@@ -794,3 +794,25 @@ func TestRejectRecommendation(t *testing.T) {
 		t.Fatal("expected event ID")
 	}
 }
+
+func TestRecommendationToProto_WithScoreBreakdown(t *testing.T) {
+	rec := app.Recommendation{
+		Name:  "fs.read_file",
+		Score: 1.15,
+		Why:   "low risk",
+		ScoreBreakdown: []domain.ScoreComponent{
+			{Name: "heuristic", Value: 1.0, Rationale: "low risk"},
+			{Name: "telemetry_boost", Value: 0.15, Rationale: "1.00 → 1.15"},
+		},
+	}
+	proto := recommendationToProto(rec)
+	if len(proto.GetScoreBreakdown()) != 2 {
+		t.Fatalf("expected 2 components, got %d", len(proto.GetScoreBreakdown()))
+	}
+	if proto.GetScoreBreakdown()[0].GetName() != "heuristic" {
+		t.Fatalf("expected heuristic, got %s", proto.GetScoreBreakdown()[0].GetName())
+	}
+	if proto.GetScoreBreakdown()[1].GetValue() != 0.15 {
+		t.Fatalf("expected 0.15, got %f", proto.GetScoreBreakdown()[1].GetValue())
+	}
+}
