@@ -11,8 +11,9 @@ inside isolated workspaces. Every tool invocation is policy-checked,
 telemetry-recorded, and artifact-preserved.
 
 The runtime **learns which tools work best** for each context and adapts
-its recommendations automatically, from simple heuristics to Neural
-Thompson Sampling as data accumulates.
+its recommendations automatically. A background pipeline (CronJob) trains
+policies from telemetry, progressing from heuristics to Neural Thompson
+Sampling as data accumulates. The online path consumes these policies.
 
 ## Why this exists
 
@@ -70,15 +71,16 @@ helm test underpass-runtime --timeout 10m
 
 ## Adaptive recommendation engine
 
-The runtime scores tools using a 4-tier stack that activates as data
-matures:
+The runtime scores tools using a 4-tier stack. The online path selects
+the best available scorer; the offline pipeline (tool-learning CronJob)
+trains policies and neural models that the online path consumes:
 
-| Data maturity | Algorithm | What happens |
-|--------------|-----------|-------------|
-| No data | **Heuristic** | Scores by risk, cost, task hint matching |
-| 5+ invocations | **+ Telemetry** | Adjusts for success rate, latency, deny rate |
-| 50+ samples | **Thompson Sampling** | Beta-distribution explore/exploit |
-| 100+ samples + model | **Neural Thompson Sampling** | MLP with weight perturbation |
+| Data maturity | Algorithm | Online / Offline |
+|--------------|-----------|-----------------|
+| No data | **Heuristic** | Online: scores by risk, cost, task hint matching |
+| 5+ invocations | **+ Telemetry boost** | Online: adjusts for success rate, latency, deny rate |
+| 50+ samples | **Thompson Sampling** | Offline: Beta policies in Valkey. Online: samples Beta posterior |
+| 100+ samples + model | **Neural Thompson Sampling** | Offline: trains MLP, publishes weights. Online: forward pass + perturbation |
 
 Selection is automatic. The active algorithm is visible in every response:
 
