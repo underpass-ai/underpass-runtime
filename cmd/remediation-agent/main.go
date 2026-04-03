@@ -25,6 +25,13 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: parseLogLevel(os.Getenv("LOG_LEVEL")),
 	}))
@@ -40,8 +47,7 @@ func main() {
 	if caPath := os.Getenv("RUNTIME_TLS_CA_PATH"); caPath != "" {
 		tlsCfg, err := buildTLS(caPath, os.Getenv("RUNTIME_TLS_CERT_PATH"), os.Getenv("RUNTIME_TLS_KEY_PATH"))
 		if err != nil {
-			logger.Error("TLS config failed", "error", err)
-			os.Exit(1)
+			return fmt.Errorf("TLS config: %w", err)
 		}
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 	} else {
@@ -50,8 +56,7 @@ func main() {
 
 	conn, err := grpc.NewClient(runtimeAddr, grpcOpts...)
 	if err != nil {
-		logger.Error("gRPC dial failed", "addr", runtimeAddr, "error", err)
-		os.Exit(1)
+		return fmt.Errorf("gRPC dial %s: %w", runtimeAddr, err)
 	}
 	defer func() { _ = conn.Close() }()
 	logger.Info("connected to runtime", "addr", runtimeAddr)
@@ -72,19 +77,17 @@ func main() {
 	// NATS connection
 	natsOpts, natsErr := buildNATSOpts()
 	if natsErr != nil {
-		logger.Error("NATS TLS failed", "error", natsErr)
-		os.Exit(1)
+		return fmt.Errorf("NATS TLS: %w", natsErr)
 	}
 
 	nc, err := nats.Connect(natsURL, natsOpts...)
 	if err != nil {
-		logger.Error("NATS connect failed", "url", natsURL, "error", err)
-		os.Exit(1)
+		return fmt.Errorf("NATS connect %s: %w", natsURL, err)
 	}
 	defer nc.Close()
 	logger.Info("connected to NATS", "url", natsURL)
 
-	_, err = nc.Subscribe(subject, func(msg *nats.Msg) {
+	if _, err := nc.Subscribe(subject, func(msg *nats.Msg) {
 		result, handleErr := agent.HandleAlert(context.Background(), msg.Data)
 		if handleErr != nil {
 			logger.Warn("remediation failed", "error", handleErr)
@@ -98,10 +101,8 @@ func main() {
 				"duration_ms", result.Duration.Milliseconds(),
 			)
 		}
-	})
-	if err != nil {
-		logger.Error("subscribe failed", "subject", subject, "error", err)
-		os.Exit(1)
+	}); err != nil {
+		return fmt.Errorf("subscribe %s: %w", subject, err)
 	}
 	logger.Info("listening for alerts", "subject", subject)
 
@@ -109,6 +110,7 @@ func main() {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 	logger.Info("shutting down")
+	return nil
 }
 
 // grpcRuntimeClient adapts gRPC stubs to the remediation.RuntimeClient interface.
