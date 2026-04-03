@@ -120,7 +120,7 @@ func TestBuildAdapters(t *testing.T) {
 		Schedule:    "hourly",
 	}
 
-	lake, store, pub, audit, cleanup, err := buildAdapters(cfg, logger)
+	lake, store, _, pub, audit, cleanup, err := buildAdapters(cfg, logger)
 	if err != nil {
 		t.Fatalf("buildAdapters: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestBuildAdaptersValkeyFailure(t *testing.T) {
 		Schedule:    "hourly",
 	}
 
-	_, _, _, _, _, err := buildAdapters(cfg, logger)
+	_, _, _, _, _, _, err := buildAdapters(cfg, logger)
 	if err == nil {
 		t.Fatal("expected error from invalid Valkey address")
 	}
@@ -182,7 +182,7 @@ func TestBuildAdaptersNATSFailure(t *testing.T) {
 		Schedule:    "hourly",
 	}
 
-	_, _, _, _, _, err := buildAdapters(cfg, logger)
+	_, _, _, _, _, _, err := buildAdapters(cfg, logger)
 	if err == nil {
 		t.Fatal("expected error from invalid NATS URL")
 	}

@@ -69,6 +69,11 @@ func (s *PolicyStore) WritePolicies(ctx context.Context, policies []domain.ToolP
 	return err
 }
 
+// WriteNeuralModel persists trained MLP weights under the given key.
+func (s *PolicyStore) WriteNeuralModel(ctx context.Context, key string, data []byte) error {
+	return s.client.Set(ctx, key, data, s.ttl).Err()
+}
+
 // ReadPolicy reads a single policy by context signature and tool ID.
 func (s *PolicyStore) ReadPolicy(ctx context.Context, contextSig, toolID string) (domain.ToolPolicy, bool, error) {
 	data, err := s.client.Get(ctx, s.key(contextSig, toolID)).Bytes()

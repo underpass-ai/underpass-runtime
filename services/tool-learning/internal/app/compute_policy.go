@@ -18,9 +18,13 @@ const (
 // ComputePolicyUseCase reads telemetry from the lake, computes tool
 // policies via a pluggable PolicyComputer, persists them, and publishes
 // update events.
+// NeuralModelValkeyKey is the Valkey key where trained MLP weights are stored.
+const NeuralModelValkeyKey = "neural_ts:model:v1"
+
 type ComputePolicyUseCase struct {
 	lake        TelemetryLakeReader
 	store       PolicyStore
+	modelStore  NeuralModelStore
 	publisher   PolicyEventPublisher
 	audit       PolicyAuditStore
 	sampler     PolicyComputer
@@ -33,6 +37,7 @@ type ComputePolicyUseCase struct {
 type ComputePolicyConfig struct {
 	Lake        TelemetryLakeReader
 	Store       PolicyStore
+	ModelStore  NeuralModelStore
 	Publisher   PolicyEventPublisher
 	Audit       PolicyAuditStore
 	Sampler     PolicyComputer
@@ -54,6 +59,7 @@ func NewComputePolicyUseCase(cfg ComputePolicyConfig) *ComputePolicyUseCase {
 	return &ComputePolicyUseCase{
 		lake:        cfg.Lake,
 		store:       cfg.Store,
+		modelStore:  cfg.ModelStore,
 		publisher:   cfg.Publisher,
 		audit:       cfg.Audit,
 		sampler:     sampler,
@@ -162,6 +168,18 @@ func (uc *ComputePolicyUseCase) run(ctx context.Context, from, to time.Time, sch
 	run.AggregatesRead = len(aggregates)
 	run.PoliciesWritten = len(policies)
 	run.PoliciesFiltered = filtered
+
+	// Train and publish neural model when enough aggregates are available.
+	if uc.modelStore != nil && len(aggregates) >= 20 {
+		samples := domain.AggregatesToSamples(aggregates)
+		if modelData, trainErr := domain.TrainNeuralModel(samples, domain.DefaultNeuralTrainerConfig()); trainErr != nil {
+			uc.logger.Warn("neural model training failed", "error", trainErr)
+		} else if writeErr := uc.modelStore.WriteNeuralModel(ctx, NeuralModelValkeyKey, modelData); writeErr != nil {
+			uc.logger.Warn("neural model write failed", "error", writeErr)
+		} else {
+			uc.logger.Info("neural model published", "key", NeuralModelValkeyKey, "samples", len(samples))
+		}
+	}
 
 	// Emit policy.computed for the batch.
 	if uc.publisher != nil && len(policies) > 0 {

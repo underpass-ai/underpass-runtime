@@ -58,7 +58,7 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 	cfg.WindowSize = *windowSize
-	lake, store, publisher, audit, cleanup, err := buildAdapters(cfg, logger)
+	lake, store, modelStore, publisher, audit, cleanup, err := buildAdapters(cfg, logger)
 	if err != nil {
 		return fmt.Errorf("build adapters: %w", err)
 	}
@@ -78,6 +78,7 @@ func run() error {
 	return execute(context.Background(), executeParams{
 		Lake:        lake,
 		Store:       store,
+		ModelStore:  modelStore,
 		Publisher:   publisher,
 		Audit:       audit,
 		Sampler:     sampler,
@@ -91,6 +92,7 @@ func run() error {
 type executeParams struct {
 	Lake        app.TelemetryLakeReader
 	Store       app.PolicyStore
+	ModelStore  app.NeuralModelStore
 	Publisher   app.PolicyEventPublisher
 	Audit       app.PolicyAuditStore
 	Sampler     app.PolicyComputer
@@ -106,6 +108,7 @@ func execute(parent context.Context, p executeParams) error {
 	uc := app.NewComputePolicyUseCase(app.ComputePolicyConfig{
 		Lake:        p.Lake,
 		Store:       p.Store,
+		ModelStore:  p.ModelStore,
 		Publisher:   p.Publisher,
 		Audit:       p.Audit,
 		Sampler:     p.Sampler,
@@ -243,6 +246,7 @@ func loadConfig(schedule string) (adapterConfig, error) {
 func buildAdapters(cfg adapterConfig, logger *slog.Logger) (
 	app.TelemetryLakeReader,
 	app.PolicyStore,
+	app.NeuralModelStore,
 	app.PolicyEventPublisher,
 	app.PolicyAuditStore,
 	func(),
@@ -250,21 +254,21 @@ func buildAdapters(cfg adapterConfig, logger *slog.Logger) (
 ) {
 	lake, err := duckdb.NewLakeReaderFromS3(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.LakeBucket, cfg.S3Region, cfg.S3UseSSL, cfg.WindowSize)
 	if err != nil {
-		return nil, nil, nil, nil, nil, fmt.Errorf("duckdb lake reader: %w", err)
+		return nil, nil, nil, nil, nil, nil, fmt.Errorf("duckdb lake reader: %w", err)
 	}
 	logger.Info(logAdapterReady, "adapter", "duckdb-lake-reader", "bucket", cfg.LakeBucket)
 
 	store, err := valkey.NewPolicyStoreFromAddress(context.Background(), cfg.ValkeyAddr, cfg.ValkeyPass, cfg.ValkeyDB, cfg.ValkeyPfx, cfg.ValkeyTTL, cfg.ValkeyTLS)
 	if err != nil {
 		_ = lake.Close()
-		return nil, nil, nil, nil, nil, fmt.Errorf("valkey policy store: %w", err)
+		return nil, nil, nil, nil, nil, nil, fmt.Errorf("valkey policy store: %w", err)
 	}
 	logger.Info(logAdapterReady, "adapter", "valkey-policy-store", "addr", cfg.ValkeyAddr)
 
 	pub, natsConn, err := natspub.NewPublisherFromURL(cfg.NATSURL, cfg.Schedule, cfg.NATSTLS)
 	if err != nil {
 		_ = lake.Close()
-		return nil, nil, nil, nil, nil, fmt.Errorf("nats publisher: %w", err)
+		return nil, nil, nil, nil, nil, nil, fmt.Errorf("nats publisher: %w", err)
 	}
 	logger.Info(logAdapterReady, "adapter", "nats-publisher", "url", cfg.NATSURL)
 
@@ -272,7 +276,7 @@ func buildAdapters(cfg adapterConfig, logger *slog.Logger) (
 	if err != nil {
 		_ = lake.Close()
 		natsConn.Close()
-		return nil, nil, nil, nil, nil, fmt.Errorf("s3 audit store: %w", err)
+		return nil, nil, nil, nil, nil, nil, fmt.Errorf("s3 audit store: %w", err)
 	}
 	logger.Info(logAdapterReady, "adapter", "s3-audit-store", "bucket", cfg.AuditBucket)
 
@@ -282,7 +286,7 @@ func buildAdapters(cfg adapterConfig, logger *slog.Logger) (
 		natsConn.Close()
 	}
 
-	return lake, store, pub, audit, cleanup, nil
+	return lake, store, store, pub, audit, cleanup, nil
 }
 
 // buildClientTLS builds a *tls.Config for outgoing connections.
