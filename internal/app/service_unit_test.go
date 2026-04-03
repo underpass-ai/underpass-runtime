@@ -985,3 +985,98 @@ func TestGetInvocation_HydratesOutputAndLogsFromArtifactRefs(t *testing.T) {
 		t.Fatalf("expected hydrated logs from artifact ref, got %#v", logs)
 	}
 }
+
+// ─── Deny telemetry with context signature ────────────────────────────────
+
+type capturingTelemetryRecorder struct {
+	records []TelemetryRecord
+}
+
+func (c *capturingTelemetryRecorder) Record(_ context.Context, rec TelemetryRecord) error {
+	c.records = append(c.records, rec)
+	return nil
+}
+
+func TestDenyInvocation_RecordsTelemetryWithContextSignature(t *testing.T) {
+	session := defaultSession()
+	capability := defaultCapability()
+
+	telRec := &capturingTelemetryRecorder{}
+	svc := newServiceForTest(
+		&fakeWorkspaceManager{session: session, found: true},
+		&fakeCatalog{entries: map[string]domain.Capability{capability.Name: capability}},
+		&fakePolicyEngine{decision: PolicyDecision{Allow: false, Reason: "risk too high"}},
+		&fakeToolEngine{},
+		&fakeArtifactStore{},
+	)
+	svc.SetTelemetry(telRec, noopTelemetryQuerier{})
+
+	inv, svcErr := svc.InvokeTool(context.Background(), session.ID, capability.Name, InvokeToolRequest{})
+	if svcErr == nil || svcErr.Code != ErrorCodePolicyDenied {
+		t.Fatalf("expected policy denied, got %#v", svcErr)
+	}
+	if inv.Status != domain.InvocationStatusDenied {
+		t.Fatalf("expected denied status, got %s", inv.Status)
+	}
+
+	if len(telRec.records) == 0 {
+		t.Fatal("expected telemetry record for denied invocation")
+	}
+	rec := telRec.records[0]
+	if rec.Status != string(domain.InvocationStatusDenied) {
+		t.Fatalf("expected denied status in telemetry, got %s", rec.Status)
+	}
+	if rec.ContextSig == "" {
+		t.Fatal("expected non-empty context signature in denied telemetry record")
+	}
+	if rec.ToolName != capability.Name {
+		t.Fatalf("expected tool %s, got %s", capability.Name, rec.ToolName)
+	}
+	if rec.Approved {
+		t.Fatal("expected Approved=false for denied invocation")
+	}
+}
+
+func TestDenyInvocation_RateLimit_RecordsTelemetry(t *testing.T) {
+	t.Setenv("WORKSPACE_RATE_LIMIT_PER_MINUTE", "1")
+
+	session := defaultSession()
+	capability := defaultCapability()
+
+	telRec := &capturingTelemetryRecorder{}
+	svc := newServiceForTest(
+		&fakeWorkspaceManager{session: session, found: true},
+		&fakeCatalog{entries: map[string]domain.Capability{capability.Name: capability}},
+		&fakePolicyEngine{decision: PolicyDecision{Allow: true}},
+		&fakeToolEngine{result: ToolRunResult{Output: map[string]any{"ok": true}}},
+		&fakeArtifactStore{},
+	)
+	svc.SetTelemetry(telRec, noopTelemetryQuerier{})
+
+	// First invocation succeeds
+	_, err := svc.InvokeTool(context.Background(), session.ID, capability.Name, InvokeToolRequest{Args: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatalf("first invocation should succeed: %v", err)
+	}
+
+	// Second invocation denied by rate limit
+	inv, err := svc.InvokeTool(context.Background(), session.ID, capability.Name, InvokeToolRequest{Args: json.RawMessage(`{}`)})
+	if err == nil || err.Code != ErrorCodePolicyDenied {
+		t.Fatalf("expected rate-limit denial, got %#v", err)
+	}
+	if inv.Status != domain.InvocationStatusDenied {
+		t.Fatalf("expected denied, got %s", inv.Status)
+	}
+
+	// Should have 2 telemetry records: 1 success + 1 denied
+	if len(telRec.records) < 2 {
+		t.Fatalf("expected at least 2 telemetry records, got %d", len(telRec.records))
+	}
+	denied := telRec.records[len(telRec.records)-1]
+	if denied.Status != string(domain.InvocationStatusDenied) {
+		t.Fatalf("expected denied in last record, got %s", denied.Status)
+	}
+	if denied.ContextSig == "" {
+		t.Fatal("expected context signature in rate-limited denial telemetry")
+	}
+}

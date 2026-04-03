@@ -523,6 +523,7 @@ func (s *Service) denyInvocation(ctx context.Context, invocation domain.Invocati
 	invocation = s.finishWithError(invocation, startedAt, domErr)
 	_ = s.storeInvocation(ctx, invocation)
 	s.audit.Record(ctx, auditEventFromInvocation(session, invocation))
+	s.recordTelemetry(ctx, session, invocation, ToolRunResult{})
 	s.publishEvent(ctx, domain.EventInvocationDenied, session, domain.InvocationDeniedPayload{
 		InvocationID:  invocation.ID,
 		ToolName:      invocation.ToolName,
