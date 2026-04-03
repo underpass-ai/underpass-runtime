@@ -360,3 +360,43 @@ func (f *fakePolicyReader) ReadPoliciesForContext(_ context.Context, _ string) (
 	}
 	return f.policies, f.err
 }
+
+// ─── Agent Feedback Loop ──────────────────────────────────────────────────
+
+func TestAcceptRecommendation(t *testing.T) {
+	svc, eventPub := makeEvidenceService()
+
+	eventID, svcErr := svc.AcceptRecommendation(context.Background(), testSessionID, "rec-1", "fs.read_file")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+	if eventID == "" {
+		t.Fatal("expected non-empty event ID")
+	}
+	if len(eventPub.events) == 0 {
+		t.Fatal("expected event published")
+	}
+	last := eventPub.events[len(eventPub.events)-1]
+	if last.Type != domain.EventRecommendationAccepted {
+		t.Fatalf("expected %s, got %s", domain.EventRecommendationAccepted, last.Type)
+	}
+}
+
+func TestRejectRecommendation(t *testing.T) {
+	svc, eventPub := makeEvidenceService()
+
+	eventID, svcErr := svc.RejectRecommendation(context.Background(), testSessionID, "rec-1", "tool didn't help")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+	if eventID == "" {
+		t.Fatal("expected non-empty event ID")
+	}
+	if len(eventPub.events) == 0 {
+		t.Fatal("expected event published")
+	}
+	last := eventPub.events[len(eventPub.events)-1]
+	if last.Type != domain.EventRecommendationRejected {
+		t.Fatalf("expected %s, got %s", domain.EventRecommendationRejected, last.Type)
+	}
+}

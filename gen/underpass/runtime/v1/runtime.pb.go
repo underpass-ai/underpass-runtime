@@ -3220,6 +3220,214 @@ func (x *CheckResponse) GetStatus() string {
 	return ""
 }
 
+type AcceptRecommendationRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	SessionId        string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	RecommendationId string                 `protobuf:"bytes,2,opt,name=recommendation_id,json=recommendationId,proto3" json:"recommendation_id,omitempty"`
+	SelectedToolId   string                 `protobuf:"bytes,3,opt,name=selected_tool_id,json=selectedToolId,proto3" json:"selected_tool_id,omitempty"` // which recommended tool the agent used
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AcceptRecommendationRequest) Reset() {
+	*x = AcceptRecommendationRequest{}
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptRecommendationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptRecommendationRequest) ProtoMessage() {}
+
+func (x *AcceptRecommendationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptRecommendationRequest.ProtoReflect.Descriptor instead.
+func (*AcceptRecommendationRequest) Descriptor() ([]byte, []int) {
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *AcceptRecommendationRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *AcceptRecommendationRequest) GetRecommendationId() string {
+	if x != nil {
+		return x.RecommendationId
+	}
+	return ""
+}
+
+func (x *AcceptRecommendationRequest) GetSelectedToolId() string {
+	if x != nil {
+		return x.SelectedToolId
+	}
+	return ""
+}
+
+type AcceptRecommendationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptRecommendationResponse) Reset() {
+	*x = AcceptRecommendationResponse{}
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptRecommendationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptRecommendationResponse) ProtoMessage() {}
+
+func (x *AcceptRecommendationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptRecommendationResponse.ProtoReflect.Descriptor instead.
+func (*AcceptRecommendationResponse) Descriptor() ([]byte, []int) {
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *AcceptRecommendationResponse) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+type RejectRecommendationRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	SessionId        string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	RecommendationId string                 `protobuf:"bytes,2,opt,name=recommendation_id,json=recommendationId,proto3" json:"recommendation_id,omitempty"`
+	Reason           string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"` // why the agent skipped the recommendation
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RejectRecommendationRequest) Reset() {
+	*x = RejectRecommendationRequest{}
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RejectRecommendationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RejectRecommendationRequest) ProtoMessage() {}
+
+func (x *RejectRecommendationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RejectRecommendationRequest.ProtoReflect.Descriptor instead.
+func (*RejectRecommendationRequest) Descriptor() ([]byte, []int) {
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *RejectRecommendationRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *RejectRecommendationRequest) GetRecommendationId() string {
+	if x != nil {
+		return x.RecommendationId
+	}
+	return ""
+}
+
+func (x *RejectRecommendationRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type RejectRecommendationResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RejectRecommendationResponse) Reset() {
+	*x = RejectRecommendationResponse{}
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RejectRecommendationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RejectRecommendationResponse) ProtoMessage() {}
+
+func (x *RejectRecommendationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RejectRecommendationResponse.ProtoReflect.Descriptor instead.
+func (*RejectRecommendationResponse) Descriptor() ([]byte, []int) {
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *RejectRecommendationResponse) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
 var File_underpass_runtime_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_underpass_runtime_v1_runtime_proto_rawDesc = "" +
@@ -3471,7 +3679,21 @@ const file_underpass_runtime_v1_runtime_proto_rawDesc = "" +
 	"\tartifacts\x18\x01 \x03(\v2\x1e.underpass.runtime.v1.ArtifactR\tartifacts\"\x0e\n" +
 	"\fCheckRequest\"'\n" +
 	"\rCheckResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status*y\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"\x93\x01\n" +
+	"\x1bAcceptRecommendationRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12+\n" +
+	"\x11recommendation_id\x18\x02 \x01(\tR\x10recommendationId\x12(\n" +
+	"\x10selected_tool_id\x18\x03 \x01(\tR\x0eselectedToolId\"9\n" +
+	"\x1cAcceptRecommendationResponse\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\"\x81\x01\n" +
+	"\x1bRejectRecommendationRequest\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12+\n" +
+	"\x11recommendation_id\x18\x02 \x01(\tR\x10recommendationId\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"9\n" +
+	"\x1cRejectRecommendationResponse\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId*y\n" +
 	"\vRuntimeKind\x12\x1c\n" +
 	"\x18RUNTIME_KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12RUNTIME_KIND_LOCAL\x10\x01\x12\x17\n" +
@@ -3511,11 +3733,13 @@ const file_underpass_runtime_v1_runtime_proto_rawDesc = "" +
 	"\x15DISCOVERY_DETAIL_FULL\x10\x022\xe1\x01\n" +
 	"\x0eSessionService\x12h\n" +
 	"\rCreateSession\x12*.underpass.runtime.v1.CreateSessionRequest\x1a+.underpass.runtime.v1.CreateSessionResponse\x12e\n" +
-	"\fCloseSession\x12).underpass.runtime.v1.CloseSessionRequest\x1a*.underpass.runtime.v1.CloseSessionResponse2\xcf\x02\n" +
+	"\fCloseSession\x12).underpass.runtime.v1.CloseSessionRequest\x1a*.underpass.runtime.v1.CloseSessionResponse2\xcd\x04\n" +
 	"\x18CapabilityCatalogService\x12\\\n" +
 	"\tListTools\x12&.underpass.runtime.v1.ListToolsRequest\x1a'.underpass.runtime.v1.ListToolsResponse\x12h\n" +
 	"\rDiscoverTools\x12*.underpass.runtime.v1.DiscoverToolsRequest\x1a+.underpass.runtime.v1.DiscoverToolsResponse\x12k\n" +
-	"\x0eRecommendTools\x12+.underpass.runtime.v1.RecommendToolsRequest\x1a,.underpass.runtime.v1.RecommendToolsResponse2\xda\x03\n" +
+	"\x0eRecommendTools\x12+.underpass.runtime.v1.RecommendToolsRequest\x1a,.underpass.runtime.v1.RecommendToolsResponse\x12}\n" +
+	"\x14AcceptRecommendation\x121.underpass.runtime.v1.AcceptRecommendationRequest\x1a2.underpass.runtime.v1.AcceptRecommendationResponse\x12}\n" +
+	"\x14RejectRecommendation\x121.underpass.runtime.v1.RejectRecommendationRequest\x1a2.underpass.runtime.v1.RejectRecommendationResponse2\xda\x03\n" +
 	"\x11InvocationService\x12_\n" +
 	"\n" +
 	"InvokeTool\x12'.underpass.runtime.v1.InvokeToolRequest\x1a(.underpass.runtime.v1.InvokeToolResponse\x12h\n" +
@@ -3538,7 +3762,7 @@ func file_underpass_runtime_v1_runtime_proto_rawDescGZIP() []byte {
 }
 
 var file_underpass_runtime_v1_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_underpass_runtime_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
+var file_underpass_runtime_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_underpass_runtime_v1_runtime_proto_goTypes = []any{
 	(RuntimeKind)(0),                       // 0: underpass.runtime.v1.RuntimeKind
 	(InvocationStatus)(0),                  // 1: underpass.runtime.v1.InvocationStatus
@@ -3587,19 +3811,23 @@ var file_underpass_runtime_v1_runtime_proto_goTypes = []any{
 	(*GetInvocationArtifactsResponse)(nil), // 44: underpass.runtime.v1.GetInvocationArtifactsResponse
 	(*CheckRequest)(nil),                   // 45: underpass.runtime.v1.CheckRequest
 	(*CheckResponse)(nil),                  // 46: underpass.runtime.v1.CheckResponse
-	nil,                                    // 47: underpass.runtime.v1.Session.MetadataEntry
-	nil,                                    // 48: underpass.runtime.v1.CreateSessionRequest.MetadataEntry
-	(*timestamppb.Timestamp)(nil),          // 49: google.protobuf.Timestamp
-	(*structpb.Value)(nil),                 // 50: google.protobuf.Value
-	(*structpb.Struct)(nil),                // 51: google.protobuf.Struct
+	(*AcceptRecommendationRequest)(nil),    // 47: underpass.runtime.v1.AcceptRecommendationRequest
+	(*AcceptRecommendationResponse)(nil),   // 48: underpass.runtime.v1.AcceptRecommendationResponse
+	(*RejectRecommendationRequest)(nil),    // 49: underpass.runtime.v1.RejectRecommendationRequest
+	(*RejectRecommendationResponse)(nil),   // 50: underpass.runtime.v1.RejectRecommendationResponse
+	nil,                                    // 51: underpass.runtime.v1.Session.MetadataEntry
+	nil,                                    // 52: underpass.runtime.v1.CreateSessionRequest.MetadataEntry
+	(*timestamppb.Timestamp)(nil),          // 53: google.protobuf.Timestamp
+	(*structpb.Value)(nil),                 // 54: google.protobuf.Value
+	(*structpb.Struct)(nil),                // 55: google.protobuf.Struct
 }
 var file_underpass_runtime_v1_runtime_proto_depIdxs = []int32{
 	0,  // 0: underpass.runtime.v1.RuntimeRef.kind:type_name -> underpass.runtime.v1.RuntimeKind
 	8,  // 1: underpass.runtime.v1.Session.runtime:type_name -> underpass.runtime.v1.RuntimeRef
 	7,  // 2: underpass.runtime.v1.Session.principal:type_name -> underpass.runtime.v1.Principal
-	47, // 3: underpass.runtime.v1.Session.metadata:type_name -> underpass.runtime.v1.Session.MetadataEntry
-	49, // 4: underpass.runtime.v1.Session.created_at:type_name -> google.protobuf.Timestamp
-	49, // 5: underpass.runtime.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
+	51, // 3: underpass.runtime.v1.Session.metadata:type_name -> underpass.runtime.v1.Session.MetadataEntry
+	53, // 4: underpass.runtime.v1.Session.created_at:type_name -> google.protobuf.Timestamp
+	53, // 5: underpass.runtime.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
 	12, // 6: underpass.runtime.v1.PolicyMetadata.path_fields:type_name -> underpass.runtime.v1.PathField
 	13, // 7: underpass.runtime.v1.PolicyMetadata.arg_fields:type_name -> underpass.runtime.v1.ArgField
 	14, // 8: underpass.runtime.v1.PolicyMetadata.profile_fields:type_name -> underpass.runtime.v1.SimpleField
@@ -3616,17 +3844,17 @@ var file_underpass_runtime_v1_runtime_proto_depIdxs = []int32{
 	15, // 19: underpass.runtime.v1.Tool.observability:type_name -> underpass.runtime.v1.Observability
 	16, // 20: underpass.runtime.v1.FullTool.tool:type_name -> underpass.runtime.v1.Tool
 	18, // 21: underpass.runtime.v1.FullTool.stats:type_name -> underpass.runtime.v1.ToolStats
-	49, // 22: underpass.runtime.v1.LogLine.at:type_name -> google.protobuf.Timestamp
-	49, // 23: underpass.runtime.v1.Artifact.created_at:type_name -> google.protobuf.Timestamp
+	53, // 22: underpass.runtime.v1.LogLine.at:type_name -> google.protobuf.Timestamp
+	53, // 23: underpass.runtime.v1.Artifact.created_at:type_name -> google.protobuf.Timestamp
 	1,  // 24: underpass.runtime.v1.Invocation.status:type_name -> underpass.runtime.v1.InvocationStatus
-	49, // 25: underpass.runtime.v1.Invocation.started_at:type_name -> google.protobuf.Timestamp
-	49, // 26: underpass.runtime.v1.Invocation.completed_at:type_name -> google.protobuf.Timestamp
-	50, // 27: underpass.runtime.v1.Invocation.output:type_name -> google.protobuf.Value
+	53, // 25: underpass.runtime.v1.Invocation.started_at:type_name -> google.protobuf.Timestamp
+	53, // 26: underpass.runtime.v1.Invocation.completed_at:type_name -> google.protobuf.Timestamp
+	54, // 27: underpass.runtime.v1.Invocation.output:type_name -> google.protobuf.Value
 	21, // 28: underpass.runtime.v1.Invocation.logs:type_name -> underpass.runtime.v1.LogLine
 	22, // 29: underpass.runtime.v1.Invocation.artifacts:type_name -> underpass.runtime.v1.Artifact
 	20, // 30: underpass.runtime.v1.Invocation.error:type_name -> underpass.runtime.v1.Error
 	7,  // 31: underpass.runtime.v1.CreateSessionRequest.principal:type_name -> underpass.runtime.v1.Principal
-	48, // 32: underpass.runtime.v1.CreateSessionRequest.metadata:type_name -> underpass.runtime.v1.CreateSessionRequest.MetadataEntry
+	52, // 32: underpass.runtime.v1.CreateSessionRequest.metadata:type_name -> underpass.runtime.v1.CreateSessionRequest.MetadataEntry
 	9,  // 33: underpass.runtime.v1.CreateSessionResponse.session:type_name -> underpass.runtime.v1.Session
 	16, // 34: underpass.runtime.v1.ListToolsResponse.tools:type_name -> underpass.runtime.v1.Tool
 	6,  // 35: underpass.runtime.v1.DiscoverToolsRequest.detail:type_name -> underpass.runtime.v1.DiscoveryDetail
@@ -3635,7 +3863,7 @@ var file_underpass_runtime_v1_runtime_proto_depIdxs = []int32{
 	17, // 38: underpass.runtime.v1.CompactToolList.tools:type_name -> underpass.runtime.v1.CompactTool
 	19, // 39: underpass.runtime.v1.FullToolList.tools:type_name -> underpass.runtime.v1.FullTool
 	24, // 40: underpass.runtime.v1.RecommendToolsResponse.recommendations:type_name -> underpass.runtime.v1.Recommendation
-	51, // 41: underpass.runtime.v1.InvokeToolRequest.args:type_name -> google.protobuf.Struct
+	55, // 41: underpass.runtime.v1.InvokeToolRequest.args:type_name -> google.protobuf.Struct
 	23, // 42: underpass.runtime.v1.InvokeToolResponse.invocation:type_name -> underpass.runtime.v1.Invocation
 	23, // 43: underpass.runtime.v1.GetInvocationResponse.invocation:type_name -> underpass.runtime.v1.Invocation
 	21, // 44: underpass.runtime.v1.GetInvocationLogsResponse.logs:type_name -> underpass.runtime.v1.LogLine
@@ -3645,23 +3873,27 @@ var file_underpass_runtime_v1_runtime_proto_depIdxs = []int32{
 	29, // 48: underpass.runtime.v1.CapabilityCatalogService.ListTools:input_type -> underpass.runtime.v1.ListToolsRequest
 	31, // 49: underpass.runtime.v1.CapabilityCatalogService.DiscoverTools:input_type -> underpass.runtime.v1.DiscoverToolsRequest
 	35, // 50: underpass.runtime.v1.CapabilityCatalogService.RecommendTools:input_type -> underpass.runtime.v1.RecommendToolsRequest
-	37, // 51: underpass.runtime.v1.InvocationService.InvokeTool:input_type -> underpass.runtime.v1.InvokeToolRequest
-	39, // 52: underpass.runtime.v1.InvocationService.GetInvocation:input_type -> underpass.runtime.v1.GetInvocationRequest
-	41, // 53: underpass.runtime.v1.InvocationService.GetInvocationLogs:input_type -> underpass.runtime.v1.GetInvocationLogsRequest
-	43, // 54: underpass.runtime.v1.InvocationService.GetInvocationArtifacts:input_type -> underpass.runtime.v1.GetInvocationArtifactsRequest
-	45, // 55: underpass.runtime.v1.HealthService.Check:input_type -> underpass.runtime.v1.CheckRequest
-	26, // 56: underpass.runtime.v1.SessionService.CreateSession:output_type -> underpass.runtime.v1.CreateSessionResponse
-	28, // 57: underpass.runtime.v1.SessionService.CloseSession:output_type -> underpass.runtime.v1.CloseSessionResponse
-	30, // 58: underpass.runtime.v1.CapabilityCatalogService.ListTools:output_type -> underpass.runtime.v1.ListToolsResponse
-	32, // 59: underpass.runtime.v1.CapabilityCatalogService.DiscoverTools:output_type -> underpass.runtime.v1.DiscoverToolsResponse
-	36, // 60: underpass.runtime.v1.CapabilityCatalogService.RecommendTools:output_type -> underpass.runtime.v1.RecommendToolsResponse
-	38, // 61: underpass.runtime.v1.InvocationService.InvokeTool:output_type -> underpass.runtime.v1.InvokeToolResponse
-	40, // 62: underpass.runtime.v1.InvocationService.GetInvocation:output_type -> underpass.runtime.v1.GetInvocationResponse
-	42, // 63: underpass.runtime.v1.InvocationService.GetInvocationLogs:output_type -> underpass.runtime.v1.GetInvocationLogsResponse
-	44, // 64: underpass.runtime.v1.InvocationService.GetInvocationArtifacts:output_type -> underpass.runtime.v1.GetInvocationArtifactsResponse
-	46, // 65: underpass.runtime.v1.HealthService.Check:output_type -> underpass.runtime.v1.CheckResponse
-	56, // [56:66] is the sub-list for method output_type
-	46, // [46:56] is the sub-list for method input_type
+	47, // 51: underpass.runtime.v1.CapabilityCatalogService.AcceptRecommendation:input_type -> underpass.runtime.v1.AcceptRecommendationRequest
+	49, // 52: underpass.runtime.v1.CapabilityCatalogService.RejectRecommendation:input_type -> underpass.runtime.v1.RejectRecommendationRequest
+	37, // 53: underpass.runtime.v1.InvocationService.InvokeTool:input_type -> underpass.runtime.v1.InvokeToolRequest
+	39, // 54: underpass.runtime.v1.InvocationService.GetInvocation:input_type -> underpass.runtime.v1.GetInvocationRequest
+	41, // 55: underpass.runtime.v1.InvocationService.GetInvocationLogs:input_type -> underpass.runtime.v1.GetInvocationLogsRequest
+	43, // 56: underpass.runtime.v1.InvocationService.GetInvocationArtifacts:input_type -> underpass.runtime.v1.GetInvocationArtifactsRequest
+	45, // 57: underpass.runtime.v1.HealthService.Check:input_type -> underpass.runtime.v1.CheckRequest
+	26, // 58: underpass.runtime.v1.SessionService.CreateSession:output_type -> underpass.runtime.v1.CreateSessionResponse
+	28, // 59: underpass.runtime.v1.SessionService.CloseSession:output_type -> underpass.runtime.v1.CloseSessionResponse
+	30, // 60: underpass.runtime.v1.CapabilityCatalogService.ListTools:output_type -> underpass.runtime.v1.ListToolsResponse
+	32, // 61: underpass.runtime.v1.CapabilityCatalogService.DiscoverTools:output_type -> underpass.runtime.v1.DiscoverToolsResponse
+	36, // 62: underpass.runtime.v1.CapabilityCatalogService.RecommendTools:output_type -> underpass.runtime.v1.RecommendToolsResponse
+	48, // 63: underpass.runtime.v1.CapabilityCatalogService.AcceptRecommendation:output_type -> underpass.runtime.v1.AcceptRecommendationResponse
+	50, // 64: underpass.runtime.v1.CapabilityCatalogService.RejectRecommendation:output_type -> underpass.runtime.v1.RejectRecommendationResponse
+	38, // 65: underpass.runtime.v1.InvocationService.InvokeTool:output_type -> underpass.runtime.v1.InvokeToolResponse
+	40, // 66: underpass.runtime.v1.InvocationService.GetInvocation:output_type -> underpass.runtime.v1.GetInvocationResponse
+	42, // 67: underpass.runtime.v1.InvocationService.GetInvocationLogs:output_type -> underpass.runtime.v1.GetInvocationLogsResponse
+	44, // 68: underpass.runtime.v1.InvocationService.GetInvocationArtifacts:output_type -> underpass.runtime.v1.GetInvocationArtifactsResponse
+	46, // 69: underpass.runtime.v1.HealthService.Check:output_type -> underpass.runtime.v1.CheckResponse
+	58, // [58:70] is the sub-list for method output_type
+	46, // [46:58] is the sub-list for method input_type
 	46, // [46:46] is the sub-list for extension type_name
 	46, // [46:46] is the sub-list for extension extendee
 	0,  // [0:46] is the sub-list for field type_name
@@ -3682,7 +3914,7 @@ func file_underpass_runtime_v1_runtime_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_underpass_runtime_v1_runtime_proto_rawDesc), len(file_underpass_runtime_v1_runtime_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   42,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   4,
 		},

@@ -72,6 +72,12 @@ func (f *fakeService) GetRecommendationDecision(_ context.Context, _ string) (do
 func (f *fakeService) GetEvidenceBundle(_ context.Context, _ string) (app.EvidenceBundle, *app.ServiceError) {
 	return app.EvidenceBundle{}, f.svcErr
 }
+func (f *fakeService) AcceptRecommendation(_ context.Context, _, _, _ string) (string, *app.ServiceError) {
+	return "evt-accept", f.svcErr
+}
+func (f *fakeService) RejectRecommendation(_ context.Context, _, _, _ string) (string, *app.ServiceError) {
+	return "evt-reject", f.svcErr
+}
 func (f *fakeService) PrometheusMetrics() string { return "" }
 
 func newTestServer(fake *fakeService) *Server {

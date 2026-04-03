@@ -26,6 +26,8 @@ type WorkspaceService interface {
 	GetInvocationArtifacts(ctx context.Context, invocationID string) ([]domain.Artifact, *app.ServiceError)
 	ValidateSessionAccess(ctx context.Context, sessionID string, principal domain.Principal) *app.ServiceError
 	ValidateInvocationAccess(ctx context.Context, invocationID string, principal domain.Principal) *app.ServiceError
+	AcceptRecommendation(ctx context.Context, sessionID, recommendationID, selectedToolID string) (string, *app.ServiceError)
+	RejectRecommendation(ctx context.Context, sessionID, recommendationID, reason string) (string, *app.ServiceError)
 }
 
 // Server implements the four gRPC services defined in runtime.proto.
@@ -151,6 +153,28 @@ func (s *Server) RecommendTools(ctx context.Context, req *pb.RecommendToolsReque
 		resp.Recommendations = append(resp.Recommendations, recommendationToProto(r))
 	}
 	return resp, nil
+}
+
+func (s *Server) AcceptRecommendation(ctx context.Context, req *pb.AcceptRecommendationRequest) (*pb.AcceptRecommendationResponse, error) {
+	if err := s.validateSessionAuth(ctx, req.GetSessionId()); err != nil {
+		return nil, err
+	}
+	eventID, svcErr := s.service.AcceptRecommendation(ctx, req.GetSessionId(), req.GetRecommendationId(), req.GetSelectedToolId())
+	if svcErr != nil {
+		return nil, serviceErrorToStatus(svcErr)
+	}
+	return &pb.AcceptRecommendationResponse{EventId: eventID}, nil
+}
+
+func (s *Server) RejectRecommendation(ctx context.Context, req *pb.RejectRecommendationRequest) (*pb.RejectRecommendationResponse, error) {
+	if err := s.validateSessionAuth(ctx, req.GetSessionId()); err != nil {
+		return nil, err
+	}
+	eventID, svcErr := s.service.RejectRecommendation(ctx, req.GetSessionId(), req.GetRecommendationId(), req.GetReason())
+	if svcErr != nil {
+		return nil, serviceErrorToStatus(svcErr)
+	}
+	return &pb.RejectRecommendationResponse{EventId: eventID}, nil
 }
 
 // ─── InvocationService ──────────────────────────────────────────────────────

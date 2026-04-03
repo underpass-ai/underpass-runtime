@@ -33,6 +33,12 @@ service CapabilityCatalogService {
 
   // RecommendTools returns scored tool recommendations for a given task.
   rpc RecommendTools(RecommendToolsRequest) returns (RecommendToolsResponse);
+
+  // AcceptRecommendation records that an agent used a recommended tool and it solved the task.
+  rpc AcceptRecommendation(AcceptRecommendationRequest) returns (AcceptRecommendationResponse);
+
+  // RejectRecommendation records that an agent skipped a recommendation (tool didn't help or was wrong).
+  rpc RejectRecommendation(RejectRecommendationRequest) returns (RejectRecommendationResponse);
 }
 
 // InvocationService handles governed tool execution and result retrieval.
@@ -422,4 +428,26 @@ message CheckRequest {}
 
 message CheckResponse {
   string status = 1;
+}
+
+// ── Agent Feedback ──────────────────────────────────────────────────────
+
+message AcceptRecommendationRequest {
+  string session_id        = 1;
+  string recommendation_id = 2;
+  string selected_tool_id  = 3;  // which recommended tool the agent used
+}
+
+message AcceptRecommendationResponse {
+  string event_id = 1;
+}
+
+message RejectRecommendationRequest {
+  string session_id        = 1;
+  string recommendation_id = 2;
+  string reason            = 3;  // why the agent skipped the recommendation
+}
+
+message RejectRecommendationResponse {
+  string event_id = 1;
 }

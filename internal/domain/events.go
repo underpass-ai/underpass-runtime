@@ -9,13 +9,15 @@ import (
 type EventType string
 
 const (
-	EventSessionCreated        EventType = "workspace.session.created"
-	EventSessionClosed         EventType = "workspace.session.closed"
-	EventInvocationStarted     EventType = "workspace.invocation.started"
-	EventInvocationCompleted   EventType = "workspace.invocation.completed"
-	EventInvocationDenied      EventType = "workspace.invocation.denied"
-	EventArtifactStored        EventType = "workspace.artifact.stored"
-	EventRecommendationEmitted EventType = "runtime.learning.recommendation.emitted"
+	EventSessionCreated         EventType = "workspace.session.created"
+	EventSessionClosed          EventType = "workspace.session.closed"
+	EventInvocationStarted      EventType = "workspace.invocation.started"
+	EventInvocationCompleted    EventType = "workspace.invocation.completed"
+	EventInvocationDenied       EventType = "workspace.invocation.denied"
+	EventArtifactStored         EventType = "workspace.artifact.stored"
+	EventRecommendationEmitted  EventType = "runtime.learning.recommendation.emitted"
+	EventRecommendationAccepted EventType = "runtime.learning.recommendation.accepted"
+	EventRecommendationRejected EventType = "runtime.learning.recommendation.rejected"
 
 	// Learning pipeline events (emitted by tool-learning service, consumed by runtime).
 	EventPolicyRunStarted   EventType = "tool_learning.run.started"
@@ -115,6 +117,18 @@ type RecommendationEmittedPayload struct {
 	AlgorithmVersion string           `json:"algorithm_version"`
 	PolicyMode       string           `json:"policy_mode"`
 	Tools            []RankedToolFact `json:"tools"`
+}
+
+// RecommendationAcceptedPayload is the payload for EventRecommendationAccepted.
+type RecommendationAcceptedPayload struct {
+	RecommendationID string `json:"recommendation_id"`
+	SelectedToolID   string `json:"selected_tool_id"`
+}
+
+// RecommendationRejectedPayload is the payload for EventRecommendationRejected.
+type RecommendationRejectedPayload struct {
+	RecommendationID string `json:"recommendation_id"`
+	Reason           string `json:"reason"`
 }
 
 // NewDomainEvent constructs a DomainEvent with a typed payload.
