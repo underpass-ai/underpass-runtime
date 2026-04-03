@@ -61,6 +61,11 @@ type RealClock struct{}
 
 func (RealClock) Now() time.Time { return time.Now() }
 
+// NeuralModelStore writes trained neural model weights to Valkey.
+type NeuralModelStore interface {
+	WriteNeuralModel(ctx context.Context, key string, data []byte) error
+}
+
 // PolicyComputer computes tool policies from aggregate telemetry.
 // Implementations: domain.ThompsonSampler, domain.ThompsonSamplerLLM.
 type PolicyComputer interface {
