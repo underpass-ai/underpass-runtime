@@ -143,7 +143,7 @@ func recommendationDecisionToProto(d domain.RecommendationDecision) *lpb.Recomme
 	case app.DecisionSourceThompson:
 		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_LEARNED_POLICY_TS
 	case app.DecisionSourceNeuralTS:
-		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_CONTEXTUAL_BANDIT_HYLINUCB
+		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_NEURAL_TS
 	}
 
 	switch d.PolicyMode {
@@ -151,9 +151,9 @@ func recommendationDecisionToProto(d domain.RecommendationDecision) *lpb.Recomme
 		proto.PolicyMode = lpb.PolicyMode_POLICY_MODE_NONE
 	case app.PolicyModeShadow:
 		proto.PolicyMode = lpb.PolicyMode_POLICY_MODE_SHADOW
-	case "assist":
+	case app.PolicyModeAssist:
 		proto.PolicyMode = lpb.PolicyMode_POLICY_MODE_ASSIST
-	case "enforced":
+	case app.PolicyModeEnforced:
 		proto.PolicyMode = lpb.PolicyMode_POLICY_MODE_ENFORCED
 	}
 

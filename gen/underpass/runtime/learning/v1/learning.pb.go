@@ -34,6 +34,7 @@ const (
 	DecisionSource_DECISION_SOURCE_LEARNED_POLICY_TSLLM       DecisionSource = 5
 	DecisionSource_DECISION_SOURCE_CONTEXTUAL_BANDIT_HYLINUCB DecisionSource = 6
 	DecisionSource_DECISION_SOURCE_HYBRID                     DecisionSource = 7
+	DecisionSource_DECISION_SOURCE_NEURAL_TS                  DecisionSource = 8
 )
 
 // Enum value maps for DecisionSource.
@@ -47,6 +48,7 @@ var (
 		5: "DECISION_SOURCE_LEARNED_POLICY_TSLLM",
 		6: "DECISION_SOURCE_CONTEXTUAL_BANDIT_HYLINUCB",
 		7: "DECISION_SOURCE_HYBRID",
+		8: "DECISION_SOURCE_NEURAL_TS",
 	}
 	DecisionSource_value = map[string]int32{
 		"DECISION_SOURCE_UNSPECIFIED":                0,
@@ -57,6 +59,7 @@ var (
 		"DECISION_SOURCE_LEARNED_POLICY_TSLLM":       5,
 		"DECISION_SOURCE_CONTEXTUAL_BANDIT_HYLINUCB": 6,
 		"DECISION_SOURCE_HYBRID":                     7,
+		"DECISION_SOURCE_NEURAL_TS":                  8,
 	}
 )
 
@@ -3251,7 +3254,7 @@ const file_underpass_runtime_learning_v1_learning_proto_rawDesc = "" +
 	"\x14GetAggregateResponse\x12O\n" +
 	"\taggregate\x18\x01 \x01(\v21.underpass.runtime.learning.v1.TelemetryAggregateR\taggregate\"b\n" +
 	"\x19GetEvidenceBundleResponse\x12E\n" +
-	"\x06bundle\x18\x01 \x01(\v2-.underpass.runtime.learning.v1.EvidenceBundleR\x06bundle*\xc9\x02\n" +
+	"\x06bundle\x18\x01 \x01(\v2-.underpass.runtime.learning.v1.EvidenceBundleR\x06bundle*\xe8\x02\n" +
 	"\x0eDecisionSource\x12\x1f\n" +
 	"\x1bDECISION_SOURCE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eDECISION_SOURCE_HEURISTIC_ONLY\x10\x01\x12,\n" +
@@ -3260,7 +3263,8 @@ const file_underpass_runtime_learning_v1_learning_proto_rawDesc = "" +
 	"#DECISION_SOURCE_LEARNED_POLICY_SWTS\x10\x04\x12(\n" +
 	"$DECISION_SOURCE_LEARNED_POLICY_TSLLM\x10\x05\x12.\n" +
 	"*DECISION_SOURCE_CONTEXTUAL_BANDIT_HYLINUCB\x10\x06\x12\x1a\n" +
-	"\x16DECISION_SOURCE_HYBRID\x10\a*\x89\x01\n" +
+	"\x16DECISION_SOURCE_HYBRID\x10\a\x12\x1d\n" +
+	"\x19DECISION_SOURCE_NEURAL_TS\x10\b*\x89\x01\n" +
 	"\n" +
 	"PolicyMode\x12\x1b\n" +
 	"\x17POLICY_MODE_UNSPECIFIED\x10\x00\x12\x14\n" +
