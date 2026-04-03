@@ -7,18 +7,18 @@ appVersion: "0.1.0"
 
 dependencies:
   - name: kube-prometheus-stack
-    version: "72.6.2"
+    version: "82.16.2"
     repository: https://prometheus-community.github.io/helm-charts
     condition: prometheus.enabled
   - name: loki
-    version: "6.29.0"
+    version: "6.55.0"
     repository: https://grafana.github.io/helm-charts
     condition: loki.enabled
   - name: promtail
-    version: "6.16.6"
+    version: "6.17.1"
     repository: https://grafana.github.io/helm-charts
     condition: promtail.enabled
   - name: opentelemetry-collector
-    version: "0.121.2"
+    version: "0.147.1"
     repository: https://open-telemetry.github.io/opentelemetry-helm-charts
     condition: otelCollector.enabled

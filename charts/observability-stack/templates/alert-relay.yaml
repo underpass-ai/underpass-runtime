@@ -1,0 +1,96 @@
+{{- if .Values.alertRelay.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-relay
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alert-relay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: alert-relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: alert-relay
+    spec:
+      containers:
+        - name: alert-relay
+          image: "{{ .Values.alertRelay.image.repository }}:{{ .Values.alertRelay.image.tag }}"
+          imagePullPolicy: {{ .Values.alertRelay.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: NATS_URL
+              value: {{ .Values.alertRelay.nats.url | quote }}
+            - name: SUBJECT_PREFIX
+              value: {{ .Values.alertRelay.subjectPrefix | quote }}
+            {{- if .Values.alertRelay.authToken }}
+            - name: WEBHOOK_AUTH_TOKEN
+              value: {{ .Values.alertRelay.authToken | quote }}
+            {{- end }}
+            {{- if .Values.alertRelay.nats.tls.enabled }}
+            - name: NATS_TLS_CA_PATH
+              value: /nats-tls/ca.crt
+            - name: NATS_TLS_CERT_PATH
+              value: /nats-tls/tls.crt
+            - name: NATS_TLS_KEY_PATH
+              value: /nats-tls/tls.key
+            {{- end }}
+          {{- if .Values.alertRelay.nats.tls.enabled }}
+          volumeMounts:
+            - name: nats-tls
+              mountPath: /nats-tls
+              readOnly: true
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop: ["ALL"]
+      {{- if .Values.alertRelay.nats.tls.enabled }}
+      volumes:
+        - name: nats-tls
+          secret:
+            secretName: {{ .Values.alertRelay.nats.tls.secretName }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-relay
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+    app.kubernetes.io/component: alert-relay
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app.kubernetes.io/name: alert-relay
+{{- end }}

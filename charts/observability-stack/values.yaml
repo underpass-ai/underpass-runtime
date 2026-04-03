@@ -20,6 +20,34 @@ tls:
   validityDays: 365
 
 # ---------------------------------------------------------------------------
+# Alert Relay — Grafana webhook → NATS domain events
+# ---------------------------------------------------------------------------
+alertRelay:
+  enabled: false
+  image:
+    repository: ghcr.io/underpass-ai/underpass-runtime/alert-relay
+    tag: latest
+    pullPolicy: IfNotPresent
+  # NATS subject prefix for alert events
+  subjectPrefix: observability.alert
+  # Shared secret for Grafana webhook auth (empty = no auth)
+  authToken: ""
+  nats:
+    url: nats://rehydration-kernel-nats.underpass-runtime.svc:4222
+    tls:
+      enabled: false
+      secretName: alert-relay-nats-tls
+
+# ---------------------------------------------------------------------------
+# Grafana Ingress (expose via nginx + cert-manager TLS)
+# ---------------------------------------------------------------------------
+grafanaIngress:
+  enabled: false
+  host: grafana.underpassai.com
+  clusterIssuer: letsencrypt-prod-r53
+  tlsSecret: grafana-tls
+
+# ---------------------------------------------------------------------------
 # Prometheus + Grafana (kube-prometheus-stack)
 # ---------------------------------------------------------------------------
 prometheus:
