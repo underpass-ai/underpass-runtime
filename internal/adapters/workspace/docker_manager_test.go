@@ -638,7 +638,8 @@ func TestDockerManager_GetSession_NilState(t *testing.T) {
 }
 
 type failingSessionStore struct {
-	saveErr error
+	saveErr   error
+	deleteErr error
 }
 
 func (s *failingSessionStore) Save(_ context.Context, _ domain.Session) error {
@@ -648,7 +649,7 @@ func (s *failingSessionStore) Get(_ context.Context, _ string) (domain.Session, 
 	return domain.Session{}, false, nil
 }
 func (s *failingSessionStore) Delete(_ context.Context, _ string) error {
-	return nil
+	return s.deleteErr
 }
 
 // noopConn implements net.Conn for faking HijackedResponse.
@@ -673,3 +674,108 @@ func (noopAddr) String() string  { return "127.0.0.1:0" }
 type emptyReader struct{}
 
 func (emptyReader) Read([]byte) (int, error) { return 0, io.EOF }
+
+// --- Cleanup error logging coverage ---
+
+func TestDockerManager_StartError_RemoveAlsoFails(t *testing.T) {
+	client := &fakeDockerClient{
+		createID:  "start-rm-fail",
+		startErr:  fmt.Errorf("port conflict"),
+		removeErr: fmt.Errorf("remove failed"),
+	}
+	mgr := NewDockerManager(DockerManagerConfig{}, client)
+
+	_, err := mgr.CreateSession(context.Background(), app.CreateSessionRequest{
+		SessionID: "start-rm-session",
+		Principal: domain.Principal{TenantID: testTenantID},
+	})
+	if err == nil {
+		t.Fatal("expected start error")
+	}
+}
+
+func TestDockerManager_CloneError_StopAndRemoveFail(t *testing.T) {
+	client := &fakeDockerClient{
+		createID:      "clone-cleanup-fail",
+		execCreateErr: fmt.Errorf("exec unavailable"),
+		stopErr:       fmt.Errorf("stop failed"),
+		removeErr:     fmt.Errorf("remove failed"),
+	}
+	mgr := NewDockerManager(DockerManagerConfig{TTL: time.Hour}, client)
+
+	_, err := mgr.CreateSession(context.Background(), app.CreateSessionRequest{
+		SessionID: "clone-cleanup-session",
+		RepoURL:   "https://example.com/repo.git",
+		Principal: domain.Principal{TenantID: testTenantID},
+	})
+	if err == nil {
+		t.Fatal("expected clone error")
+	}
+}
+
+func TestDockerManager_SessionSaveError_CleanupFails(t *testing.T) {
+	store := &failingSessionStore{saveErr: fmt.Errorf("store write failed")}
+	client := &fakeDockerClient{
+		createID:  "save-cleanup-fail",
+		stopErr:   fmt.Errorf("stop failed"),
+		removeErr: fmt.Errorf("remove failed"),
+	}
+	mgr := NewDockerManager(DockerManagerConfig{
+		TTL:          time.Hour,
+		SessionStore: store,
+	}, client)
+
+	_, err := mgr.CreateSession(context.Background(), app.CreateSessionRequest{
+		SessionID: "save-cleanup-session",
+		Principal: domain.Principal{TenantID: testTenantID},
+	})
+	if err == nil {
+		t.Fatal("expected save error")
+	}
+}
+
+func TestDockerManager_CloseSession_StopFails(t *testing.T) {
+	client := &fakeDockerClient{
+		createID: "close-stop-fail",
+		stopErr:  fmt.Errorf("stop timeout"),
+	}
+	mgr := NewDockerManager(DockerManagerConfig{TTL: time.Hour}, client)
+
+	_, _ = mgr.CreateSession(context.Background(), app.CreateSessionRequest{
+		SessionID: "close-stop-session",
+		Principal: domain.Principal{TenantID: testTenantID},
+	})
+
+	err := mgr.CloseSession(context.Background(), "close-stop-session")
+	if err != nil {
+		t.Fatalf("close should succeed even if stop fails: %v", err)
+	}
+}
+
+func TestDockerManager_GetSession_ExpiredCloseError(t *testing.T) {
+	store := app.NewInMemorySessionStore()
+	client := &fakeDockerClient{
+		createID:  "expired-close-fail",
+		removeErr: fmt.Errorf("remove failed"),
+	}
+	mgr := NewDockerManager(DockerManagerConfig{
+		TTL:          1 * time.Millisecond,
+		SessionStore: store,
+	}, client)
+
+	_, _ = mgr.CreateSession(context.Background(), app.CreateSessionRequest{
+		SessionID:       "expired-close-session",
+		Principal:       domain.Principal{TenantID: testTenantID},
+		ExpiresInSecond: 0,
+	})
+
+	time.Sleep(5 * time.Millisecond)
+
+	_, ok, err := mgr.GetSession(context.Background(), "expired-close-session")
+	if err != nil {
+		t.Fatalf("expected no error on expired get, got %v", err)
+	}
+	if ok {
+		t.Fatal("expected expired session not found")
+	}
+}
