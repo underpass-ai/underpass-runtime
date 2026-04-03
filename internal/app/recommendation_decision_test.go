@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
@@ -398,5 +400,45 @@ func TestRejectRecommendation(t *testing.T) {
 	last := eventPub.events[len(eventPub.events)-1]
 	if last.Type != domain.EventRecommendationRejected {
 		t.Fatalf("expected %s, got %s", domain.EventRecommendationRejected, last.Type)
+	}
+}
+
+func TestAcceptRecommendation_SessionGetError(t *testing.T) {
+	svc := NewService(
+		&fakeWorkspaceManager{getErr: fmt.Errorf("db down")},
+		&fakeCatalog{},
+		&fakePolicyEngine{},
+		&fakeToolEngine{},
+		&fakeArtifactStore{},
+		&fakeAudit{},
+	)
+	_, svcErr := svc.AcceptRecommendation(context.Background(), "s1", "rec-1", "fs.read")
+	if svcErr == nil {
+		t.Fatal("expected error when session lookup fails")
+	}
+}
+
+func TestAcceptRecommendation_WithKPIMetrics(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	svc.SetKPIMetrics(NewKPIMetrics())
+
+	_, svcErr := svc.AcceptRecommendation(context.Background(), testSessionID, "rec-1", "fs.read_file")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+
+	metrics := svc.PrometheusMetrics()
+	if !strings.Contains(metrics, "workspace_recommendation_acceptance_rate") {
+		t.Fatal("expected recommendation metric in prometheus output")
+	}
+}
+
+func TestRejectRecommendation_WithKPIMetrics(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	svc.SetKPIMetrics(NewKPIMetrics())
+
+	_, svcErr := svc.RejectRecommendation(context.Background(), testSessionID, "rec-1", "not useful")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
 	}
 }
