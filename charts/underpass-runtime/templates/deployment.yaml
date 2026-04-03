@@ -48,6 +48,9 @@ spec:
             - name: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "underpass-runtime.fullname" . }}
