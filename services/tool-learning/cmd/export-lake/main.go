@@ -263,7 +263,7 @@ func buildValkeyClient(ctx context.Context) (*redis.Client, error) {
 		DB:       0,
 	}
 	if os.Getenv("VALKEY_TLS_CA_PATH") != "" {
-		cfg := &tls.Config{MinVersion: tls.VersionTLS13}
+		cfg := &tls.Config{MinVersion: tls.VersionTLS13, ServerName: os.Getenv("VALKEY_TLS_SERVER_NAME")}
 		caData, err := os.ReadFile(os.Getenv("VALKEY_TLS_CA_PATH"))
 		if err != nil {
 			return nil, fmt.Errorf("read CA: %w", err)
