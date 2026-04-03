@@ -1,0 +1,354 @@
+[1;33mINFO DEBUG MODE — cleanup disabled, verbose logging[0m
+[1;33mINFO   test_id:       12-event-driven-agent[0m
+[1;33mINFO   run_id:        e2e-event-agent-1773862457[0m
+[1;33mINFO   workspace_url: https://underpass-runtime.underpass-runtime.svc.cluster.local:50053[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 1: Subscribing to workspace.task.completed[0m
+[0;34m================================================================================[0m
+
+[0;32mOK Subscribed to workspace.task.completed[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 2: Publishing task event to workspace.task.assigned[0m
+[0;34m================================================================================[0m
+
+[0;32mOK Published task pr-review-6c71cdcd[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 3: Creating workspace session[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> POST /v1/sessions[0m
+[1;33mINFO      body: {"principal": {"tenant_id": "underpass-ai", "actor_id": "code-review-agent", "roles": ["reviewer"]}, "metadata": {"task_id": "pr-review-6c71cdcd", "repo": "underpass-ai/billing-api", "runner_profile":[0m
+[1;33mINFO   << 201 (531 bytes)[0m
+[1;33mINFO   SESSION created: session-938fbe150433a867[0m
+[1;33mINFO     workspace_path: /tmp/workspaces/underpass-ai/session-938fbe150433a867/repo[0m
+[0;32mOK Session: session-938fbe150433a867[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 4: Discovering available tools[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> GET /v1/sessions/session-938fbe150433a867/tools/discovery?detail=compact[0m
+[1;33mINFO   << 200 (15412 bytes)[0m
+[0;32mOK Discovered 70 tools[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 5: Writing source code to workspace (simulating PR checkout)[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> POST /v1/sessions/session-938fbe150433a867/tools/fs.write_file/invoke[0m
+[1;33mINFO      body: {"correlation_id": "e2e-event-agent-1773862457-0001", "approved": true, "args": {"path": "handlers.go", "content": "package handlers\n\nimport (\n\t\"encoding/json\"\n\t\"net/http\"\n\t\"os\"\n)\n\nty[0m
+[1;33mINFO   << 200 (1355 bytes)[0m
+[1;33mINFO   INVOKE fs.write_file -> succeeded (id=inv-c1b9338f74e2fa00, 0ms)[0m
+[0;32mOK handlers.go written (752 bytes, sha256=db6710b9cbbc9a5c...)[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 6: Reading source code for analysis[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> POST /v1/sessions/session-938fbe150433a867/tools/fs.read_file/invoke[0m
+[1;33mINFO      body: {"correlation_id": "e2e-event-agent-1773862457-0002", "approved": false, "args": {"path": "handlers.go"}}[0m
+[1;33mINFO   << 200 (2143 bytes)[0m
+[1;33mINFO   INVOKE fs.read_file -> succeeded (id=inv-671b98a258a0e721, 0ms)[0m
+[0;32mOK Code analyzed: 752 bytes, unchecked-error bug=found[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 7: Writing code review report[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> POST /v1/sessions/session-938fbe150433a867/tools/fs.write_file/invoke[0m
+[1;33mINFO      body: {"correlation_id": "e2e-event-agent-1773862457-0003", "approved": true, "args": {"path": "REVIEW.md", "content": "## Code Review Report\n\n**File**: handlers.go\n**Agent**: code-review-agent\n**Severi[0m
+[1;33mINFO   << 200 (1353 bytes)[0m
+[1;33mINFO   INVOKE fs.write_file -> succeeded (id=inv-c0f6e2b380f7be4e, 0ms)[0m
+[0;32mOK REVIEW.md written (1341 bytes, sha256=d0c0d32c34a248d7...)[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 8: Verifying workspace state[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> POST /v1/sessions/session-938fbe150433a867/tools/fs.list/invoke[0m
+[1;33mINFO      body: {"correlation_id": "e2e-event-agent-1773862457-0004", "approved": false, "args": {"path": "."}}[0m
+[1;33mINFO   << 200 (1490 bytes)[0m
+[1;33mINFO   INVOKE fs.list -> succeeded (id=inv-36abb221ab810578, 0ms)[0m
+[0;32mOK Workspace: 2 files — handlers.go=yes, REVIEW.md=yes[0m
+[1;33mINFO   >> POST /v1/sessions/session-938fbe150433a867/tools/fs.read_file/invoke[0m
+[1;33mINFO      body: {"correlation_id": "e2e-event-agent-1773862457-0005", "approved": false, "args": {"path": "REVIEW.md"}}[0m
+[1;33mINFO   << 200 (2697 bytes)[0m
+[1;33mINFO   INVOKE fs.read_file -> succeeded (id=inv-7048fe6b0781fd01, 0ms)[0m
+[0;32mOK Review verified: 1341 bytes, verdict=REQUEST CHANGES[0m
+[1;33mINFO   >> DELETE /v1/sessions/session-938fbe150433a867[0m
+[1;33mINFO   << 200 (16 bytes)[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 9: Publishing completion to workspace.task.completed[0m
+[0;34m================================================================================[0m
+
+[0;32mOK Published completion for pr-review-6c71cdcd[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 10: Verifying NATS round-trip[0m
+[0;34m================================================================================[0m
+
+[0;32mOK NATS round-trip verified: task_id=pr-review-6c71cdcd[0m
+
+[0;34m────────────────────────────────────────────────────────────────────────[0m
+[0;34m  DEBUG SUMMARY — 12-event-driven-agent (e2e-event-agent-1773862457)[0m
+[0;34m────────────────────────────────────────────────────────────────────────[0m
+
+  Sessions (1):
+    session-938fbe150433a867  ->  /tmp/workspaces/underpass-ai/session-938fbe150433a867/repo
+
+  Invocations (5):
+    inv-c1b9338f74e2fa00  fs.write_file                   succeeded     HTTP 200
+    inv-671b98a258a0e721  fs.read_file                    succeeded     HTTP 200
+    inv-c0f6e2b380f7be4e  fs.write_file                   succeeded     HTTP 200
+    inv-36abb221ab810578  fs.list                         succeeded     HTTP 200
+    inv-7048fe6b0781fd01  fs.read_file                    succeeded     HTTP 200
+
+  [1;33mSessions left open for inspection.[0m
+  Inspect with:
+    kubectl exec -n underpass-runtime deploy/valkey -- valkey-cli KEYS 'workspace:session:*'
+    kubectl debug -n underpass-runtime <pod> --image=busybox --target=underpass-runtime --profile=general
+
+[0;34m────────────────────────────────────────────────────────────────────────[0m
+
+[1;33mWARN Evidence file: /tmp/evidence-12.json[0m
+EVIDENCE_JSON_START
+{
+  "test_id": "12-event-driven-agent",
+  "run_id": "e2e-event-agent-1773862457",
+  "status": "passed",
+  "started_at": "2026-03-18T19:34:17.993580+00:00",
+  "workspace_url": "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053",
+  "debug": true,
+  "skip_cleanup": true,
+  "steps": [
+    {
+      "at": "2026-03-18T19:34:18.040828+00:00",
+      "step": "nats_subscribe_result",
+      "status": "passed"
+    },
+    {
+      "at": "2026-03-18T19:34:18.041095+00:00",
+      "step": "nats_publish_task",
+      "status": "passed",
+      "data": {
+        "task_id": "pr-review-6c71cdcd"
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.046115+00:00",
+      "step": "create_session",
+      "status": "passed",
+      "data": {
+        "session_id": "session-938fbe150433a867"
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.048903+00:00",
+      "step": "discover_tools",
+      "status": "passed",
+      "data": {
+        "count": 70
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.051606+00:00",
+      "step": "invoke_fs.write_file",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-c1b9338f74e2fa00",
+        "status": "succeeded"
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.054531+00:00",
+      "step": "invoke_fs.read_file",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-671b98a258a0e721",
+        "status": "succeeded"
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.054537+00:00",
+      "step": "analyze_code",
+      "status": "passed",
+      "data": {
+        "has_bug": true,
+        "size": 752
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.057002+00:00",
+      "step": "invoke_fs.write_file",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-c0f6e2b380f7be4e",
+        "status": "succeeded"
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.092715+00:00",
+      "step": "invoke_fs.list",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-36abb221ab810578",
+        "status": "succeeded"
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.092723+00:00",
+      "step": "verify_workspace",
+      "status": "passed",
+      "data": {
+        "files": [
+          "REVIEW.md",
+          "handlers.go"
+        ],
+        "has_source": true,
+        "has_review": true
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.095689+00:00",
+      "step": "invoke_fs.read_file",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-7048fe6b0781fd01",
+        "status": "succeeded"
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.095696+00:00",
+      "step": "verify_review",
+      "status": "passed",
+      "data": {
+        "has_verdict": true,
+        "size": 1341
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.098746+00:00",
+      "step": "nats_publish_result",
+      "status": "passed",
+      "data": {
+        "task_id": "pr-review-6c71cdcd",
+        "type": "pull_request.reviewed",
+        "agent": "code-review-agent",
+        "session_id": "session-938fbe150433a867",
+        "verdict": "request_changes",
+        "findings": 3,
+        "severity": "HIGH",
+        "files_analyzed": 1,
+        "tools_used": [
+          "fs.read_file",
+          "fs.write_file",
+          "fs.list"
+        ],
+        "invocations": 5,
+        "timestamp": "2026-03-18T19:34:18Z"
+      }
+    },
+    {
+      "at": "2026-03-18T19:34:18.098827+00:00",
+      "step": "nats_roundtrip",
+      "status": "passed",
+      "data": {
+        "task_id": "pr-review-6c71cdcd",
+        "type": "pull_request.reviewed",
+        "agent": "code-review-agent",
+        "session_id": "session-938fbe150433a867",
+        "verdict": "request_changes",
+        "findings": 3,
+        "severity": "HIGH",
+        "files_analyzed": 1,
+        "tools_used": [
+          "fs.read_file",
+          "fs.write_file",
+          "fs.list"
+        ],
+        "invocations": 5,
+        "timestamp": "2026-03-18T19:34:18Z"
+      }
+    }
+  ],
+  "sessions": [
+    {
+      "at": "2026-03-18T19:34:18.046090+00:00",
+      "session_id": "session-938fbe150433a867",
+      "payload": {
+        "principal": {
+          "tenant_id": "underpass-ai",
+          "actor_id": "code-review-agent",
+          "roles": [
+            "reviewer"
+          ]
+        },
+        "metadata": {
+          "task_id": "pr-review-6c71cdcd",
+          "repo": "underpass-ai/billing-api",
+          "runner_profile": "base"
+        }
+      },
+      "workspace_path": "/tmp/workspaces/underpass-ai/session-938fbe150433a867/repo"
+    }
+  ],
+  "invocations": [
+    {
+      "at": "2026-03-18T19:34:18.051586+00:00",
+      "session_id": "session-938fbe150433a867",
+      "tool": "fs.write_file",
+      "http_status": 200,
+      "invocation_id": "inv-c1b9338f74e2fa00",
+      "invocation_status": "succeeded",
+      "error_code": null,
+      "error_message": null
+    },
+    {
+      "at": "2026-03-18T19:34:18.054513+00:00",
+      "session_id": "session-938fbe150433a867",
+      "tool": "fs.read_file",
+      "http_status": 200,
+      "invocation_id": "inv-671b98a258a0e721",
+      "invocation_status": "succeeded",
+      "error_code": null,
+      "error_message": null
+    },
+    {
+      "at": "2026-03-18T19:34:18.056980+00:00",
+      "session_id": "session-938fbe150433a867",
+      "tool": "fs.write_file",
+      "http_status": 200,
+      "invocation_id": "inv-c0f6e2b380f7be4e",
+      "invocation_status": "succeeded",
+      "error_code": null,
+      "error_message": null
+    },
+    {
+      "at": "2026-03-18T19:34:18.092694+00:00",
+      "session_id": "session-938fbe150433a867",
+      "tool": "fs.list",
+      "http_status": 200,
+      "invocation_id": "inv-36abb221ab810578",
+      "invocation_status": "succeeded",
+      "error_code": null,
+      "error_message": null
+    },
+    {
+      "at": "2026-03-18T19:34:18.095670+00:00",
+      "session_id": "session-938fbe150433a867",
+      "tool": "fs.read_file",
+      "http_status": 200,
+      "invocation_id": "inv-7048fe6b0781fd01",
+      "invocation_status": "succeeded",
+      "error_code": null,
+      "error_message": null
+    }
+  ],
+  "ended_at": "2026-03-18T19:34:18.099068+00:00"
+}
+EVIDENCE_JSON_END
+[0;32mOK Event-Driven Agent E2E PASSED — 5 invocations over TLS[0m

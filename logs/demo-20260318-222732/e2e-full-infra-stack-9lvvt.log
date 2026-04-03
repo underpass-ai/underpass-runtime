@@ -1,0 +1,256 @@
+[1;33mINFO DEBUG MODE — cleanup disabled, verbose logging[0m
+[1;33mINFO   test_id:       14-full-infra-stack[0m
+[1;33mINFO   run_id:        e2e-infra-1773866123[0m
+[1;33mINFO   workspace_url: https://underpass-runtime.underpass-runtime.svc.cluster.local:50053[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 1: Subscribing to NATS workspace.events.>[0m
+[0;34m================================================================================[0m
+
+[0;32mOK Subscribed to workspace.events.>[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 2: Creating session (Valkey-backed)[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> POST /v1/sessions[0m
+[1;33mINFO      body: {"principal": {"tenant_id": "infra-test", "actor_id": "e2e-infra", "roles": ["developer"]}, "metadata": {"test": "full-infra-stack"}}[0m
+[1;33mINFO   << 201 (455 bytes)[0m
+[1;33mINFO   SESSION created: session-0ab8511f2834ac68[0m
+[1;33mINFO     workspace_path: /tmp/workspaces/infra-test/session-0ab8511f2834ac68/repo[0m
+[0;32mOK Session: session-0ab8511f2834ac68 (persisted in Valkey)[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 3: Invoking fs.write_file (Valkey invocation store)[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> POST /v1/sessions/session-0ab8511f2834ac68/tools/fs.write_file/invoke[0m
+[1;33mINFO      body: {"correlation_id": "e2e-infra-1773866123-0001", "approved": true, "args": {"path": "infra-test.md", "content": "# Full Infra Test\nTimestamp: 2026-03-18T20:35:23Z\nTest ID: e2e-infra-1773866123\n"}}[0m
+[1;33mINFO   << 200 (1318 bytes)[0m
+[1;33mINFO   INVOKE fs.write_file -> succeeded (id=inv-aa86fa2de58eedd4, 9ms)[0m
+[0;32mOK fs.write_file → inv-aa86fa2de58eedd4 (persisted in Valkey)[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 4: Invoking fs.read_file (verify content round-trip)[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> POST /v1/sessions/session-0ab8511f2834ac68/tools/fs.read_file/invoke[0m
+[1;33mINFO      body: {"correlation_id": "e2e-infra-1773866123-0002", "approved": false, "args": {"path": "infra-test.md"}}[0m
+[1;33mINFO   << 200 (1351 bytes)[0m
+[1;33mINFO   INVOKE fs.read_file -> succeeded (id=inv-9dce4f657d63dc43, 7ms)[0m
+[0;32mOK fs.read_file → inv-9dce4f657d63dc43 (content match: True)[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 5: GET /invocations/{{id}} (Valkey persistence proof)[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> GET /v1/invocations/inv-aa86fa2de58eedd4[0m
+[1;33mINFO   << 200 (1223 bytes)[0m
+[0;32mOK   GET /invocations/inv-aa86fa2de58e... → succeeded (from Valkey)[0m
+[1;33mINFO   >> GET /v1/invocations/inv-9dce4f657d63dc43[0m
+[1;33mINFO   << 200 (1257 bytes)[0m
+[0;32mOK   GET /invocations/inv-9dce4f657d63... → succeeded (from Valkey)[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 6: GET /invocations/{id}/artifacts (S3 persistence)[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> GET /v1/invocations/inv-aa86fa2de58eedd4/artifacts[0m
+[1;33mINFO   << 200 (654 bytes)[0m
+[0;32mOK   GET /invocations/inv-aa86fa2de58e.../artifacts → 200 (2 artifacts)[0m
+[1;33mINFO   >> GET /v1/invocations/inv-9dce4f657d63dc43/artifacts[0m
+[1;33mINFO   << 200 (655 bytes)[0m
+[0;32mOK   GET /invocations/inv-9dce4f657d63.../artifacts → 200 (2 artifacts)[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 7: Closing session[0m
+[0;34m================================================================================[0m
+
+[1;33mINFO   >> DELETE /v1/sessions/session-0ab8511f2834ac68[0m
+[1;33mINFO   << 200 (16 bytes)[0m
+[0;32mOK Session closed: 200[0m
+
+[0;34m================================================================================[0m
+[0;34mStep 8: Waiting for NATS events (outbox relay poll)[0m
+[0;34m================================================================================[0m
+
+
+[0;34m================================================================================[0m
+[0;34mStep 9: Verifying NATS domain events[0m
+[0;34m================================================================================[0m
+
+[0;32mOK NATS events verified: 6 events — session.created=yes, invocation.started=yes, invocation.completed=yes, session.closed=yes[0m
+
+[0;34m────────────────────────────────────────────────────────────────────────[0m
+[0;34m  DEBUG SUMMARY — 14-full-infra-stack (e2e-infra-1773866123)[0m
+[0;34m────────────────────────────────────────────────────────────────────────[0m
+
+  Sessions (1):
+    session-0ab8511f2834ac68  ->  /tmp/workspaces/infra-test/session-0ab8511f2834ac68/repo
+
+  Invocations (2):
+    inv-aa86fa2de58eedd4  fs.write_file                   succeeded     HTTP 200
+    inv-9dce4f657d63dc43  fs.read_file                    succeeded     HTTP 200
+
+  [1;33mSessions left open for inspection.[0m
+  Inspect with:
+    kubectl exec -n underpass-runtime deploy/valkey -- valkey-cli KEYS 'workspace:session:*'
+    kubectl debug -n underpass-runtime <pod> --image=busybox --target=underpass-runtime --profile=general
+
+[0;34m────────────────────────────────────────────────────────────────────────[0m
+
+[1;33mWARN Evidence file: /tmp/evidence-14.json[0m
+EVIDENCE_JSON_START
+{
+  "test_id": "14-full-infra-stack",
+  "run_id": "e2e-infra-1773866123",
+  "status": "passed",
+  "started_at": "2026-03-18T20:35:23.057770+00:00",
+  "workspace_url": "https://underpass-runtime.underpass-runtime.svc.cluster.local:50053",
+  "debug": true,
+  "skip_cleanup": true,
+  "steps": [
+    {
+      "at": "2026-03-18T20:35:23.136548+00:00",
+      "step": "nats_subscribe",
+      "status": "passed"
+    },
+    {
+      "at": "2026-03-18T20:35:23.143017+00:00",
+      "step": "create_session",
+      "status": "passed",
+      "data": {
+        "session_id": "session-0ab8511f2834ac68"
+      }
+    },
+    {
+      "at": "2026-03-18T20:35:23.155684+00:00",
+      "step": "invoke_write",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-aa86fa2de58eedd4",
+        "bytes": 80
+      }
+    },
+    {
+      "at": "2026-03-18T20:35:23.166655+00:00",
+      "step": "invoke_read",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-9dce4f657d63dc43",
+        "content_match": true,
+        "size": 80
+      }
+    },
+    {
+      "at": "2026-03-18T20:35:23.170186+00:00",
+      "step": "retrieve_inv-aa86fa2d",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-aa86fa2de58eedd4",
+        "stored_status": "succeeded"
+      }
+    },
+    {
+      "at": "2026-03-18T20:35:23.173446+00:00",
+      "step": "retrieve_inv-9dce4f65",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-9dce4f657d63dc43",
+        "stored_status": "succeeded"
+      }
+    },
+    {
+      "at": "2026-03-18T20:35:23.176414+00:00",
+      "step": "artifacts_inv-aa86fa2d",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-aa86fa2de58eedd4",
+        "status": 200,
+        "artifact_count": 2
+      }
+    },
+    {
+      "at": "2026-03-18T20:35:23.179473+00:00",
+      "step": "artifacts_inv-9dce4f65",
+      "status": "passed",
+      "data": {
+        "invocation_id": "inv-9dce4f657d63dc43",
+        "status": 200,
+        "artifact_count": 2
+      }
+    },
+    {
+      "at": "2026-03-18T20:35:23.181954+00:00",
+      "step": "close_session",
+      "status": "passed",
+      "data": {
+        "status": 200
+      }
+    },
+    {
+      "at": "2026-03-18T20:35:26.183491+00:00",
+      "step": "nats_events",
+      "status": "passed",
+      "data": {
+        "total_events": 6,
+        "event_types": [
+          "workspace.session.created",
+          "workspace.invocation.started",
+          "workspace.invocation.completed",
+          "workspace.invocation.started",
+          "workspace.invocation.completed",
+          "workspace.session.closed"
+        ],
+        "has_session_created": true,
+        "has_invocation_started": true,
+        "has_invocation_completed": true,
+        "has_session_closed": true
+      }
+    }
+  ],
+  "sessions": [
+    {
+      "at": "2026-03-18T20:35:23.142993+00:00",
+      "session_id": "session-0ab8511f2834ac68",
+      "payload": {
+        "principal": {
+          "tenant_id": "infra-test",
+          "actor_id": "e2e-infra",
+          "roles": [
+            "developer"
+          ]
+        },
+        "metadata": {
+          "test": "full-infra-stack"
+        }
+      },
+      "workspace_path": "/tmp/workspaces/infra-test/session-0ab8511f2834ac68/repo"
+    }
+  ],
+  "invocations": [
+    {
+      "at": "2026-03-18T20:35:23.155663+00:00",
+      "session_id": "session-0ab8511f2834ac68",
+      "tool": "fs.write_file",
+      "http_status": 200,
+      "invocation_id": "inv-aa86fa2de58eedd4",
+      "invocation_status": "succeeded",
+      "error_code": null,
+      "error_message": null
+    },
+    {
+      "at": "2026-03-18T20:35:23.166631+00:00",
+      "session_id": "session-0ab8511f2834ac68",
+      "tool": "fs.read_file",
+      "http_status": 200,
+      "invocation_id": "inv-9dce4f657d63dc43",
+      "invocation_status": "succeeded",
+      "error_code": null,
+      "error_message": null
+    }
+  ],
+  "ended_at": "2026-03-18T20:35:26.183516+00:00"
+}
+EVIDENCE_JSON_END
+[0;32mOK Full Infra Stack PASSED — 2 invocations over TLS, 6 NATS events via outbox, Valkey persistence verified[0m
