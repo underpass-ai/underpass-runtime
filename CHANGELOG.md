@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-04-03
+
+### Gap Sweep — 24 PRs (#88-#105)
+
+**Learning Evidence Plane**
+- Durable Valkey backend for RecommendationDecisionStore (30-day TTL) (#88)
+- 6 new LearningEvidenceService RPCs: GetLearningStatus, GetPolicy, ListPolicies, GetAggregate (#90)
+- Telemetry TTL enforcement (Expire after RPush) + bounded LRange (10k cap) (#90)
+- Subscribe to all 6 tool_learning.* NATS subjects (#90)
+- Context signature computed for denied invocations (#91)
+- Proto enum DECISION_SOURCE_NEURAL_TS + PolicyMode constants (#97)
+
+**NeuralTS End-to-End**
+- Wire TrainNeuralModel in tool-learning CronJob → publishes model to Valkey (#92)
+- Telemetry-to-Lake exporter (Valkey → Parquet/S3) + E2E test (#95)
+
+**Agent Feedback Loop**
+- AcceptRecommendation / RejectRecommendation gRPC RPCs (#99)
+- Domain events: recommendation.accepted / recommendation.rejected
+- E2E validated on cluster
+
+**Explainability Trace**
+- Structured score_breakdown per recommendation (heuristic → telemetry → policy) (#100)
+- Persisted in decision store, exposed in both runtime and learning protos
+
+**Cross-Agent Learning**
+- CrossAgentInsight in every recommendation response (#103)
+- Confidence levels: low/medium/high based on collective invocation count
+
+**Autonomous Remediation**
+- remediation-agent: NATS alert subscriber → playbook execution → feedback (#101)
+- 4 built-in playbooks (failure rate, latency, denials, health)
+
+**Workspace Prewarming**
+- Background pre-load of policies, stats, model at session creation (#102)
+- Zero cold-start on first RecommendTools call
+
+**Observability**
+- TraceLogHandler: trace_id/span_id injected into every structured log (#93)
+- Metrics port 9090 exposed in Deployment + Service (#93)
+- Observability stack: [underpass-ai/underpass-observability](https://github.com/underpass-ai/underpass-observability)
+  (Grafana, Loki, OTEL Collector, Prometheus, alert-relay)
+- Grafana dashboard (8 panels) auto-provisioned
+- Route53 DNS: grafana.underpassai.com
+
+**Quality**
+- 12x cleanup error logging (replaced _ = with slog.Warn) (#89)
+- 5 KPI metrics wired into hot paths (#96)
+- README algorithm claims corrected (online vs offline) (#98)
+- Comprehensive documentation update (#104)
+
 ## 2026-04-02
 
 ### P0: Recommendation Evidence (#80)

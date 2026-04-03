@@ -771,3 +771,18 @@ helm upgrade --install underpass-runtime \
   charts/underpass-runtime \
   -f values-tls-full.yaml
 ```
+
+## Observability Stack mTLS
+
+The observability stack ([underpass-ai/underpass-observability](https://github.com/underpass-ai/underpass-observability))
+supports mTLS for the OTEL Collector using the same CA trust domain:
+
+```bash
+helm install observability charts/observability-stack \
+  -n observability --create-namespace \
+  -f charts/observability-stack/values.mtls.yaml
+```
+
+The cert-gen hook reads the shared CA from the runtime namespace and generates
+`otel-collector-tls` server certificates. See `values.mtls.yaml` for the full
+TLS receiver configuration.

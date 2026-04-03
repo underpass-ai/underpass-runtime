@@ -175,3 +175,30 @@ underpass-runtime
 
 Use `values.shared-infra.yaml` to point to the kernel's services. Use
 `values.mtls.example.yaml` to enable mTLS on all transports.
+
+## Observability Stack
+
+A separate Helm chart deploys Grafana, Prometheus, Loki, OTEL Collector, and
+the alert-relay webhook in a dedicated namespace. See
+[underpass-ai/underpass-observability](https://github.com/underpass-ai/underpass-observability)
+for installation instructions.
+
+```bash
+# Deploy observability stack (separate namespace)
+helm install observability charts/observability-stack \
+  -n observability --create-namespace \
+  --set runtimeNamespace=underpass-runtime \
+  --set grafanaIngress.enabled=true \
+  --set grafanaIngress.host=grafana.example.com
+```
+
+The stack scrapes runtime metrics at `:9090` via cross-namespace ServiceMonitor
+and receives OTLP traces from the runtime. Connect the runtime:
+
+```bash
+helm upgrade underpass-runtime charts/underpass-runtime \
+  -n underpass-runtime --reuse-values \
+  --set telemetry.otel.enabled=true \
+  --set telemetry.otel.endpoint=http://otel-collector.observability.svc:4318 \
+  --set telemetry.otel.insecure=true
+```
