@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
@@ -359,4 +361,84 @@ func (f *fakePolicyReader) ReadPoliciesForContext(_ context.Context, _ string) (
 		return map[string]ToolPolicy{}, f.err
 	}
 	return f.policies, f.err
+}
+
+// ─── Agent Feedback Loop ──────────────────────────────────────────────────
+
+func TestAcceptRecommendation(t *testing.T) {
+	svc, eventPub := makeEvidenceService()
+
+	eventID, svcErr := svc.AcceptRecommendation(context.Background(), testSessionID, "rec-1", "fs.read_file")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+	if eventID == "" {
+		t.Fatal("expected non-empty event ID")
+	}
+	if len(eventPub.events) == 0 {
+		t.Fatal("expected event published")
+	}
+	last := eventPub.events[len(eventPub.events)-1]
+	if last.Type != domain.EventRecommendationAccepted {
+		t.Fatalf("expected %s, got %s", domain.EventRecommendationAccepted, last.Type)
+	}
+}
+
+func TestRejectRecommendation(t *testing.T) {
+	svc, eventPub := makeEvidenceService()
+
+	eventID, svcErr := svc.RejectRecommendation(context.Background(), testSessionID, "rec-1", "tool didn't help")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+	if eventID == "" {
+		t.Fatal("expected non-empty event ID")
+	}
+	if len(eventPub.events) == 0 {
+		t.Fatal("expected event published")
+	}
+	last := eventPub.events[len(eventPub.events)-1]
+	if last.Type != domain.EventRecommendationRejected {
+		t.Fatalf("expected %s, got %s", domain.EventRecommendationRejected, last.Type)
+	}
+}
+
+func TestAcceptRecommendation_SessionGetError(t *testing.T) {
+	svc := NewService(
+		&fakeWorkspaceManager{getErr: fmt.Errorf("db down")},
+		&fakeCatalog{},
+		&fakePolicyEngine{},
+		&fakeToolEngine{},
+		&fakeArtifactStore{},
+		&fakeAudit{},
+	)
+	_, svcErr := svc.AcceptRecommendation(context.Background(), "s1", "rec-1", "fs.read")
+	if svcErr == nil {
+		t.Fatal("expected error when session lookup fails")
+	}
+}
+
+func TestAcceptRecommendation_WithKPIMetrics(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	svc.SetKPIMetrics(NewKPIMetrics())
+
+	_, svcErr := svc.AcceptRecommendation(context.Background(), testSessionID, "rec-1", "fs.read_file")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+
+	metrics := svc.PrometheusMetrics()
+	if !strings.Contains(metrics, "workspace_recommendation_acceptance_rate") {
+		t.Fatal("expected recommendation metric in prometheus output")
+	}
+}
+
+func TestRejectRecommendation_WithKPIMetrics(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	svc.SetKPIMetrics(NewKPIMetrics())
+
+	_, svcErr := svc.RejectRecommendation(context.Background(), testSessionID, "rec-1", "not useful")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
 }

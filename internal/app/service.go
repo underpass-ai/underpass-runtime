@@ -1382,3 +1382,45 @@ func (s *Service) GetAggregate(ctx context.Context, toolID string) (ToolStats, *
 	}
 	return stats, nil
 }
+
+// ─── Agent Feedback Loop ──────────────────────────────────────────────────
+
+// AcceptRecommendation records that an agent used a recommended tool and it solved the task.
+func (s *Service) AcceptRecommendation(ctx context.Context, sessionID, recommendationID, selectedToolID string) (string, *ServiceError) {
+	session, _, err := s.workspace.GetSession(ctx, sessionID)
+	if err != nil {
+		return "", &ServiceError{Code: ErrorCodeInternal, Message: "session lookup failed"}
+	}
+
+	eventID := newID("evt")
+	s.publishEvent(ctx, domain.EventRecommendationAccepted, session, domain.RecommendationAcceptedPayload{
+		RecommendationID: recommendationID,
+		SelectedToolID:   selectedToolID,
+	})
+
+	if s.kpiMetrics != nil {
+		s.kpiMetrics.ObserveRecommendationUsed(true)
+	}
+
+	return eventID, nil
+}
+
+// RejectRecommendation records that an agent skipped a recommendation.
+func (s *Service) RejectRecommendation(ctx context.Context, sessionID, recommendationID, reason string) (string, *ServiceError) {
+	session, _, err := s.workspace.GetSession(ctx, sessionID)
+	if err != nil {
+		return "", &ServiceError{Code: ErrorCodeInternal, Message: "session lookup failed"}
+	}
+
+	eventID := newID("evt")
+	s.publishEvent(ctx, domain.EventRecommendationRejected, session, domain.RecommendationRejectedPayload{
+		RecommendationID: recommendationID,
+		Reason:           reason,
+	})
+
+	if s.kpiMetrics != nil {
+		s.kpiMetrics.ObserveRecommendationUsed(false)
+	}
+
+	return eventID, nil
+}

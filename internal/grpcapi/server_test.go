@@ -72,6 +72,12 @@ func (f *fakeService) GetRecommendationDecision(_ context.Context, _ string) (do
 func (f *fakeService) GetEvidenceBundle(_ context.Context, _ string) (app.EvidenceBundle, *app.ServiceError) {
 	return app.EvidenceBundle{}, f.svcErr
 }
+func (f *fakeService) AcceptRecommendation(_ context.Context, _, _, _ string) (string, *app.ServiceError) {
+	return "evt-accept", f.svcErr
+}
+func (f *fakeService) RejectRecommendation(_ context.Context, _, _, _ string) (string, *app.ServiceError) {
+	return "evt-reject", f.svcErr
+}
 func (f *fakeService) PrometheusMetrics() string { return "" }
 
 func newTestServer(fake *fakeService) *Server {
@@ -758,5 +764,33 @@ func TestAuthConfigFromEnv_TrustedHeaders_MissingToken(t *testing.T) {
 	_, err := AuthConfigFromEnv()
 	if err == nil {
 		t.Fatal("expected error for missing token")
+	}
+}
+
+func TestAcceptRecommendation(t *testing.T) {
+	fake := &fakeService{}
+	srv := newTestServer(fake)
+	resp, err := srv.AcceptRecommendation(context.Background(), &pb.AcceptRecommendationRequest{
+		SessionId: "sess-1", RecommendationId: "rec-1", SelectedToolId: "fs.read",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.GetEventId() == "" {
+		t.Fatal("expected event ID")
+	}
+}
+
+func TestRejectRecommendation(t *testing.T) {
+	fake := &fakeService{}
+	srv := newTestServer(fake)
+	resp, err := srv.RejectRecommendation(context.Background(), &pb.RejectRecommendationRequest{
+		SessionId: "sess-1", RecommendationId: "rec-1", Reason: "not useful",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.GetEventId() == "" {
+		t.Fatal("expected event ID")
 	}
 }

@@ -167,9 +167,11 @@ var SessionService_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	CapabilityCatalogService_ListTools_FullMethodName      = "/underpass.runtime.v1.CapabilityCatalogService/ListTools"
-	CapabilityCatalogService_DiscoverTools_FullMethodName  = "/underpass.runtime.v1.CapabilityCatalogService/DiscoverTools"
-	CapabilityCatalogService_RecommendTools_FullMethodName = "/underpass.runtime.v1.CapabilityCatalogService/RecommendTools"
+	CapabilityCatalogService_ListTools_FullMethodName            = "/underpass.runtime.v1.CapabilityCatalogService/ListTools"
+	CapabilityCatalogService_DiscoverTools_FullMethodName        = "/underpass.runtime.v1.CapabilityCatalogService/DiscoverTools"
+	CapabilityCatalogService_RecommendTools_FullMethodName       = "/underpass.runtime.v1.CapabilityCatalogService/RecommendTools"
+	CapabilityCatalogService_AcceptRecommendation_FullMethodName = "/underpass.runtime.v1.CapabilityCatalogService/AcceptRecommendation"
+	CapabilityCatalogService_RejectRecommendation_FullMethodName = "/underpass.runtime.v1.CapabilityCatalogService/RejectRecommendation"
 )
 
 // CapabilityCatalogServiceClient is the client API for CapabilityCatalogService service.
@@ -184,6 +186,10 @@ type CapabilityCatalogServiceClient interface {
 	DiscoverTools(ctx context.Context, in *DiscoverToolsRequest, opts ...grpc.CallOption) (*DiscoverToolsResponse, error)
 	// RecommendTools returns scored tool recommendations for a given task.
 	RecommendTools(ctx context.Context, in *RecommendToolsRequest, opts ...grpc.CallOption) (*RecommendToolsResponse, error)
+	// AcceptRecommendation records that an agent used a recommended tool and it solved the task.
+	AcceptRecommendation(ctx context.Context, in *AcceptRecommendationRequest, opts ...grpc.CallOption) (*AcceptRecommendationResponse, error)
+	// RejectRecommendation records that an agent skipped a recommendation (tool didn't help or was wrong).
+	RejectRecommendation(ctx context.Context, in *RejectRecommendationRequest, opts ...grpc.CallOption) (*RejectRecommendationResponse, error)
 }
 
 type capabilityCatalogServiceClient struct {
@@ -224,6 +230,26 @@ func (c *capabilityCatalogServiceClient) RecommendTools(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *capabilityCatalogServiceClient) AcceptRecommendation(ctx context.Context, in *AcceptRecommendationRequest, opts ...grpc.CallOption) (*AcceptRecommendationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AcceptRecommendationResponse)
+	err := c.cc.Invoke(ctx, CapabilityCatalogService_AcceptRecommendation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *capabilityCatalogServiceClient) RejectRecommendation(ctx context.Context, in *RejectRecommendationRequest, opts ...grpc.CallOption) (*RejectRecommendationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RejectRecommendationResponse)
+	err := c.cc.Invoke(ctx, CapabilityCatalogService_RejectRecommendation_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CapabilityCatalogServiceServer is the server API for CapabilityCatalogService service.
 // All implementations must embed UnimplementedCapabilityCatalogServiceServer
 // for forward compatibility.
@@ -236,6 +262,10 @@ type CapabilityCatalogServiceServer interface {
 	DiscoverTools(context.Context, *DiscoverToolsRequest) (*DiscoverToolsResponse, error)
 	// RecommendTools returns scored tool recommendations for a given task.
 	RecommendTools(context.Context, *RecommendToolsRequest) (*RecommendToolsResponse, error)
+	// AcceptRecommendation records that an agent used a recommended tool and it solved the task.
+	AcceptRecommendation(context.Context, *AcceptRecommendationRequest) (*AcceptRecommendationResponse, error)
+	// RejectRecommendation records that an agent skipped a recommendation (tool didn't help or was wrong).
+	RejectRecommendation(context.Context, *RejectRecommendationRequest) (*RejectRecommendationResponse, error)
 	mustEmbedUnimplementedCapabilityCatalogServiceServer()
 }
 
@@ -254,6 +284,12 @@ func (UnimplementedCapabilityCatalogServiceServer) DiscoverTools(context.Context
 }
 func (UnimplementedCapabilityCatalogServiceServer) RecommendTools(context.Context, *RecommendToolsRequest) (*RecommendToolsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RecommendTools not implemented")
+}
+func (UnimplementedCapabilityCatalogServiceServer) AcceptRecommendation(context.Context, *AcceptRecommendationRequest) (*AcceptRecommendationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AcceptRecommendation not implemented")
+}
+func (UnimplementedCapabilityCatalogServiceServer) RejectRecommendation(context.Context, *RejectRecommendationRequest) (*RejectRecommendationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RejectRecommendation not implemented")
 }
 func (UnimplementedCapabilityCatalogServiceServer) mustEmbedUnimplementedCapabilityCatalogServiceServer() {
 }
@@ -331,6 +367,42 @@ func _CapabilityCatalogService_RecommendTools_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CapabilityCatalogService_AcceptRecommendation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AcceptRecommendationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CapabilityCatalogServiceServer).AcceptRecommendation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CapabilityCatalogService_AcceptRecommendation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CapabilityCatalogServiceServer).AcceptRecommendation(ctx, req.(*AcceptRecommendationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CapabilityCatalogService_RejectRecommendation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RejectRecommendationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CapabilityCatalogServiceServer).RejectRecommendation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CapabilityCatalogService_RejectRecommendation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CapabilityCatalogServiceServer).RejectRecommendation(ctx, req.(*RejectRecommendationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CapabilityCatalogService_ServiceDesc is the grpc.ServiceDesc for CapabilityCatalogService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -349,6 +421,14 @@ var CapabilityCatalogService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RecommendTools",
 			Handler:    _CapabilityCatalogService_RecommendTools_Handler,
+		},
+		{
+			MethodName: "AcceptRecommendation",
+			Handler:    _CapabilityCatalogService_AcceptRecommendation_Handler,
+		},
+		{
+			MethodName: "RejectRecommendation",
+			Handler:    _CapabilityCatalogService_RejectRecommendation_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
