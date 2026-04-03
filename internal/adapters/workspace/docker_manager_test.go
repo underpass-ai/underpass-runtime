@@ -752,6 +752,25 @@ func TestDockerManager_CloseSession_StopFails(t *testing.T) {
 	}
 }
 
+func TestDockerManager_CloseSession_StoreDeleteFails(t *testing.T) {
+	store := &failingSessionStore{deleteErr: fmt.Errorf("delete failed")}
+	client := &fakeDockerClient{createID: "del-fail"}
+	mgr := NewDockerManager(DockerManagerConfig{
+		TTL:          time.Hour,
+		SessionStore: store,
+	}, client)
+
+	// Manually add container so CloseSession finds it
+	mgr.mu.Lock()
+	mgr.containers["del-fail-session"] = "del-fail"
+	mgr.mu.Unlock()
+
+	err := mgr.CloseSession(context.Background(), "del-fail-session")
+	if err != nil {
+		t.Fatalf("close should succeed even if store delete fails: %v", err)
+	}
+}
+
 func TestDockerManager_GetSession_ExpiredCloseError(t *testing.T) {
 	store := app.NewInMemorySessionStore()
 	client := &fakeDockerClient{
