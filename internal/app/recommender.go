@@ -27,11 +27,12 @@ const (
 
 // Recommendation is a single ranked tool suggestion.
 type Recommendation struct {
-	Name          string   `json:"name"`
-	Score         float64  `json:"score"`
-	Why           string   `json:"why"`
-	EstimatedCost string   `json:"estimated_cost"`
-	PolicyNotes   []string `json:"policy_notes"`
+	Name           string                  `json:"name"`
+	Score          float64                 `json:"score"`
+	Why            string                  `json:"why"`
+	EstimatedCost  string                  `json:"estimated_cost"`
+	PolicyNotes    []string                `json:"policy_notes"`
+	ScoreBreakdown []domain.ScoreComponent `json:"score_breakdown,omitempty"`
 }
 
 // RecommendationsResponse is returned by the recommendations endpoint.
@@ -128,12 +129,25 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 	recs := make([]Recommendation, 0, len(tools))
 	for i := range tools {
 		rec := scoreTool(&tools[i], hintTokens)
+		baseScore := rec.Score
+		rec.ScoreBreakdown = append(rec.ScoreBreakdown, domain.ScoreComponent{
+			Name: "heuristic", Value: baseScore, Rationale: rec.Why,
+		})
+
 		// Apply telemetry-based adjustments if stats exist
 		if allStats != nil {
+			beforeTel := rec.Score
 			rec = applyTelemetryBoost(rec, allStats[tools[i].Name])
+			if delta := rec.Score - beforeTel; delta != 0 {
+				rec.ScoreBreakdown = append(rec.ScoreBreakdown, domain.ScoreComponent{
+					Name: "telemetry_boost", Value: delta, Rationale: fmt.Sprintf("%.2f → %.2f", beforeTel, rec.Score),
+				})
+			}
 		}
+
 		// Apply learned policy scoring via selected algorithm
 		if p, ok := learnedPolicies[tools[i].Name]; ok && scorer != nil {
+			beforePolicy := rec.Score
 			newScore, why := scorer.Score(rec.Score, p)
 			if why != "" {
 				rec.Score = newScore
@@ -142,6 +156,9 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 					fmt.Sprintf("algorithm:%s policy:%s:%s confidence=%.2f n=%d",
 						algorithmID, p.ContextSignature, p.ToolID, p.Confidence, p.NSamples),
 				)
+				rec.ScoreBreakdown = append(rec.ScoreBreakdown, domain.ScoreComponent{
+					Name: algorithmID, Value: newScore - beforePolicy, Rationale: why,
+				})
 			}
 		}
 		recs = append(recs, rec)
@@ -173,11 +190,12 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 	rankedFacts := make([]domain.RankedToolFact, len(recs))
 	for i, r := range recs {
 		rankedEvidence[i] = domain.RankedToolEvidence{
-			ToolID:        r.Name,
-			Rank:          i + 1,
-			FinalScore:    r.Score,
-			Why:           r.Why,
-			EstimatedCost: r.EstimatedCost,
+			ToolID:         r.Name,
+			Rank:           i + 1,
+			FinalScore:     r.Score,
+			Why:            r.Why,
+			EstimatedCost:  r.EstimatedCost,
+			ScoreBreakdown: r.ScoreBreakdown,
 		}
 		rankedFacts[i] = domain.RankedToolFact{
 			ToolID:     r.Name,

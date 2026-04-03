@@ -292,12 +292,19 @@ message Invocation {
   Error                     error          = 17;
 }
 
+message ScoreComponent {
+  string name      = 1;
+  double value     = 2;
+  string rationale = 3;
+}
+
 message Recommendation {
-  string          name           = 1;
-  double          score          = 2;
-  string          why            = 3;
-  string          estimated_cost = 4;
-  repeated string policy_notes   = 5;
+  string          name            = 1;
+  double          score           = 2;
+  string          why             = 3;
+  string          estimated_cost  = 4;
+  repeated string policy_notes    = 5;
+  repeated ScoreComponent score_breakdown = 6;
 }
 
 // ─── Request/Response ────────────────────────────────────────────────────────

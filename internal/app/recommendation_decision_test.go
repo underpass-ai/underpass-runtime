@@ -433,6 +433,38 @@ func TestAcceptRecommendation_WithKPIMetrics(t *testing.T) {
 	}
 }
 
+func TestRecommendTools_ScoreBreakdown(t *testing.T) {
+	svc, _ := makeEvidenceService()
+
+	resp, svcErr := svc.RecommendTools(context.Background(), testSessionID, "read", 5)
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+	if len(resp.Recommendations) == 0 {
+		t.Fatal("expected recommendations")
+	}
+
+	rec := resp.Recommendations[0]
+	if len(rec.ScoreBreakdown) == 0 {
+		t.Fatal("expected score breakdown")
+	}
+	if rec.ScoreBreakdown[0].Name != "heuristic" {
+		t.Fatalf("expected first component 'heuristic', got %s", rec.ScoreBreakdown[0].Name)
+	}
+	if rec.ScoreBreakdown[0].Value <= 0 {
+		t.Fatal("expected positive heuristic score")
+	}
+
+	// Verify breakdown persists in decision
+	decision, svcErr := svc.GetRecommendationDecision(context.Background(), resp.RecommendationID)
+	if svcErr != nil {
+		t.Fatalf("get decision: %v", svcErr)
+	}
+	if len(decision.Recommendations[0].ScoreBreakdown) == 0 {
+		t.Fatal("expected score breakdown persisted in decision")
+	}
+}
+
 func TestRejectRecommendation_WithKPIMetrics(t *testing.T) {
 	svc, _ := makeEvidenceService()
 	svc.SetKPIMetrics(NewKPIMetrics())

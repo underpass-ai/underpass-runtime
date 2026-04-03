@@ -1905,20 +1905,81 @@ func (x *Invocation) GetError() *Error {
 	return nil
 }
 
-type Recommendation struct {
+type ScoreComponent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Score         float64                `protobuf:"fixed64,2,opt,name=score,proto3" json:"score,omitempty"`
-	Why           string                 `protobuf:"bytes,3,opt,name=why,proto3" json:"why,omitempty"`
-	EstimatedCost string                 `protobuf:"bytes,4,opt,name=estimated_cost,json=estimatedCost,proto3" json:"estimated_cost,omitempty"`
-	PolicyNotes   []string               `protobuf:"bytes,5,rep,name=policy_notes,json=policyNotes,proto3" json:"policy_notes,omitempty"`
+	Value         float64                `protobuf:"fixed64,2,opt,name=value,proto3" json:"value,omitempty"`
+	Rationale     string                 `protobuf:"bytes,3,opt,name=rationale,proto3" json:"rationale,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *ScoreComponent) Reset() {
+	*x = ScoreComponent{}
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScoreComponent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScoreComponent) ProtoMessage() {}
+
+func (x *ScoreComponent) ProtoReflect() protoreflect.Message {
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScoreComponent.ProtoReflect.Descriptor instead.
+func (*ScoreComponent) Descriptor() ([]byte, []int) {
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ScoreComponent) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ScoreComponent) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+func (x *ScoreComponent) GetRationale() string {
+	if x != nil {
+		return x.Rationale
+	}
+	return ""
+}
+
+type Recommendation struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Score          float64                `protobuf:"fixed64,2,opt,name=score,proto3" json:"score,omitempty"`
+	Why            string                 `protobuf:"bytes,3,opt,name=why,proto3" json:"why,omitempty"`
+	EstimatedCost  string                 `protobuf:"bytes,4,opt,name=estimated_cost,json=estimatedCost,proto3" json:"estimated_cost,omitempty"`
+	PolicyNotes    []string               `protobuf:"bytes,5,rep,name=policy_notes,json=policyNotes,proto3" json:"policy_notes,omitempty"`
+	ScoreBreakdown []*ScoreComponent      `protobuf:"bytes,6,rep,name=score_breakdown,json=scoreBreakdown,proto3" json:"score_breakdown,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
 func (x *Recommendation) Reset() {
 	*x = Recommendation{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[17]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1930,7 +1991,7 @@ func (x *Recommendation) String() string {
 func (*Recommendation) ProtoMessage() {}
 
 func (x *Recommendation) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[17]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1943,7 +2004,7 @@ func (x *Recommendation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Recommendation.ProtoReflect.Descriptor instead.
 func (*Recommendation) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{17}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Recommendation) GetName() string {
@@ -1981,6 +2042,13 @@ func (x *Recommendation) GetPolicyNotes() []string {
 	return nil
 }
 
+func (x *Recommendation) GetScoreBreakdown() []*ScoreComponent {
+	if x != nil {
+		return x.ScoreBreakdown
+	}
+	return nil
+}
+
 type CreateSessionRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	SessionId        string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -1997,7 +2065,7 @@ type CreateSessionRequest struct {
 
 func (x *CreateSessionRequest) Reset() {
 	*x = CreateSessionRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[18]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2009,7 +2077,7 @@ func (x *CreateSessionRequest) String() string {
 func (*CreateSessionRequest) ProtoMessage() {}
 
 func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[18]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2022,7 +2090,7 @@ func (x *CreateSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionRequest.ProtoReflect.Descriptor instead.
 func (*CreateSessionRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{18}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CreateSessionRequest) GetSessionId() string {
@@ -2090,7 +2158,7 @@ type CreateSessionResponse struct {
 
 func (x *CreateSessionResponse) Reset() {
 	*x = CreateSessionResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[19]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2102,7 +2170,7 @@ func (x *CreateSessionResponse) String() string {
 func (*CreateSessionResponse) ProtoMessage() {}
 
 func (x *CreateSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[19]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2115,7 +2183,7 @@ func (x *CreateSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSessionResponse.ProtoReflect.Descriptor instead.
 func (*CreateSessionResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{19}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CreateSessionResponse) GetSession() *Session {
@@ -2134,7 +2202,7 @@ type CloseSessionRequest struct {
 
 func (x *CloseSessionRequest) Reset() {
 	*x = CloseSessionRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[20]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2146,7 +2214,7 @@ func (x *CloseSessionRequest) String() string {
 func (*CloseSessionRequest) ProtoMessage() {}
 
 func (x *CloseSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[20]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2159,7 +2227,7 @@ func (x *CloseSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseSessionRequest.ProtoReflect.Descriptor instead.
 func (*CloseSessionRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{20}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CloseSessionRequest) GetSessionId() string {
@@ -2178,7 +2246,7 @@ type CloseSessionResponse struct {
 
 func (x *CloseSessionResponse) Reset() {
 	*x = CloseSessionResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[21]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2190,7 +2258,7 @@ func (x *CloseSessionResponse) String() string {
 func (*CloseSessionResponse) ProtoMessage() {}
 
 func (x *CloseSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[21]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2203,7 +2271,7 @@ func (x *CloseSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseSessionResponse.ProtoReflect.Descriptor instead.
 func (*CloseSessionResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{21}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CloseSessionResponse) GetClosed() bool {
@@ -2222,7 +2290,7 @@ type ListToolsRequest struct {
 
 func (x *ListToolsRequest) Reset() {
 	*x = ListToolsRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[22]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2234,7 +2302,7 @@ func (x *ListToolsRequest) String() string {
 func (*ListToolsRequest) ProtoMessage() {}
 
 func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[22]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2247,7 +2315,7 @@ func (x *ListToolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsRequest.ProtoReflect.Descriptor instead.
 func (*ListToolsRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{22}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListToolsRequest) GetSessionId() string {
@@ -2266,7 +2334,7 @@ type ListToolsResponse struct {
 
 func (x *ListToolsResponse) Reset() {
 	*x = ListToolsResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[23]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2278,7 +2346,7 @@ func (x *ListToolsResponse) String() string {
 func (*ListToolsResponse) ProtoMessage() {}
 
 func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[23]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2291,7 +2359,7 @@ func (x *ListToolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListToolsResponse.ProtoReflect.Descriptor instead.
 func (*ListToolsResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{23}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListToolsResponse) GetTools() []*Tool {
@@ -2316,7 +2384,7 @@ type DiscoverToolsRequest struct {
 
 func (x *DiscoverToolsRequest) Reset() {
 	*x = DiscoverToolsRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[24]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2328,7 +2396,7 @@ func (x *DiscoverToolsRequest) String() string {
 func (*DiscoverToolsRequest) ProtoMessage() {}
 
 func (x *DiscoverToolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[24]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2341,7 +2409,7 @@ func (x *DiscoverToolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverToolsRequest.ProtoReflect.Descriptor instead.
 func (*DiscoverToolsRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{24}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DiscoverToolsRequest) GetSessionId() string {
@@ -2409,7 +2477,7 @@ type DiscoverToolsResponse struct {
 
 func (x *DiscoverToolsResponse) Reset() {
 	*x = DiscoverToolsResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[25]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2421,7 +2489,7 @@ func (x *DiscoverToolsResponse) String() string {
 func (*DiscoverToolsResponse) ProtoMessage() {}
 
 func (x *DiscoverToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[25]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2434,7 +2502,7 @@ func (x *DiscoverToolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverToolsResponse.ProtoReflect.Descriptor instead.
 func (*DiscoverToolsResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{25}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DiscoverToolsResponse) GetTools() isDiscoverToolsResponse_Tools {
@@ -2501,7 +2569,7 @@ type CompactToolList struct {
 
 func (x *CompactToolList) Reset() {
 	*x = CompactToolList{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[26]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2513,7 +2581,7 @@ func (x *CompactToolList) String() string {
 func (*CompactToolList) ProtoMessage() {}
 
 func (x *CompactToolList) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[26]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2526,7 +2594,7 @@ func (x *CompactToolList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompactToolList.ProtoReflect.Descriptor instead.
 func (*CompactToolList) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{26}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CompactToolList) GetTools() []*CompactTool {
@@ -2545,7 +2613,7 @@ type FullToolList struct {
 
 func (x *FullToolList) Reset() {
 	*x = FullToolList{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[27]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2557,7 +2625,7 @@ func (x *FullToolList) String() string {
 func (*FullToolList) ProtoMessage() {}
 
 func (x *FullToolList) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[27]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2570,7 +2638,7 @@ func (x *FullToolList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FullToolList.ProtoReflect.Descriptor instead.
 func (*FullToolList) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{27}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *FullToolList) GetTools() []*FullTool {
@@ -2591,7 +2659,7 @@ type RecommendToolsRequest struct {
 
 func (x *RecommendToolsRequest) Reset() {
 	*x = RecommendToolsRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[28]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2603,7 +2671,7 @@ func (x *RecommendToolsRequest) String() string {
 func (*RecommendToolsRequest) ProtoMessage() {}
 
 func (x *RecommendToolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[28]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2616,7 +2684,7 @@ func (x *RecommendToolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecommendToolsRequest.ProtoReflect.Descriptor instead.
 func (*RecommendToolsRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{28}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RecommendToolsRequest) GetSessionId() string {
@@ -2658,7 +2726,7 @@ type RecommendToolsResponse struct {
 
 func (x *RecommendToolsResponse) Reset() {
 	*x = RecommendToolsResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[29]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2670,7 +2738,7 @@ func (x *RecommendToolsResponse) String() string {
 func (*RecommendToolsResponse) ProtoMessage() {}
 
 func (x *RecommendToolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[29]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2683,7 +2751,7 @@ func (x *RecommendToolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecommendToolsResponse.ProtoReflect.Descriptor instead.
 func (*RecommendToolsResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{29}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RecommendToolsResponse) GetRecommendations() []*Recommendation {
@@ -2769,7 +2837,7 @@ type InvokeToolRequest struct {
 
 func (x *InvokeToolRequest) Reset() {
 	*x = InvokeToolRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[30]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2781,7 +2849,7 @@ func (x *InvokeToolRequest) String() string {
 func (*InvokeToolRequest) ProtoMessage() {}
 
 func (x *InvokeToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[30]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2794,7 +2862,7 @@ func (x *InvokeToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeToolRequest.ProtoReflect.Descriptor instead.
 func (*InvokeToolRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{30}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *InvokeToolRequest) GetSessionId() string {
@@ -2841,7 +2909,7 @@ type InvokeToolResponse struct {
 
 func (x *InvokeToolResponse) Reset() {
 	*x = InvokeToolResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[31]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2853,7 +2921,7 @@ func (x *InvokeToolResponse) String() string {
 func (*InvokeToolResponse) ProtoMessage() {}
 
 func (x *InvokeToolResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[31]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2866,7 +2934,7 @@ func (x *InvokeToolResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeToolResponse.ProtoReflect.Descriptor instead.
 func (*InvokeToolResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{31}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *InvokeToolResponse) GetInvocation() *Invocation {
@@ -2885,7 +2953,7 @@ type GetInvocationRequest struct {
 
 func (x *GetInvocationRequest) Reset() {
 	*x = GetInvocationRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[32]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2897,7 +2965,7 @@ func (x *GetInvocationRequest) String() string {
 func (*GetInvocationRequest) ProtoMessage() {}
 
 func (x *GetInvocationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[32]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2910,7 +2978,7 @@ func (x *GetInvocationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvocationRequest.ProtoReflect.Descriptor instead.
 func (*GetInvocationRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{32}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetInvocationRequest) GetInvocationId() string {
@@ -2929,7 +2997,7 @@ type GetInvocationResponse struct {
 
 func (x *GetInvocationResponse) Reset() {
 	*x = GetInvocationResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[33]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2941,7 +3009,7 @@ func (x *GetInvocationResponse) String() string {
 func (*GetInvocationResponse) ProtoMessage() {}
 
 func (x *GetInvocationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[33]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2954,7 +3022,7 @@ func (x *GetInvocationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvocationResponse.ProtoReflect.Descriptor instead.
 func (*GetInvocationResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{33}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GetInvocationResponse) GetInvocation() *Invocation {
@@ -2973,7 +3041,7 @@ type GetInvocationLogsRequest struct {
 
 func (x *GetInvocationLogsRequest) Reset() {
 	*x = GetInvocationLogsRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[34]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2985,7 +3053,7 @@ func (x *GetInvocationLogsRequest) String() string {
 func (*GetInvocationLogsRequest) ProtoMessage() {}
 
 func (x *GetInvocationLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[34]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2998,7 +3066,7 @@ func (x *GetInvocationLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvocationLogsRequest.ProtoReflect.Descriptor instead.
 func (*GetInvocationLogsRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{34}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetInvocationLogsRequest) GetInvocationId() string {
@@ -3017,7 +3085,7 @@ type GetInvocationLogsResponse struct {
 
 func (x *GetInvocationLogsResponse) Reset() {
 	*x = GetInvocationLogsResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[35]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3029,7 +3097,7 @@ func (x *GetInvocationLogsResponse) String() string {
 func (*GetInvocationLogsResponse) ProtoMessage() {}
 
 func (x *GetInvocationLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[35]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3042,7 +3110,7 @@ func (x *GetInvocationLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvocationLogsResponse.ProtoReflect.Descriptor instead.
 func (*GetInvocationLogsResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{35}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GetInvocationLogsResponse) GetLogs() []*LogLine {
@@ -3061,7 +3129,7 @@ type GetInvocationArtifactsRequest struct {
 
 func (x *GetInvocationArtifactsRequest) Reset() {
 	*x = GetInvocationArtifactsRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[36]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3073,7 +3141,7 @@ func (x *GetInvocationArtifactsRequest) String() string {
 func (*GetInvocationArtifactsRequest) ProtoMessage() {}
 
 func (x *GetInvocationArtifactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[36]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3086,7 +3154,7 @@ func (x *GetInvocationArtifactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvocationArtifactsRequest.ProtoReflect.Descriptor instead.
 func (*GetInvocationArtifactsRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{36}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GetInvocationArtifactsRequest) GetInvocationId() string {
@@ -3105,7 +3173,7 @@ type GetInvocationArtifactsResponse struct {
 
 func (x *GetInvocationArtifactsResponse) Reset() {
 	*x = GetInvocationArtifactsResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[37]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3117,7 +3185,7 @@ func (x *GetInvocationArtifactsResponse) String() string {
 func (*GetInvocationArtifactsResponse) ProtoMessage() {}
 
 func (x *GetInvocationArtifactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[37]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3130,7 +3198,7 @@ func (x *GetInvocationArtifactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvocationArtifactsResponse.ProtoReflect.Descriptor instead.
 func (*GetInvocationArtifactsResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{37}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *GetInvocationArtifactsResponse) GetArtifacts() []*Artifact {
@@ -3148,7 +3216,7 @@ type CheckRequest struct {
 
 func (x *CheckRequest) Reset() {
 	*x = CheckRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[38]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3160,7 +3228,7 @@ func (x *CheckRequest) String() string {
 func (*CheckRequest) ProtoMessage() {}
 
 func (x *CheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[38]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3173,7 +3241,7 @@ func (x *CheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckRequest.ProtoReflect.Descriptor instead.
 func (*CheckRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{38}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{39}
 }
 
 type CheckResponse struct {
@@ -3185,7 +3253,7 @@ type CheckResponse struct {
 
 func (x *CheckResponse) Reset() {
 	*x = CheckResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[39]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3197,7 +3265,7 @@ func (x *CheckResponse) String() string {
 func (*CheckResponse) ProtoMessage() {}
 
 func (x *CheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[39]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3210,7 +3278,7 @@ func (x *CheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckResponse.ProtoReflect.Descriptor instead.
 func (*CheckResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{39}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *CheckResponse) GetStatus() string {
@@ -3231,7 +3299,7 @@ type AcceptRecommendationRequest struct {
 
 func (x *AcceptRecommendationRequest) Reset() {
 	*x = AcceptRecommendationRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[40]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3243,7 +3311,7 @@ func (x *AcceptRecommendationRequest) String() string {
 func (*AcceptRecommendationRequest) ProtoMessage() {}
 
 func (x *AcceptRecommendationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[40]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3256,7 +3324,7 @@ func (x *AcceptRecommendationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptRecommendationRequest.ProtoReflect.Descriptor instead.
 func (*AcceptRecommendationRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{40}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *AcceptRecommendationRequest) GetSessionId() string {
@@ -3289,7 +3357,7 @@ type AcceptRecommendationResponse struct {
 
 func (x *AcceptRecommendationResponse) Reset() {
 	*x = AcceptRecommendationResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[41]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3301,7 +3369,7 @@ func (x *AcceptRecommendationResponse) String() string {
 func (*AcceptRecommendationResponse) ProtoMessage() {}
 
 func (x *AcceptRecommendationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[41]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3314,7 +3382,7 @@ func (x *AcceptRecommendationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptRecommendationResponse.ProtoReflect.Descriptor instead.
 func (*AcceptRecommendationResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{41}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *AcceptRecommendationResponse) GetEventId() string {
@@ -3335,7 +3403,7 @@ type RejectRecommendationRequest struct {
 
 func (x *RejectRecommendationRequest) Reset() {
 	*x = RejectRecommendationRequest{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[42]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3347,7 +3415,7 @@ func (x *RejectRecommendationRequest) String() string {
 func (*RejectRecommendationRequest) ProtoMessage() {}
 
 func (x *RejectRecommendationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[42]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3360,7 +3428,7 @@ func (x *RejectRecommendationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectRecommendationRequest.ProtoReflect.Descriptor instead.
 func (*RejectRecommendationRequest) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{42}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *RejectRecommendationRequest) GetSessionId() string {
@@ -3393,7 +3461,7 @@ type RejectRecommendationResponse struct {
 
 func (x *RejectRecommendationResponse) Reset() {
 	*x = RejectRecommendationResponse{}
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[43]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3405,7 +3473,7 @@ func (x *RejectRecommendationResponse) String() string {
 func (*RejectRecommendationResponse) ProtoMessage() {}
 
 func (x *RejectRecommendationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[43]
+	mi := &file_underpass_runtime_v1_runtime_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3418,7 +3486,7 @@ func (x *RejectRecommendationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectRecommendationResponse.ProtoReflect.Descriptor instead.
 func (*RejectRecommendationResponse) Descriptor() ([]byte, []int) {
-	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{43}
+	return file_underpass_runtime_v1_runtime_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *RejectRecommendationResponse) GetEventId() string {
@@ -3583,13 +3651,18 @@ const file_underpass_runtime_v1_runtime_proto_rawDesc = "" +
 	"\x04logs\x18\x0e \x03(\v2\x1d.underpass.runtime.v1.LogLineR\x04logs\x12\x19\n" +
 	"\blogs_ref\x18\x0f \x01(\tR\alogsRef\x12<\n" +
 	"\tartifacts\x18\x10 \x03(\v2\x1e.underpass.runtime.v1.ArtifactR\tartifacts\x121\n" +
-	"\x05error\x18\x11 \x01(\v2\x1b.underpass.runtime.v1.ErrorR\x05error\"\x96\x01\n" +
+	"\x05error\x18\x11 \x01(\v2\x1b.underpass.runtime.v1.ErrorR\x05error\"X\n" +
+	"\x0eScoreComponent\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value\x12\x1c\n" +
+	"\trationale\x18\x03 \x01(\tR\trationale\"\xe5\x01\n" +
 	"\x0eRecommendation\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05score\x18\x02 \x01(\x01R\x05score\x12\x10\n" +
 	"\x03why\x18\x03 \x01(\tR\x03why\x12%\n" +
 	"\x0eestimated_cost\x18\x04 \x01(\tR\restimatedCost\x12!\n" +
-	"\fpolicy_notes\x18\x05 \x03(\tR\vpolicyNotes\"\xba\x03\n" +
+	"\fpolicy_notes\x18\x05 \x03(\tR\vpolicyNotes\x12M\n" +
+	"\x0fscore_breakdown\x18\x06 \x03(\v2$.underpass.runtime.v1.ScoreComponentR\x0escoreBreakdown\"\xba\x03\n" +
 	"\x14CreateSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x19\n" +
@@ -3762,7 +3835,7 @@ func file_underpass_runtime_v1_runtime_proto_rawDescGZIP() []byte {
 }
 
 var file_underpass_runtime_v1_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_underpass_runtime_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_underpass_runtime_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
 var file_underpass_runtime_v1_runtime_proto_goTypes = []any{
 	(RuntimeKind)(0),                       // 0: underpass.runtime.v1.RuntimeKind
 	(InvocationStatus)(0),                  // 1: underpass.runtime.v1.InvocationStatus
@@ -3788,46 +3861,47 @@ var file_underpass_runtime_v1_runtime_proto_goTypes = []any{
 	(*LogLine)(nil),                        // 21: underpass.runtime.v1.LogLine
 	(*Artifact)(nil),                       // 22: underpass.runtime.v1.Artifact
 	(*Invocation)(nil),                     // 23: underpass.runtime.v1.Invocation
-	(*Recommendation)(nil),                 // 24: underpass.runtime.v1.Recommendation
-	(*CreateSessionRequest)(nil),           // 25: underpass.runtime.v1.CreateSessionRequest
-	(*CreateSessionResponse)(nil),          // 26: underpass.runtime.v1.CreateSessionResponse
-	(*CloseSessionRequest)(nil),            // 27: underpass.runtime.v1.CloseSessionRequest
-	(*CloseSessionResponse)(nil),           // 28: underpass.runtime.v1.CloseSessionResponse
-	(*ListToolsRequest)(nil),               // 29: underpass.runtime.v1.ListToolsRequest
-	(*ListToolsResponse)(nil),              // 30: underpass.runtime.v1.ListToolsResponse
-	(*DiscoverToolsRequest)(nil),           // 31: underpass.runtime.v1.DiscoverToolsRequest
-	(*DiscoverToolsResponse)(nil),          // 32: underpass.runtime.v1.DiscoverToolsResponse
-	(*CompactToolList)(nil),                // 33: underpass.runtime.v1.CompactToolList
-	(*FullToolList)(nil),                   // 34: underpass.runtime.v1.FullToolList
-	(*RecommendToolsRequest)(nil),          // 35: underpass.runtime.v1.RecommendToolsRequest
-	(*RecommendToolsResponse)(nil),         // 36: underpass.runtime.v1.RecommendToolsResponse
-	(*InvokeToolRequest)(nil),              // 37: underpass.runtime.v1.InvokeToolRequest
-	(*InvokeToolResponse)(nil),             // 38: underpass.runtime.v1.InvokeToolResponse
-	(*GetInvocationRequest)(nil),           // 39: underpass.runtime.v1.GetInvocationRequest
-	(*GetInvocationResponse)(nil),          // 40: underpass.runtime.v1.GetInvocationResponse
-	(*GetInvocationLogsRequest)(nil),       // 41: underpass.runtime.v1.GetInvocationLogsRequest
-	(*GetInvocationLogsResponse)(nil),      // 42: underpass.runtime.v1.GetInvocationLogsResponse
-	(*GetInvocationArtifactsRequest)(nil),  // 43: underpass.runtime.v1.GetInvocationArtifactsRequest
-	(*GetInvocationArtifactsResponse)(nil), // 44: underpass.runtime.v1.GetInvocationArtifactsResponse
-	(*CheckRequest)(nil),                   // 45: underpass.runtime.v1.CheckRequest
-	(*CheckResponse)(nil),                  // 46: underpass.runtime.v1.CheckResponse
-	(*AcceptRecommendationRequest)(nil),    // 47: underpass.runtime.v1.AcceptRecommendationRequest
-	(*AcceptRecommendationResponse)(nil),   // 48: underpass.runtime.v1.AcceptRecommendationResponse
-	(*RejectRecommendationRequest)(nil),    // 49: underpass.runtime.v1.RejectRecommendationRequest
-	(*RejectRecommendationResponse)(nil),   // 50: underpass.runtime.v1.RejectRecommendationResponse
-	nil,                                    // 51: underpass.runtime.v1.Session.MetadataEntry
-	nil,                                    // 52: underpass.runtime.v1.CreateSessionRequest.MetadataEntry
-	(*timestamppb.Timestamp)(nil),          // 53: google.protobuf.Timestamp
-	(*structpb.Value)(nil),                 // 54: google.protobuf.Value
-	(*structpb.Struct)(nil),                // 55: google.protobuf.Struct
+	(*ScoreComponent)(nil),                 // 24: underpass.runtime.v1.ScoreComponent
+	(*Recommendation)(nil),                 // 25: underpass.runtime.v1.Recommendation
+	(*CreateSessionRequest)(nil),           // 26: underpass.runtime.v1.CreateSessionRequest
+	(*CreateSessionResponse)(nil),          // 27: underpass.runtime.v1.CreateSessionResponse
+	(*CloseSessionRequest)(nil),            // 28: underpass.runtime.v1.CloseSessionRequest
+	(*CloseSessionResponse)(nil),           // 29: underpass.runtime.v1.CloseSessionResponse
+	(*ListToolsRequest)(nil),               // 30: underpass.runtime.v1.ListToolsRequest
+	(*ListToolsResponse)(nil),              // 31: underpass.runtime.v1.ListToolsResponse
+	(*DiscoverToolsRequest)(nil),           // 32: underpass.runtime.v1.DiscoverToolsRequest
+	(*DiscoverToolsResponse)(nil),          // 33: underpass.runtime.v1.DiscoverToolsResponse
+	(*CompactToolList)(nil),                // 34: underpass.runtime.v1.CompactToolList
+	(*FullToolList)(nil),                   // 35: underpass.runtime.v1.FullToolList
+	(*RecommendToolsRequest)(nil),          // 36: underpass.runtime.v1.RecommendToolsRequest
+	(*RecommendToolsResponse)(nil),         // 37: underpass.runtime.v1.RecommendToolsResponse
+	(*InvokeToolRequest)(nil),              // 38: underpass.runtime.v1.InvokeToolRequest
+	(*InvokeToolResponse)(nil),             // 39: underpass.runtime.v1.InvokeToolResponse
+	(*GetInvocationRequest)(nil),           // 40: underpass.runtime.v1.GetInvocationRequest
+	(*GetInvocationResponse)(nil),          // 41: underpass.runtime.v1.GetInvocationResponse
+	(*GetInvocationLogsRequest)(nil),       // 42: underpass.runtime.v1.GetInvocationLogsRequest
+	(*GetInvocationLogsResponse)(nil),      // 43: underpass.runtime.v1.GetInvocationLogsResponse
+	(*GetInvocationArtifactsRequest)(nil),  // 44: underpass.runtime.v1.GetInvocationArtifactsRequest
+	(*GetInvocationArtifactsResponse)(nil), // 45: underpass.runtime.v1.GetInvocationArtifactsResponse
+	(*CheckRequest)(nil),                   // 46: underpass.runtime.v1.CheckRequest
+	(*CheckResponse)(nil),                  // 47: underpass.runtime.v1.CheckResponse
+	(*AcceptRecommendationRequest)(nil),    // 48: underpass.runtime.v1.AcceptRecommendationRequest
+	(*AcceptRecommendationResponse)(nil),   // 49: underpass.runtime.v1.AcceptRecommendationResponse
+	(*RejectRecommendationRequest)(nil),    // 50: underpass.runtime.v1.RejectRecommendationRequest
+	(*RejectRecommendationResponse)(nil),   // 51: underpass.runtime.v1.RejectRecommendationResponse
+	nil,                                    // 52: underpass.runtime.v1.Session.MetadataEntry
+	nil,                                    // 53: underpass.runtime.v1.CreateSessionRequest.MetadataEntry
+	(*timestamppb.Timestamp)(nil),          // 54: google.protobuf.Timestamp
+	(*structpb.Value)(nil),                 // 55: google.protobuf.Value
+	(*structpb.Struct)(nil),                // 56: google.protobuf.Struct
 }
 var file_underpass_runtime_v1_runtime_proto_depIdxs = []int32{
 	0,  // 0: underpass.runtime.v1.RuntimeRef.kind:type_name -> underpass.runtime.v1.RuntimeKind
 	8,  // 1: underpass.runtime.v1.Session.runtime:type_name -> underpass.runtime.v1.RuntimeRef
 	7,  // 2: underpass.runtime.v1.Session.principal:type_name -> underpass.runtime.v1.Principal
-	51, // 3: underpass.runtime.v1.Session.metadata:type_name -> underpass.runtime.v1.Session.MetadataEntry
-	53, // 4: underpass.runtime.v1.Session.created_at:type_name -> google.protobuf.Timestamp
-	53, // 5: underpass.runtime.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
+	52, // 3: underpass.runtime.v1.Session.metadata:type_name -> underpass.runtime.v1.Session.MetadataEntry
+	54, // 4: underpass.runtime.v1.Session.created_at:type_name -> google.protobuf.Timestamp
+	54, // 5: underpass.runtime.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
 	12, // 6: underpass.runtime.v1.PolicyMetadata.path_fields:type_name -> underpass.runtime.v1.PathField
 	13, // 7: underpass.runtime.v1.PolicyMetadata.arg_fields:type_name -> underpass.runtime.v1.ArgField
 	14, // 8: underpass.runtime.v1.PolicyMetadata.profile_fields:type_name -> underpass.runtime.v1.SimpleField
@@ -3844,59 +3918,60 @@ var file_underpass_runtime_v1_runtime_proto_depIdxs = []int32{
 	15, // 19: underpass.runtime.v1.Tool.observability:type_name -> underpass.runtime.v1.Observability
 	16, // 20: underpass.runtime.v1.FullTool.tool:type_name -> underpass.runtime.v1.Tool
 	18, // 21: underpass.runtime.v1.FullTool.stats:type_name -> underpass.runtime.v1.ToolStats
-	53, // 22: underpass.runtime.v1.LogLine.at:type_name -> google.protobuf.Timestamp
-	53, // 23: underpass.runtime.v1.Artifact.created_at:type_name -> google.protobuf.Timestamp
+	54, // 22: underpass.runtime.v1.LogLine.at:type_name -> google.protobuf.Timestamp
+	54, // 23: underpass.runtime.v1.Artifact.created_at:type_name -> google.protobuf.Timestamp
 	1,  // 24: underpass.runtime.v1.Invocation.status:type_name -> underpass.runtime.v1.InvocationStatus
-	53, // 25: underpass.runtime.v1.Invocation.started_at:type_name -> google.protobuf.Timestamp
-	53, // 26: underpass.runtime.v1.Invocation.completed_at:type_name -> google.protobuf.Timestamp
-	54, // 27: underpass.runtime.v1.Invocation.output:type_name -> google.protobuf.Value
+	54, // 25: underpass.runtime.v1.Invocation.started_at:type_name -> google.protobuf.Timestamp
+	54, // 26: underpass.runtime.v1.Invocation.completed_at:type_name -> google.protobuf.Timestamp
+	55, // 27: underpass.runtime.v1.Invocation.output:type_name -> google.protobuf.Value
 	21, // 28: underpass.runtime.v1.Invocation.logs:type_name -> underpass.runtime.v1.LogLine
 	22, // 29: underpass.runtime.v1.Invocation.artifacts:type_name -> underpass.runtime.v1.Artifact
 	20, // 30: underpass.runtime.v1.Invocation.error:type_name -> underpass.runtime.v1.Error
-	7,  // 31: underpass.runtime.v1.CreateSessionRequest.principal:type_name -> underpass.runtime.v1.Principal
-	52, // 32: underpass.runtime.v1.CreateSessionRequest.metadata:type_name -> underpass.runtime.v1.CreateSessionRequest.MetadataEntry
-	9,  // 33: underpass.runtime.v1.CreateSessionResponse.session:type_name -> underpass.runtime.v1.Session
-	16, // 34: underpass.runtime.v1.ListToolsResponse.tools:type_name -> underpass.runtime.v1.Tool
-	6,  // 35: underpass.runtime.v1.DiscoverToolsRequest.detail:type_name -> underpass.runtime.v1.DiscoveryDetail
-	33, // 36: underpass.runtime.v1.DiscoverToolsResponse.compact:type_name -> underpass.runtime.v1.CompactToolList
-	34, // 37: underpass.runtime.v1.DiscoverToolsResponse.full:type_name -> underpass.runtime.v1.FullToolList
-	17, // 38: underpass.runtime.v1.CompactToolList.tools:type_name -> underpass.runtime.v1.CompactTool
-	19, // 39: underpass.runtime.v1.FullToolList.tools:type_name -> underpass.runtime.v1.FullTool
-	24, // 40: underpass.runtime.v1.RecommendToolsResponse.recommendations:type_name -> underpass.runtime.v1.Recommendation
-	55, // 41: underpass.runtime.v1.InvokeToolRequest.args:type_name -> google.protobuf.Struct
-	23, // 42: underpass.runtime.v1.InvokeToolResponse.invocation:type_name -> underpass.runtime.v1.Invocation
-	23, // 43: underpass.runtime.v1.GetInvocationResponse.invocation:type_name -> underpass.runtime.v1.Invocation
-	21, // 44: underpass.runtime.v1.GetInvocationLogsResponse.logs:type_name -> underpass.runtime.v1.LogLine
-	22, // 45: underpass.runtime.v1.GetInvocationArtifactsResponse.artifacts:type_name -> underpass.runtime.v1.Artifact
-	25, // 46: underpass.runtime.v1.SessionService.CreateSession:input_type -> underpass.runtime.v1.CreateSessionRequest
-	27, // 47: underpass.runtime.v1.SessionService.CloseSession:input_type -> underpass.runtime.v1.CloseSessionRequest
-	29, // 48: underpass.runtime.v1.CapabilityCatalogService.ListTools:input_type -> underpass.runtime.v1.ListToolsRequest
-	31, // 49: underpass.runtime.v1.CapabilityCatalogService.DiscoverTools:input_type -> underpass.runtime.v1.DiscoverToolsRequest
-	35, // 50: underpass.runtime.v1.CapabilityCatalogService.RecommendTools:input_type -> underpass.runtime.v1.RecommendToolsRequest
-	47, // 51: underpass.runtime.v1.CapabilityCatalogService.AcceptRecommendation:input_type -> underpass.runtime.v1.AcceptRecommendationRequest
-	49, // 52: underpass.runtime.v1.CapabilityCatalogService.RejectRecommendation:input_type -> underpass.runtime.v1.RejectRecommendationRequest
-	37, // 53: underpass.runtime.v1.InvocationService.InvokeTool:input_type -> underpass.runtime.v1.InvokeToolRequest
-	39, // 54: underpass.runtime.v1.InvocationService.GetInvocation:input_type -> underpass.runtime.v1.GetInvocationRequest
-	41, // 55: underpass.runtime.v1.InvocationService.GetInvocationLogs:input_type -> underpass.runtime.v1.GetInvocationLogsRequest
-	43, // 56: underpass.runtime.v1.InvocationService.GetInvocationArtifacts:input_type -> underpass.runtime.v1.GetInvocationArtifactsRequest
-	45, // 57: underpass.runtime.v1.HealthService.Check:input_type -> underpass.runtime.v1.CheckRequest
-	26, // 58: underpass.runtime.v1.SessionService.CreateSession:output_type -> underpass.runtime.v1.CreateSessionResponse
-	28, // 59: underpass.runtime.v1.SessionService.CloseSession:output_type -> underpass.runtime.v1.CloseSessionResponse
-	30, // 60: underpass.runtime.v1.CapabilityCatalogService.ListTools:output_type -> underpass.runtime.v1.ListToolsResponse
-	32, // 61: underpass.runtime.v1.CapabilityCatalogService.DiscoverTools:output_type -> underpass.runtime.v1.DiscoverToolsResponse
-	36, // 62: underpass.runtime.v1.CapabilityCatalogService.RecommendTools:output_type -> underpass.runtime.v1.RecommendToolsResponse
-	48, // 63: underpass.runtime.v1.CapabilityCatalogService.AcceptRecommendation:output_type -> underpass.runtime.v1.AcceptRecommendationResponse
-	50, // 64: underpass.runtime.v1.CapabilityCatalogService.RejectRecommendation:output_type -> underpass.runtime.v1.RejectRecommendationResponse
-	38, // 65: underpass.runtime.v1.InvocationService.InvokeTool:output_type -> underpass.runtime.v1.InvokeToolResponse
-	40, // 66: underpass.runtime.v1.InvocationService.GetInvocation:output_type -> underpass.runtime.v1.GetInvocationResponse
-	42, // 67: underpass.runtime.v1.InvocationService.GetInvocationLogs:output_type -> underpass.runtime.v1.GetInvocationLogsResponse
-	44, // 68: underpass.runtime.v1.InvocationService.GetInvocationArtifacts:output_type -> underpass.runtime.v1.GetInvocationArtifactsResponse
-	46, // 69: underpass.runtime.v1.HealthService.Check:output_type -> underpass.runtime.v1.CheckResponse
-	58, // [58:70] is the sub-list for method output_type
-	46, // [46:58] is the sub-list for method input_type
-	46, // [46:46] is the sub-list for extension type_name
-	46, // [46:46] is the sub-list for extension extendee
-	0,  // [0:46] is the sub-list for field type_name
+	24, // 31: underpass.runtime.v1.Recommendation.score_breakdown:type_name -> underpass.runtime.v1.ScoreComponent
+	7,  // 32: underpass.runtime.v1.CreateSessionRequest.principal:type_name -> underpass.runtime.v1.Principal
+	53, // 33: underpass.runtime.v1.CreateSessionRequest.metadata:type_name -> underpass.runtime.v1.CreateSessionRequest.MetadataEntry
+	9,  // 34: underpass.runtime.v1.CreateSessionResponse.session:type_name -> underpass.runtime.v1.Session
+	16, // 35: underpass.runtime.v1.ListToolsResponse.tools:type_name -> underpass.runtime.v1.Tool
+	6,  // 36: underpass.runtime.v1.DiscoverToolsRequest.detail:type_name -> underpass.runtime.v1.DiscoveryDetail
+	34, // 37: underpass.runtime.v1.DiscoverToolsResponse.compact:type_name -> underpass.runtime.v1.CompactToolList
+	35, // 38: underpass.runtime.v1.DiscoverToolsResponse.full:type_name -> underpass.runtime.v1.FullToolList
+	17, // 39: underpass.runtime.v1.CompactToolList.tools:type_name -> underpass.runtime.v1.CompactTool
+	19, // 40: underpass.runtime.v1.FullToolList.tools:type_name -> underpass.runtime.v1.FullTool
+	25, // 41: underpass.runtime.v1.RecommendToolsResponse.recommendations:type_name -> underpass.runtime.v1.Recommendation
+	56, // 42: underpass.runtime.v1.InvokeToolRequest.args:type_name -> google.protobuf.Struct
+	23, // 43: underpass.runtime.v1.InvokeToolResponse.invocation:type_name -> underpass.runtime.v1.Invocation
+	23, // 44: underpass.runtime.v1.GetInvocationResponse.invocation:type_name -> underpass.runtime.v1.Invocation
+	21, // 45: underpass.runtime.v1.GetInvocationLogsResponse.logs:type_name -> underpass.runtime.v1.LogLine
+	22, // 46: underpass.runtime.v1.GetInvocationArtifactsResponse.artifacts:type_name -> underpass.runtime.v1.Artifact
+	26, // 47: underpass.runtime.v1.SessionService.CreateSession:input_type -> underpass.runtime.v1.CreateSessionRequest
+	28, // 48: underpass.runtime.v1.SessionService.CloseSession:input_type -> underpass.runtime.v1.CloseSessionRequest
+	30, // 49: underpass.runtime.v1.CapabilityCatalogService.ListTools:input_type -> underpass.runtime.v1.ListToolsRequest
+	32, // 50: underpass.runtime.v1.CapabilityCatalogService.DiscoverTools:input_type -> underpass.runtime.v1.DiscoverToolsRequest
+	36, // 51: underpass.runtime.v1.CapabilityCatalogService.RecommendTools:input_type -> underpass.runtime.v1.RecommendToolsRequest
+	48, // 52: underpass.runtime.v1.CapabilityCatalogService.AcceptRecommendation:input_type -> underpass.runtime.v1.AcceptRecommendationRequest
+	50, // 53: underpass.runtime.v1.CapabilityCatalogService.RejectRecommendation:input_type -> underpass.runtime.v1.RejectRecommendationRequest
+	38, // 54: underpass.runtime.v1.InvocationService.InvokeTool:input_type -> underpass.runtime.v1.InvokeToolRequest
+	40, // 55: underpass.runtime.v1.InvocationService.GetInvocation:input_type -> underpass.runtime.v1.GetInvocationRequest
+	42, // 56: underpass.runtime.v1.InvocationService.GetInvocationLogs:input_type -> underpass.runtime.v1.GetInvocationLogsRequest
+	44, // 57: underpass.runtime.v1.InvocationService.GetInvocationArtifacts:input_type -> underpass.runtime.v1.GetInvocationArtifactsRequest
+	46, // 58: underpass.runtime.v1.HealthService.Check:input_type -> underpass.runtime.v1.CheckRequest
+	27, // 59: underpass.runtime.v1.SessionService.CreateSession:output_type -> underpass.runtime.v1.CreateSessionResponse
+	29, // 60: underpass.runtime.v1.SessionService.CloseSession:output_type -> underpass.runtime.v1.CloseSessionResponse
+	31, // 61: underpass.runtime.v1.CapabilityCatalogService.ListTools:output_type -> underpass.runtime.v1.ListToolsResponse
+	33, // 62: underpass.runtime.v1.CapabilityCatalogService.DiscoverTools:output_type -> underpass.runtime.v1.DiscoverToolsResponse
+	37, // 63: underpass.runtime.v1.CapabilityCatalogService.RecommendTools:output_type -> underpass.runtime.v1.RecommendToolsResponse
+	49, // 64: underpass.runtime.v1.CapabilityCatalogService.AcceptRecommendation:output_type -> underpass.runtime.v1.AcceptRecommendationResponse
+	51, // 65: underpass.runtime.v1.CapabilityCatalogService.RejectRecommendation:output_type -> underpass.runtime.v1.RejectRecommendationResponse
+	39, // 66: underpass.runtime.v1.InvocationService.InvokeTool:output_type -> underpass.runtime.v1.InvokeToolResponse
+	41, // 67: underpass.runtime.v1.InvocationService.GetInvocation:output_type -> underpass.runtime.v1.GetInvocationResponse
+	43, // 68: underpass.runtime.v1.InvocationService.GetInvocationLogs:output_type -> underpass.runtime.v1.GetInvocationLogsResponse
+	45, // 69: underpass.runtime.v1.InvocationService.GetInvocationArtifacts:output_type -> underpass.runtime.v1.GetInvocationArtifactsResponse
+	47, // 70: underpass.runtime.v1.HealthService.Check:output_type -> underpass.runtime.v1.CheckResponse
+	59, // [59:71] is the sub-list for method output_type
+	47, // [47:59] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_underpass_runtime_v1_runtime_proto_init() }
@@ -3904,7 +3979,7 @@ func file_underpass_runtime_v1_runtime_proto_init() {
 	if File_underpass_runtime_v1_runtime_proto != nil {
 		return
 	}
-	file_underpass_runtime_v1_runtime_proto_msgTypes[25].OneofWrappers = []any{
+	file_underpass_runtime_v1_runtime_proto_msgTypes[26].OneofWrappers = []any{
 		(*DiscoverToolsResponse_Compact)(nil),
 		(*DiscoverToolsResponse_Full)(nil),
 	}
@@ -3914,7 +3989,7 @@ func file_underpass_runtime_v1_runtime_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_underpass_runtime_v1_runtime_proto_rawDesc), len(file_underpass_runtime_v1_runtime_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   46,
+			NumMessages:   47,
 			NumExtensions: 0,
 			NumServices:   4,
 		},
