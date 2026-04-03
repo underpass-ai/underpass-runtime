@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -134,14 +135,20 @@ func (m *DockerManager) CreateSession(ctx context.Context, req app.CreateSession
 	}
 
 	if err := m.client.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		_ = m.client.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		if rmErr := m.client.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true}); rmErr != nil {
+			slog.Warn("failed to remove container after start failure", "container", resp.ID, "error", rmErr)
+		}
 		return domain.Session{}, fmt.Errorf("start container: %w", err)
 	}
 
 	if req.RepoURL != "" {
 		if err := m.cloneRepoInContainer(ctx, resp.ID, req.RepoURL, req.RepoRef); err != nil {
-			_ = m.client.ContainerStop(ctx, resp.ID, container.StopOptions{})
-			_ = m.client.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			if stopErr := m.client.ContainerStop(ctx, resp.ID, container.StopOptions{}); stopErr != nil {
+				slog.Warn("failed to stop container after clone failure", "container", resp.ID, "error", stopErr)
+			}
+			if rmErr := m.client.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true}); rmErr != nil {
+				slog.Warn("failed to remove container after clone failure", "container", resp.ID, "error", rmErr)
+			}
 			return domain.Session{}, fmt.Errorf("clone repo in container: %w", err)
 		}
 	}
@@ -181,8 +188,12 @@ func (m *DockerManager) CreateSession(ctx context.Context, req app.CreateSession
 
 	if m.cfg.SessionStore != nil {
 		if err := m.cfg.SessionStore.Save(ctx, session); err != nil {
-			_ = m.client.ContainerStop(ctx, resp.ID, container.StopOptions{})
-			_ = m.client.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+			if stopErr := m.client.ContainerStop(ctx, resp.ID, container.StopOptions{}); stopErr != nil {
+				slog.Warn("failed to stop container after session save failure", "container", resp.ID, "error", stopErr)
+			}
+			if rmErr := m.client.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true}); rmErr != nil {
+				slog.Warn("failed to remove container after session save failure", "container", resp.ID, "error", rmErr)
+			}
 			return domain.Session{}, fmt.Errorf("save session: %w", err)
 		}
 	}
@@ -197,7 +208,9 @@ func (m *DockerManager) GetSession(ctx context.Context, sessionID string) (domai
 			return domain.Session{}, false, err
 		}
 		if time.Now().UTC().After(session.ExpiresAt) {
-			_ = m.CloseSession(ctx, sessionID)
+			if err := m.CloseSession(ctx, sessionID); err != nil {
+				slog.Warn("failed to close expired session", "session_id", sessionID, "error", err)
+			}
 			return domain.Session{}, false, nil
 		}
 		return session, true, nil
@@ -245,14 +258,18 @@ func (m *DockerManager) CloseSession(ctx context.Context, sessionID string) erro
 				ok = true
 			}
 		}
-		_ = m.cfg.SessionStore.Delete(ctx, sessionID)
+		if delErr := m.cfg.SessionStore.Delete(ctx, sessionID); delErr != nil {
+			slog.Warn("failed to delete session from store", "session_id", sessionID, "error", delErr)
+		}
 	}
 
 	if !ok || containerID == "" {
 		return nil
 	}
 
-	_ = m.client.ContainerStop(ctx, containerID, container.StopOptions{})
+	if stopErr := m.client.ContainerStop(ctx, containerID, container.StopOptions{}); stopErr != nil {
+		slog.Warn("failed to stop container during session close", "container", containerID, "error", stopErr)
+	}
 	return m.client.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
 }
 
