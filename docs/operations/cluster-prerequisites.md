@@ -24,6 +24,7 @@ Checklist of cluster-level requirements before deploying underpass-runtime.
 | **HPA** | Metrics Server | `kubectl top pods` |
 | **GPU workloads (vLLM)** | NVIDIA GPU Operator + device plugin | `kubectl get nodes -o json \| jq '.items[].status.capacity["nvidia.com/gpu"]'` |
 | **Ingress (vLLM)** | NGINX Ingress Controller | `kubectl get ingressclass` |
+| **Observability stack** | See [underpass-ai/underpass-observability](https://github.com/underpass-ai/underpass-observability) | Grafana, Loki, OTEL Collector, Prometheus, alert-relay |
 
 ## Namespace Setup
 

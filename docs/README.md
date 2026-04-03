@@ -28,6 +28,14 @@
 | [Testing Guide](testing.md) | Test pyramid, unit/integration/E2E matrix, CI gates |
 | [Observability](observability.md) | Metrics inventory, OTel tracing, Prometheus alerts, Grafana queries |
 
+## Infrastructure
+
+| Document | Description |
+|---|---|
+| [Observability Stack](https://github.com/underpass-ai/underpass-observability) | Grafana, Loki, OTEL Collector, Prometheus, alert-relay (separate repo) |
+| [Algorithm Architecture](ARCHITECTURE_ALGORITHMS.md) | Scoring tiers, NeuralTS, explainability trace, cross-agent learning |
+| [Evidence Plane](EVIDENCE_PLANE.md) | Recommendation traceability, decision store, feedback loop |
+
 ## Runbooks
 
 | Document | Description |
