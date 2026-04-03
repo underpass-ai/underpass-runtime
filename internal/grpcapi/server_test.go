@@ -766,3 +766,31 @@ func TestAuthConfigFromEnv_TrustedHeaders_MissingToken(t *testing.T) {
 		t.Fatal("expected error for missing token")
 	}
 }
+
+func TestAcceptRecommendation(t *testing.T) {
+	fake := &fakeService{}
+	srv := newTestServer(fake)
+	resp, err := srv.AcceptRecommendation(context.Background(), &pb.AcceptRecommendationRequest{
+		SessionId: "sess-1", RecommendationId: "rec-1", SelectedToolId: "fs.read",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.GetEventId() == "" {
+		t.Fatal("expected event ID")
+	}
+}
+
+func TestRejectRecommendation(t *testing.T) {
+	fake := &fakeService{}
+	srv := newTestServer(fake)
+	resp, err := srv.RejectRecommendation(context.Background(), &pb.RejectRecommendationRequest{
+		SessionId: "sess-1", RecommendationId: "rec-1", Reason: "not useful",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.GetEventId() == "" {
+		t.Fatal("expected event ID")
+	}
+}
