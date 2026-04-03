@@ -194,7 +194,8 @@ CREATE TABLE invocations (
 	}
 	defer func() { _ = stmt.Close() }()
 
-	for _, r := range records {
+	for i := range records {
+		r := &records[i]
 		ts := r.Timestamp.UTC()
 		dt := ts.Format("2006-01-02")
 		hour := fmt.Sprintf("%d", ts.Hour())
