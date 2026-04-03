@@ -47,6 +47,7 @@ type Service struct {
 	policyLearned   PolicyReader
 	neuralModel     NeuralModelReader
 	decisionStore   RecommendationDecisionStore
+	warmCaches      *sessionWarmCaches
 	tracer          trace.Tracer
 
 	// sessionInvCount tracks invocation count per session for first-tool metric.
@@ -87,6 +88,7 @@ func NewService(
 		metrics:         newInvocationMetrics(),
 		qualityObserver: noopQualityObserver{},
 		decisionStore:   NewInMemoryRecommendationDecisionStore(),
+		warmCaches:      newSessionWarmCaches(),
 		tracer:          otel.Tracer("workspace.service"),
 	}
 }
@@ -198,6 +200,7 @@ func (s *Service) CreateSession(ctx context.Context, req CreateSessionRequest) (
 	if s.kpiMetrics != nil {
 		s.kpiMetrics.ObserveSessionCreated()
 	}
+	s.prewarmSession(session)
 	return session, nil
 }
 
@@ -219,6 +222,7 @@ func (s *Service) CloseSession(ctx context.Context, sessionID string) *ServiceEr
 	if s.kpiMetrics != nil {
 		s.kpiMetrics.ObserveSessionClosed()
 	}
+	s.warmCaches.evict(sessionID)
 	return nil
 }
 
