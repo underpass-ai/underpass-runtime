@@ -1080,3 +1080,74 @@ func TestDenyInvocation_RateLimit_RecordsTelemetry(t *testing.T) {
 		t.Fatal("expected context signature in rate-limited denial telemetry")
 	}
 }
+
+// ─── KPI Metrics wiring ──────────────────────────────────────────────────
+
+func TestInvokeTool_ObservesToolCallKPI(t *testing.T) {
+	session := defaultSession()
+	capability := defaultCapability()
+	kpi := NewKPIMetrics()
+
+	svc := newServiceForTest(
+		&fakeWorkspaceManager{session: session, found: true},
+		&fakeCatalog{entries: map[string]domain.Capability{capability.Name: capability}},
+		&fakePolicyEngine{decision: PolicyDecision{Allow: true}},
+		&fakeToolEngine{result: ToolRunResult{Output: map[string]any{"ok": true}}},
+		&fakeArtifactStore{},
+	)
+	svc.SetKPIMetrics(kpi)
+
+	_, err := svc.InvokeTool(context.Background(), session.ID, capability.Name, InvokeToolRequest{Args: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	metrics := svc.PrometheusMetrics()
+	if !strings.Contains(metrics, "workspace_tool_calls_per_task") {
+		t.Fatal("expected workspace_tool_calls_per_task in prometheus output")
+	}
+	if !strings.Contains(metrics, "workspace_success_on_first_tool_total") {
+		t.Fatal("expected first tool metric")
+	}
+}
+
+func TestInvokeTool_ObservesPolicyDenialAfterRecommendation(t *testing.T) {
+	session := defaultSession()
+	capability := defaultCapability()
+	kpi := NewKPIMetrics()
+
+	svc := newServiceForTest(
+		&fakeWorkspaceManager{session: session, found: true},
+		&fakeCatalog{entries: map[string]domain.Capability{capability.Name: capability}},
+		&fakePolicyEngine{decision: PolicyDecision{Allow: false, Reason: "denied"}},
+		&fakeToolEngine{},
+		&fakeArtifactStore{},
+	)
+	svc.SetKPIMetrics(kpi)
+
+	// Simulate recommendation that included this tool
+	svc.sessionLastRec.Store(session.ID, []string{capability.Name})
+
+	svc.InvokeTool(context.Background(), session.ID, capability.Name, InvokeToolRequest{})
+
+	metrics := svc.PrometheusMetrics()
+	if !strings.Contains(metrics, "workspace_policy_denial_rate_bad_recommendation") {
+		t.Fatal("expected policy denial after recommendation metric")
+	}
+}
+
+func TestWasRecommended(t *testing.T) {
+	svc := newServiceForTest(&fakeWorkspaceManager{}, &fakeCatalog{}, &fakePolicyEngine{}, &fakeToolEngine{}, &fakeArtifactStore{})
+
+	if svc.wasRecommended("s1", "fs.read") {
+		t.Fatal("expected false for unknown session")
+	}
+
+	svc.sessionLastRec.Store("s1", []string{"fs.read", "fs.write"})
+	if !svc.wasRecommended("s1", "fs.read") {
+		t.Fatal("expected true for recommended tool")
+	}
+	if svc.wasRecommended("s1", "git.commit") {
+		t.Fatal("expected false for non-recommended tool")
+	}
+}
