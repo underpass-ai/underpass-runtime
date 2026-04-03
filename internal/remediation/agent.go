@@ -188,11 +188,12 @@ func (a *Agent) executePlaybook(ctx context.Context, alert AlertEvent, pb Playbo
 	}
 
 	result.Duration = time.Since(start)
-	if allSucceeded {
+	switch {
+	case allSucceeded:
 		result.Outcome = "success"
-	} else if len(result.Steps) > 0 {
+	case len(result.Steps) > 0:
 		result.Outcome = "partial"
-	} else {
+	default:
 		result.Outcome = "failed"
 	}
 

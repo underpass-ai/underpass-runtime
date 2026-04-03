@@ -18,6 +18,7 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/remediation"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
@@ -44,15 +45,15 @@ func main() {
 		}
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 	} else {
-		grpcOpts = append(grpcOpts, grpc.WithInsecure())
+		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 
-	conn, err := grpc.Dial(runtimeAddr, grpcOpts...)
+	conn, err := grpc.NewClient(runtimeAddr, grpcOpts...)
 	if err != nil {
 		logger.Error("gRPC dial failed", "addr", runtimeAddr, "error", err)
 		os.Exit(1)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	logger.Info("connected to runtime", "addr", runtimeAddr)
 
 	client := &grpcRuntimeClient{
@@ -70,13 +71,14 @@ func main() {
 
 	// NATS connection
 	natsOpts := []nats.Option{nats.Name("remediation-agent")}
-	if caPath := os.Getenv("NATS_TLS_CA_PATH"); caPath != "" {
-		tlsCfg, err := buildTLS(caPath, os.Getenv("NATS_TLS_CERT_PATH"), os.Getenv("NATS_TLS_KEY_PATH"))
-		if err != nil {
-			logger.Error("NATS TLS failed", "error", err)
+	if natsCaPath := os.Getenv("NATS_TLS_CA_PATH"); natsCaPath != "" {
+		natsTLS, tlsErr := buildTLS(natsCaPath, os.Getenv("NATS_TLS_CERT_PATH"), os.Getenv("NATS_TLS_KEY_PATH"))
+		if tlsErr != nil {
+			logger.Error("NATS TLS failed", "error", tlsErr)
+			conn.Close()
 			os.Exit(1)
 		}
-		natsOpts = append(natsOpts, nats.Secure(tlsCfg))
+		natsOpts = append(natsOpts, nats.Secure(natsTLS))
 	}
 
 	nc, err := nats.Connect(natsURL, natsOpts...)
