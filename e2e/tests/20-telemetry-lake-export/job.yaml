@@ -1,0 +1,73 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: e2e-telemetry-lake-export
+  namespace: underpass-runtime
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 120
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: export-lake
+          image: ghcr.io/underpass-ai/underpass-runtime/export-lake:latest
+          imagePullPolicy: Always
+          env:
+            - name: VALKEY_ADDR
+              value: "rehydration-kernel-valkey:6379"
+            - name: VALKEY_TLS_CA_PATH
+              value: "/valkey-tls/ca.crt"
+            - name: VALKEY_TLS_CERT_PATH
+              value: "/valkey-tls/tls.crt"
+            - name: VALKEY_TLS_KEY_PATH
+              value: "/valkey-tls/tls.key"
+            - name: VALKEY_TLS_SERVER_NAME
+              value: "rehydration-kernel-valkey"
+            - name: VALKEY_TELEMETRY_PREFIX
+              value: "workspace:telemetry:"
+            - name: S3_ENDPOINT
+              value: "minio:9000"
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: accessKey
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: secretKey
+            - name: S3_USE_SSL
+              value: "true"
+            - name: SSL_CERT_FILE
+              value: "/s3-tls/ca.crt"
+            - name: S3_REGION
+              value: "us-east-1"
+            - name: LAKE_BUCKET
+              value: "telemetry-lake"
+            - name: LOG_LEVEL
+              value: "info"
+          volumeMounts:
+            - name: valkey-tls
+              mountPath: /valkey-tls
+              readOnly: true
+            - name: s3-tls
+              mountPath: /s3-tls
+              readOnly: true
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      imagePullSecrets:
+        - name: ghcr-pull
+      volumes:
+        - name: valkey-tls
+          secret:
+            secretName: underpass-runtime-valkey-client-tls
+        - name: s3-tls
+          secret:
+            secretName: underpass-runtime-s3-client-tls
