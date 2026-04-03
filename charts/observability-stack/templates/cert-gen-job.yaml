@@ -1,0 +1,214 @@
+{{- if .Values.tls.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-cert-gen
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 120
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: cert-gen
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: {{ include "observability-stack.fullname" . }}-cert-gen
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cert-gen
+          image: {{ .Values.tls.certGenImage | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: CA_SECRET
+              value: {{ .Values.tls.caSecret | quote }}
+            - name: CA_NAMESPACE
+              value: {{ .Values.runtimeNamespace | quote }}
+            - name: VALIDITY_DAYS
+              value: {{ .Values.tls.validityDays | quote }}
+          command:
+            - /bin/sh
+            - -ce
+            - |
+              APISERVER=https://kubernetes.default.svc
+              TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              KUBE_CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+
+              kube_get() {
+                curl -s -o /tmp/response.json -w "%{http_code}" \
+                  --cacert "$KUBE_CA" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  "${APISERVER}/api/v1/namespaces/$1/secrets/$2"
+              }
+
+              secret_exists() {
+                [ "$(kube_get "$NAMESPACE" "$1")" = "200" ]
+              }
+
+              create_secret() {
+                local name=$1 data=$2
+                local payload
+                payload=$(printf '{"apiVersion":"v1","kind":"Secret","metadata":{"name":"%s","namespace":"%s","labels":{"app.kubernetes.io/managed-by":"cert-gen","app.kubernetes.io/part-of":"observability-stack"}},"type":"Opaque","data":%s}' \
+                  "$name" "$NAMESPACE" "$data")
+                curl -s -o /tmp/response.json -w "%{http_code}" \
+                  --cacert "$KUBE_CA" \
+                  -H "Authorization: Bearer $TOKEN" \
+                  -H "Content-Type: application/json" \
+                  -X POST -d "$payload" \
+                  "${APISERVER}/api/v1/namespaces/${NAMESPACE}/secrets"
+                echo "  created secret $name"
+              }
+
+              gen_key() {
+                openssl genpkey -algorithm EC \
+                  -pkeyopt ec_paramgen_curve:prime256v1 \
+                  -out "$1" 2>/dev/null
+              }
+
+              # Read shared CA from runtime namespace
+              echo "Reading CA from ${CA_NAMESPACE}/${CA_SECRET}..."
+              code=$(kube_get "$CA_NAMESPACE" "$CA_SECRET")
+              if [ "$code" != "200" ]; then
+                echo "ERROR: CA secret not found (HTTP $code). Deploy runtime with certGen first."
+                exit 1
+              fi
+              jq -r '.data["tls.crt"]' /tmp/response.json | base64 -d > /tmp/ca.crt
+              jq -r '.data["tls.key"]' /tmp/response.json | base64 -d > /tmp/ca.key
+              CA_CRT_B64=$(jq -r '.data["tls.crt"]' /tmp/response.json)
+
+              # OTEL Collector server cert
+              OTEL_SECRET="otel-collector-tls"
+              if secret_exists "$OTEL_SECRET"; then
+                echo "Secret $OTEL_SECRET exists, skipping"
+              else
+                echo "Generating OTEL Collector server certificate..."
+                gen_key /tmp/otel.key
+                cat > /tmp/otel.ext <<EXTEOF
+              [req]
+              distinguished_name = dn
+              req_extensions = v3_req
+              prompt = no
+              [dn]
+              CN = otel-collector
+              [v3_req]
+              subjectAltName = DNS:otel-collector,DNS:otel-collector.${NAMESPACE}.svc,DNS:otel-collector.${NAMESPACE}.svc.cluster.local
+              extendedKeyUsage = serverAuth,clientAuth
+              EXTEOF
+                openssl req -new -key /tmp/otel.key -out /tmp/otel.csr -config /tmp/otel.ext
+                openssl x509 -req -in /tmp/otel.csr \
+                  -CA /tmp/ca.crt -CAkey /tmp/ca.key -CAcreateserial \
+                  -out /tmp/otel.crt -days "$VALIDITY_DAYS" \
+                  -extfile /tmp/otel.ext -extensions v3_req 2>/dev/null
+                CRT_B64=$(base64 -w0 /tmp/otel.crt)
+                KEY_B64=$(base64 -w0 /tmp/otel.key)
+                create_secret "$OTEL_SECRET" \
+                  "{\"tls.crt\":\"$CRT_B64\",\"tls.key\":\"$KEY_B64\",\"ca.crt\":\"$CA_CRT_B64\"}"
+              fi
+
+              echo "Observability cert generation complete"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            limits:
+              cpu: 200m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-cert-gen
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-cert-gen
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-cert-gen
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "observability-stack.fullname" . }}-cert-gen
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "observability-stack.fullname" . }}-cert-gen
+---
+# Cross-namespace role to read CA from runtime namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-ca-reader
+  namespace: {{ .Values.runtimeNamespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ .Values.tls.caSecret | quote }}]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-ca-reader
+  namespace: {{ .Values.runtimeNamespace }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "observability-stack.fullname" . }}-ca-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "observability-stack.fullname" . }}-cert-gen
+    namespace: {{ .Release.Namespace }}
+{{- end }}

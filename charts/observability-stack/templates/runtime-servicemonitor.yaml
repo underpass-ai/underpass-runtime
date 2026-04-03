@@ -1,0 +1,21 @@
+{{- if .Values.prometheus.enabled }}
+# Cross-namespace ServiceMonitor — scrapes underpass-runtime metrics
+# from the runtime namespace into the observability Prometheus.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: underpass-runtime
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Values.runtimeNamespace }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: underpass-runtime
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+{{- end }}

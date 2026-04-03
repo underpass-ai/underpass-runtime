@@ -12,5 +12,9 @@ spec:
       targetPort: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
       protocol: TCP
       name: {{ if ne $tlsMode "disabled" }}https{{ else }}http{{ end }}
+    - port: 9090
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
   selector:
     {{- include "underpass-runtime.selectorLabels" . | nindent 4 }}

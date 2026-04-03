@@ -54,7 +54,7 @@ const (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLogLevel(os.Getenv("LOG_LEVEL"))}))
+	logger := slog.New(tlsutil.NewTraceLogHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLogLevel(os.Getenv("LOG_LEVEL"))})))
 
 	telemetryShutdown, err := setupTelemetry(context.Background(), logger)
 	if err != nil {
