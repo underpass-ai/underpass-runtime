@@ -37,16 +37,17 @@ type Recommendation struct {
 
 // RecommendationsResponse is returned by the recommendations endpoint.
 type RecommendationsResponse struct {
-	Recommendations  []Recommendation `json:"recommendations"`
-	TaskHint         string           `json:"task_hint"`
-	TopK             int              `json:"top_k"`
-	RecommendationID string           `json:"recommendation_id"`
-	EventID          string           `json:"event_id"`
-	EventSubject     string           `json:"event_subject"`
-	DecisionSource   string           `json:"decision_source"`
-	AlgorithmID      string           `json:"algorithm_id"`
-	AlgorithmVersion string           `json:"algorithm_version"`
-	PolicyMode       string           `json:"policy_mode"`
+	Recommendations  []Recommendation   `json:"recommendations"`
+	TaskHint         string             `json:"task_hint"`
+	TopK             int                `json:"top_k"`
+	RecommendationID string             `json:"recommendation_id"`
+	EventID          string             `json:"event_id"`
+	EventSubject     string             `json:"event_subject"`
+	DecisionSource   string             `json:"decision_source"`
+	AlgorithmID      string             `json:"algorithm_id"`
+	AlgorithmVersion string             `json:"algorithm_version"`
+	PolicyMode       string             `json:"policy_mode"`
+	Insight          *CrossAgentInsight `json:"insight,omitempty"`
 }
 
 const (
@@ -257,6 +258,9 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 	}
 	s.sessionLastRec.Store(sessionID, toolIDs)
 
+	// Build cross-agent insight.
+	insight := BuildCrossAgentInsight(contextSig, allStats, learnedPolicies, algorithmID)
+
 	return RecommendationsResponse{
 		Recommendations:  recs,
 		TaskHint:         taskHint,
@@ -268,6 +272,7 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		AlgorithmID:      algorithmID,
 		AlgorithmVersion: algorithmVersion,
 		PolicyMode:       policyMode,
+		Insight:          &insight,
 	}, nil
 }
 
