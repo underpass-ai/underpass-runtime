@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"testing"
 )
@@ -13,6 +14,8 @@ type fakeRuntimeClient struct {
 	recID     string
 	invokeRes InvokeResult
 	invokeErr error
+	acceptErr error
+	rejectErr error
 	accepted  bool
 	rejected  bool
 }
@@ -29,11 +32,11 @@ func (f *fakeRuntimeClient) InvokeTool(_ context.Context, _, _ string) (InvokeRe
 }
 func (f *fakeRuntimeClient) AcceptRecommendation(_ context.Context, _, _, _ string) error {
 	f.accepted = true
-	return nil
+	return f.acceptErr
 }
 func (f *fakeRuntimeClient) RejectRecommendation(_ context.Context, _, _, _ string) error {
 	f.rejected = true
-	return nil
+	return f.rejectErr
 }
 
 func firingAlert(name string) []byte {
@@ -115,6 +118,38 @@ func TestAgent_HandleAlert_NoPlaybook(t *testing.T) {
 	}
 	if result != nil {
 		t.Fatal("expected nil result for unknown alert")
+	}
+}
+
+func TestAgent_HandleAlert_AcceptFeedbackError(t *testing.T) {
+	client := &fakeRuntimeClient{
+		sessionID: "sess-af", recTools: []string{"fs.list"}, recID: "rec-af",
+		invokeRes: InvokeResult{Status: "INVOCATION_STATUS_SUCCEEDED"},
+		acceptErr: fmt.Errorf("nats down"),
+	}
+	agent := NewAgent(AgentConfig{Client: client, TenantID: "t1", ActorID: "agent", Logger: slog.Default()})
+	result, err := agent.HandleAlert(context.Background(), firingAlert("WorkspaceInvocationFailureRateHigh"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != "success" {
+		t.Fatalf("expected success despite feedback error, got %s", result.Outcome)
+	}
+}
+
+func TestAgent_HandleAlert_RejectFeedbackError(t *testing.T) {
+	client := &fakeRuntimeClient{
+		sessionID: "sess-rf", recTools: []string{"fs.list"}, recID: "rec-rf",
+		invokeRes: InvokeResult{Status: "INVOCATION_STATUS_FAILED"},
+		rejectErr: fmt.Errorf("nats down"),
+	}
+	agent := NewAgent(AgentConfig{Client: client, TenantID: "t1", ActorID: "agent", Logger: slog.Default()})
+	result, err := agent.HandleAlert(context.Background(), firingAlert("WorkspaceInvocationFailureRateHigh"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != "partial" {
+		t.Fatalf("expected partial despite feedback error, got %s", result.Outcome)
 	}
 }
 
