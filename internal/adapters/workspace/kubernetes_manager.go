@@ -301,7 +301,7 @@ func (m *KubernetesManager) sessionPod(req app.CreateSessionRequest, sessionID, 
 			{
 				Name:            "repo-init",
 				Image:           m.cfg.InitImage,
-				ImagePullPolicy: corev1.PullAlways,
+				ImagePullPolicy: corev1.PullIfNotPresent,
 				Command: []string{
 					"sh",
 					"-lc",
@@ -314,7 +314,7 @@ func (m *KubernetesManager) sessionPod(req app.CreateSessionRequest, sessionID, 
 			{
 				Name:            m.cfg.RunnerContainerName,
 				Image:           runnerImage,
-				ImagePullPolicy: corev1.PullAlways,
+				ImagePullPolicy: corev1.PullIfNotPresent,
 				Command:         []string{"sh", "-lc", "sleep infinity"},
 				WorkingDir:      m.cfg.WorkspaceDir,
 				VolumeMounts:    []corev1.VolumeMount{workspaceVolumeMount},
