@@ -1,8 +1,0 @@
-Found 5 pods, using pod/underpass-runtime-7f86fc8b46-pj2h9
-{"time":"2026-03-19T16:30:11.20898756Z","level":"INFO","msg":"HTTP server TLS configured","mode":"server"}
-{"time":"2026-03-19T16:30:11.210213696Z","level":"INFO","msg":"session store initialized","backend":"valkey","address":"valkey:6379","db":0,"ttl_seconds":86400}
-{"time":"2026-03-19T16:30:11.218254098Z","level":"INFO","msg":"artifact store initialized","backend":"s3","bucket":"workspace-artifacts","region":"us-east-1","endpoint":"http://minio:9000"}
-{"time":"2026-03-19T16:30:11.219455324Z","level":"INFO","msg":"invocation store initialized","backend":"valkey","address":"valkey:6379","db":0,"ttl_seconds":86400}
-{"time":"2026-03-19T16:30:11.22347564Z","level":"INFO","msg":"event bus initialized","bus":"nats+outbox"}
-{"time":"2026-03-19T16:30:11.224101638Z","level":"INFO","msg":"telemetry initialized","backend":"valkey","address":"valkey:6379","interval_seconds":300}
-{"time":"2026-03-19T16:30:11.224168758Z","level":"INFO","msg":"workspace service listening (TLS)","port":"50053","workspace_root":"/tmp/workspaces"}

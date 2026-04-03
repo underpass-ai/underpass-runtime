@@ -1,7 +1,0 @@
-initializing observability for rehydration-kernel
-grpc transport for deterministic-context-rehydration on 0.0.0.0:50054 (tls=disabled)
-http admin placeholder on 0.0.0.0:8080
-nats projection consumer routing rehydration.graph.node.materialized and rehydration.node.detail.materialized for context-projection
-nats compatibility runtime disabled
-nats projection runtime via JetStream with nats projection consumer routing rehydration.graph.node.materialized and rehydration.node.detail.materialized for context-projection
-query bootstrap role=system
