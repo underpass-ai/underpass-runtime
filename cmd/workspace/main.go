@@ -151,9 +151,12 @@ func main() {
 			service.SetNeuralModelReader(nmr)
 		}
 	}
-	if decisionStore := buildDecisionStore(logger, valkeyTLS); decisionStore != nil {
-		service.SetRecommendationDecisionStore(decisionStore)
+	decisionStore, err := buildDecisionStore(logger, valkeyTLS)
+	if err != nil {
+		logger.Error("failed to initialize decision store", "error", err)
+		os.Exit(1)
 	}
+	service.SetRecommendationDecisionStore(decisionStore)
 	service.SetKPIMetrics(app.NewKPIMetrics())
 	subscribePolicyUpdated(natsConn, logger)
 	authConfig, err := grpcapi.AuthConfigFromEnv()
@@ -345,40 +348,42 @@ func buildInvocationStore(logger *slog.Logger, valkeyTLS *tls.Config) (app.Invoc
 	}
 }
 
-func buildDecisionStore(logger *slog.Logger, valkeyTLS *tls.Config) app.RecommendationDecisionStore {
+func buildDecisionStore(logger *slog.Logger, valkeyTLS *tls.Config) (app.RecommendationDecisionStore, error) {
 	backend := strings.ToLower(strings.TrimSpace(envOrDefault("DECISION_STORE_BACKEND", "memory")))
-	if backend != "valkey" {
+	switch backend {
+	case "", "memory":
 		logger.Info("decision store initialized", "backend", "memory")
-		return nil // service keeps its default in-memory store
-	}
+		return app.NewInMemoryRecommendationDecisionStore(), nil
+	case "valkey":
+		address := strings.TrimSpace(os.Getenv("VALKEY_ADDR"))
+		if address == "" {
+			host := strings.TrimSpace(envOrDefault("VALKEY_HOST", "localhost"))
+			port := strings.TrimSpace(envOrDefault("VALKEY_PORT", "6379"))
+			address = fmt.Sprintf("%s:%s", host, port)
+		}
 
-	address := strings.TrimSpace(os.Getenv("VALKEY_ADDR"))
-	if address == "" {
-		host := strings.TrimSpace(envOrDefault("VALKEY_HOST", "localhost"))
-		port := strings.TrimSpace(envOrDefault("VALKEY_PORT", "6379"))
-		address = fmt.Sprintf("%s:%s", host, port)
-	}
+		password := os.Getenv("VALKEY_PASSWORD")
+		db := parseIntOrDefault(os.Getenv("VALKEY_DB"), 0)
+		keyPrefix := envOrDefault("DECISION_STORE_KEY_PREFIX", "workspace:decision")
+		ttlSeconds := parseIntOrDefault(os.Getenv("DECISION_STORE_TTL_SECONDS"), 2592000) // 30 days
 
-	password := os.Getenv("VALKEY_PASSWORD")
-	db := parseIntOrDefault(os.Getenv("VALKEY_DB"), 0)
-	keyPrefix := envOrDefault("DECISION_STORE_KEY_PREFIX", "workspace:decision")
-	ttlSeconds := parseIntOrDefault(os.Getenv("DECISION_STORE_TTL_SECONDS"), 2592000) // 30 days
-
-	store, err := decisionstoreadapter.NewValkeyStoreFromAddress(
-		context.Background(),
-		address,
-		password,
-		db,
-		keyPrefix,
-		time.Duration(ttlSeconds)*time.Second,
-		valkeyTLS,
-	)
-	if err != nil {
-		logger.Warn("decision store valkey unavailable, falling back to memory", "error", err)
-		return nil
+		store, err := decisionstoreadapter.NewValkeyStoreFromAddress(
+			context.Background(),
+			address,
+			password,
+			db,
+			keyPrefix,
+			time.Duration(ttlSeconds)*time.Second,
+			valkeyTLS,
+		)
+		if err != nil {
+			return nil, err
+		}
+		logger.Info("decision store initialized", "backend", "valkey", "address", address, "db", db, "ttl_seconds", ttlSeconds)
+		return store, nil
+	default:
+		return nil, fmt.Errorf("unsupported DECISION_STORE_BACKEND: %s", backend)
 	}
-	logger.Info("decision store initialized", "backend", "valkey", "address", address, "db", db, "ttl_seconds", ttlSeconds)
-	return store
 }
 
 func buildSessionStore(logger *slog.Logger, valkeyTLS *tls.Config) (app.SessionStore, error) {
