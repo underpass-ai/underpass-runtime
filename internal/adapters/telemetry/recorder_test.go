@@ -84,6 +84,10 @@ func (f *fakeValkeyClient) LTrim(_ context.Context, key string, start, stop int6
 	return redis.NewStatusResult("OK", nil)
 }
 
+func (f *fakeValkeyClient) Expire(_ context.Context, _ string, _ time.Duration) *redis.BoolCmd {
+	return redis.NewBoolResult(true, nil)
+}
+
 func (f *fakeValkeyClient) LLen(_ context.Context, key string) *redis.IntCmd {
 	if f.lenErr != nil {
 		return redis.NewIntResult(0, f.lenErr)

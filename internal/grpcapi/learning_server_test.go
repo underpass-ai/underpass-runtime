@@ -26,6 +26,22 @@ func (f *fakeLearningService) GetEvidenceBundle(_ context.Context, _ string) (ap
 	return f.bundle, f.svcErr
 }
 
+func (f *fakeLearningService) GetLearningStatus(_ context.Context) app.LearningStatus {
+	return app.LearningStatus{Status: "active", ActiveAlgorithms: []string{"heuristic_v1"}, RecommendationEvents: true, EvidenceProjection: true}
+}
+
+func (f *fakeLearningService) GetPolicy(_ context.Context, _, _ string) (app.ToolPolicy, *app.ServiceError) {
+	return app.ToolPolicy{}, f.svcErr
+}
+
+func (f *fakeLearningService) ListPolicies(_ context.Context, _ string) (map[string]app.ToolPolicy, *app.ServiceError) {
+	return nil, f.svcErr
+}
+
+func (f *fakeLearningService) GetAggregate(_ context.Context, _ string) (app.ToolStats, *app.ServiceError) {
+	return app.ToolStats{}, f.svcErr
+}
+
 // ─── GetRecommendationDecision ─────────────────────────────────────────────
 
 func TestLearningServer_GetRecommendationDecision(t *testing.T) {

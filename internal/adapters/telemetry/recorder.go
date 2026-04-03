@@ -20,6 +20,7 @@ type valkeyClient interface {
 	LRange(ctx context.Context, key string, start, stop int64) *redis.StringSliceCmd
 	LTrim(ctx context.Context, key string, start, stop int64) *redis.StatusCmd
 	LLen(ctx context.Context, key string) *redis.IntCmd
+	Expire(ctx context.Context, key string, expiration time.Duration) *redis.BoolCmd
 }
 
 // ValkeyRecorder implements TelemetryRecorder backed by a Valkey list.
@@ -60,7 +61,10 @@ func NewValkeyRecorderFromAddress(ctx context.Context, address, password string,
 	return NewValkeyRecorder(client, keyPrefix, ttl), nil
 }
 
-// Record appends a telemetry record to the per-tool list.
+// maxRecordsPerTool caps the number of telemetry records kept per tool list.
+const maxRecordsPerTool int64 = 10000
+
+// Record appends a telemetry record to the per-tool list and enforces TTL.
 func (r *ValkeyRecorder) Record(ctx context.Context, record app.TelemetryRecord) error {
 	data, err := json.Marshal(record)
 	if err != nil {
@@ -70,6 +74,7 @@ func (r *ValkeyRecorder) Record(ctx context.Context, record app.TelemetryRecord)
 	if err := r.client.RPush(ctx, key, string(data)).Err(); err != nil {
 		return fmt.Errorf("telemetry rpush: %w", err)
 	}
+	r.client.Expire(ctx, key, r.ttl)
 	return nil
 }
 
@@ -77,7 +82,7 @@ func (r *ValkeyRecorder) Record(ctx context.Context, record app.TelemetryRecord)
 // aggregator to compute stats.
 func (r *ValkeyRecorder) ReadTool(ctx context.Context, toolName string) ([]app.TelemetryRecord, error) {
 	key := r.toolKey(toolName)
-	items, err := r.client.LRange(ctx, key, 0, -1).Result()
+	items, err := r.client.LRange(ctx, key, -maxRecordsPerTool, -1).Result()
 	if err != nil {
 		return nil, fmt.Errorf("telemetry lrange: %w", err)
 	}
