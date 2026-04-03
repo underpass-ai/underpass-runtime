@@ -9,7 +9,8 @@ Complete reference for all environment variables consumed by the workspace servi
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | `50053` | HTTP(S) listen port. |
+| `PORT` | `50053` | gRPC listen port. |
+| `METRICS_PORT` | `9090` | Prometheus metrics HTTP port. Exposed at `/metrics`. |
 | `LOG_LEVEL` | `info` | Log verbosity. Accepted values: `debug`, `info`, `warn`, `error` (case-insensitive). |
 | `WORKSPACE_ROOT` | `/tmp/underpass-workspaces` | Filesystem root for local workspaces. Only used when `WORKSPACE_BACKEND=local`. |
 | `ARTIFACT_ROOT` | `/tmp/underpass-artifacts` | Filesystem root for the local artifact store. Created automatically on startup. |
@@ -81,9 +82,21 @@ Controls TLS for the NATS event-bus connection.
 
 ---
 
+## Decision Store
+
+Persists recommendation decisions for the learning evidence plane. Durable storage ensures audit trail survives service restarts.
+
+| Variable | Default | Description |
+|---|---|---|
+| `DECISION_STORE_BACKEND` | `memory` | Decision persistence backend. Values: `memory`, `valkey`. |
+| `DECISION_STORE_KEY_PREFIX` | `workspace:decision` | Redis/Valkey key prefix for decision records. Only used when backend is `valkey`. |
+| `DECISION_STORE_TTL_SECONDS` | `2592000` | Decision TTL in seconds (default 30 days). Only used when backend is `valkey`. |
+
+---
+
 ## Valkey Connection
 
-Shared by all Valkey-backed subsystems (session store, invocation store, telemetry, outbox).
+Shared by all Valkey-backed subsystems (session store, invocation store, decision store, telemetry, outbox).
 
 | Variable | Default | Description |
 |---|---|---|

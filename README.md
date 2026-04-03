@@ -33,16 +33,24 @@ retrying tools that always fail. Underpass Runtime solves this:
 Event fires (task assigned, PR opened, build broken)
     |
     v
-Agent activates, creates a session
+Agent activates, creates a session (workspace prewarmed in background)
     |
     v
 Runtime recommends tools (adaptive: heuristic -> Thompson -> NeuralTS)
+  + cross-agent insight: "backed by 47 invocations across 5 tools"
+  + score breakdown: heuristic 1.0 + telemetry +0.15 + policy -0.06
     |
     v
 Agent invokes tools in isolated workspace
     |
     v
-Telemetry recorded, policies improve, next event gets better recommendations
+Agent reports feedback: AcceptRecommendation / RejectRecommendation
+    |
+    v
+Telemetry + feedback recorded -> policies improve -> next event gets better
+    |
+    v
+Alert fires? -> Remediation agent auto-diagnoses and runs playbooks
 ```
 
 Transport: gRPC over mTLS. Five infrastructure backends: Valkey (state + policies),
@@ -132,15 +140,80 @@ See [e2e/README.md](e2e/README.md) for evidence.
 
 ## gRPC API
 
-Proto definitions: `specs/underpass/runtime/v1/runtime.proto`
+Proto definitions: `specs/underpass/runtime/v1/runtime.proto` + `specs/underpass/runtime/learning/v1/learning.proto`
 
 | Service | RPCs | Purpose |
 |---------|------|---------|
 | **SessionService** | CreateSession, CloseSession | Workspace lifecycle |
-| **CapabilityCatalogService** | ListTools, DiscoverTools, RecommendTools | Tool discovery + adaptive recommendations |
+| **CapabilityCatalogService** | ListTools, DiscoverTools, RecommendTools, AcceptRecommendation, RejectRecommendation | Tool discovery, adaptive recommendations, agent feedback loop |
 | **InvocationService** | InvokeTool, GetInvocation, GetLogs, GetArtifacts | Governed tool execution |
-| **LearningEvidenceService** | GetRecommendationDecision, GetEvidenceBundle | Recommendation audit trail |
+| **LearningEvidenceService** | GetLearningStatus, GetRecommendationDecision, GetEvidenceBundle, GetPolicy, ListPolicies, GetAggregate + 8 more | Recommendation audit, policy inspection, learning pipeline status |
 | **HealthService** | Check | Health + readiness |
+
+## Agent feedback loop
+
+Agents report whether a recommendation actually solved their task:
+
+```
+Agent → RecommendTools → rec-123 (fs.read_file)
+Agent → InvokeTool(fs.read_file) → succeeded
+Agent → AcceptRecommendation(rec-123, fs.read_file)  // or RejectRecommendation
+                    ↓
+Learning pipeline adjusts future policies (reward shaping)
+```
+
+This closes the outer loop: the system learns not just "did the tool work?" but "did it solve the agent's problem?".
+
+## Explainability trace
+
+Every recommendation carries a machine-readable score breakdown:
+
+```json
+"score_breakdown": [
+  {"name": "heuristic",       "value": 1.0,  "rationale": "low risk, no side effects"},
+  {"name": "telemetry_boost", "value": 0.15, "rationale": "95% success rate (20 invocations)"},
+  {"name": "beta_thompson",   "value": -0.06, "rationale": "thompson(sample=0.87, weight=0.75)"}
+]
+```
+
+Persisted in the decision store and accessible via `GetRecommendationDecision`.
+
+## Cross-agent learning
+
+Agents in the same context automatically share learning. Every recommendation includes an insight:
+
+```json
+"insight": {
+  "total_invocations": 47,
+  "tool_count": 5,
+  "confidence": "medium",
+  "algorithm_tier": "thompson"
+}
+```
+
+Confidence levels: **low** (<20 invocations), **medium** (20-99), **high** (100+ with active policy).
+
+## Autonomous remediation
+
+The `remediation-agent` subscribes to NATS alert events and auto-runs playbooks:
+
+| Alert | Action |
+|-------|--------|
+| WorkspaceInvocationFailureRateHigh | Diagnose error patterns |
+| WorkspaceP95InvocationLatencyHigh | Investigate latency spikes |
+| WorkspaceInvocationDeniedRateHigh | Audit policy denials |
+| WorkspaceDown | Emergency health check |
+
+Flow: Grafana alert → alert-relay → NATS → remediation-agent → session + tools + feedback → close.
+
+## Observability
+
+- **Prometheus metrics** at `:9090` (configurable via `METRICS_PORT`): invocations, latency histograms, denial rates, 11 KPI metrics
+- **OpenTelemetry traces** with `trace_id` + `span_id` injected into every structured log (TraceLogHandler)
+- **Grafana dashboard** auto-provisioned via `charts/observability-stack/` (8 panels)
+- **Loki** for structured log aggregation via Promtail
+- **OTEL Collector** for trace ingestion
+- Separate observability stack: [underpass-ai/underpass-observability](https://github.com/underpass-ai/underpass-observability)
 
 ## Documentation
 
@@ -164,6 +237,7 @@ Architecture decisions: [docs/adr/](docs/adr/)
 | Repository | Role |
 |-----------|------|
 | **underpass-runtime** (this) | Tool execution + telemetry + adaptive learning |
+| [underpass-observability](https://github.com/underpass-ai/underpass-observability) | Grafana, Loki, OTEL Collector, Prometheus, alert relay |
 | [rehydration-kernel](https://github.com/underpass-ai/rehydration-kernel) | Surgical context from knowledge graphs |
 | [swe-ai-fleet](https://github.com/underpass-ai/swe-ai-fleet) | Multi-agent SWE platform |
 | [underpass-demo](https://github.com/underpass-ai/underpass-demo) | See it working together |
