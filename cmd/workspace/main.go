@@ -745,14 +745,24 @@ func subscribePolicyUpdated(conn *nats.Conn, logger *slog.Logger) {
 	if conn == nil {
 		return
 	}
-	_, err := conn.Subscribe("tool_learning.policy.updated", func(msg *nats.Msg) {
-		logger.Info("learned policies updated (tool-learning pipeline)",
-			"subject", msg.Subject,
-			"bytes", len(msg.Data),
-		)
-	})
-	if err != nil {
-		logger.Warn("subscribe to tool_learning.policy.updated failed", "error", err)
+	subjects := []string{
+		"tool_learning.policy.updated",
+		"tool_learning.run.started",
+		"tool_learning.run.completed",
+		"tool_learning.run.failed",
+		"tool_learning.policy.computed",
+		"tool_learning.snapshot.published",
+	}
+	for _, subj := range subjects {
+		s := subj
+		if _, err := conn.Subscribe(s, func(msg *nats.Msg) {
+			logger.Info("learning pipeline event received",
+				"subject", msg.Subject,
+				"bytes", len(msg.Data),
+			)
+		}); err != nil {
+			logger.Warn("subscribe to learning event failed", "subject", s, "error", err)
+		}
 	}
 }
 

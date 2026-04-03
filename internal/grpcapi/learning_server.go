@@ -2,6 +2,7 @@ package grpcapi
 
 import (
 	"context"
+	"fmt"
 
 	lpb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/learning/v1"
 	"github.com/underpass-ai/underpass-runtime/internal/app"
@@ -9,7 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// LearningEvidenceServer implements the P0 subset of the LearningEvidenceService.
+// LearningEvidenceServer implements the LearningEvidenceService gRPC service.
 type LearningEvidenceServer struct {
 	lpb.UnimplementedLearningEvidenceServiceServer
 	service LearningEvidenceService
@@ -19,11 +20,27 @@ type LearningEvidenceServer struct {
 type LearningEvidenceService interface {
 	GetRecommendationDecision(ctx context.Context, recommendationID string) (domain.RecommendationDecision, *app.ServiceError)
 	GetEvidenceBundle(ctx context.Context, recommendationID string) (app.EvidenceBundle, *app.ServiceError)
+	GetLearningStatus(ctx context.Context) app.LearningStatus
+	GetPolicy(ctx context.Context, contextSig, toolID string) (app.ToolPolicy, *app.ServiceError)
+	ListPolicies(ctx context.Context, contextSig string) (map[string]app.ToolPolicy, *app.ServiceError)
+	GetAggregate(ctx context.Context, toolID string) (app.ToolStats, *app.ServiceError)
 }
 
 // NewLearningEvidenceServer creates the learning evidence gRPC server adapter.
 func NewLearningEvidenceServer(svc LearningEvidenceService) *LearningEvidenceServer {
 	return &LearningEvidenceServer{service: svc}
+}
+
+func (s *LearningEvidenceServer) GetLearningStatus(ctx context.Context, _ *lpb.GetLearningStatusRequest) (*lpb.GetLearningStatusResponse, error) {
+	st := s.service.GetLearningStatus(ctx)
+	return &lpb.GetLearningStatusResponse{
+		Status:                      st.Status,
+		AsOf:                        timestamppb.Now(),
+		ActiveAlgorithms:            st.ActiveAlgorithms,
+		RuntimeRecommendationEvents: st.RecommendationEvents,
+		ToolLearningEvents:          st.ToolLearningEvents,
+		EvidenceProjectionEnabled:   st.EvidenceProjection,
+	}, nil
 }
 
 func (s *LearningEvidenceServer) GetRecommendationDecision(ctx context.Context, req *lpb.GetRecommendationDecisionRequest) (*lpb.GetRecommendationDecisionResponse, error) {
@@ -41,12 +58,49 @@ func (s *LearningEvidenceServer) GetEvidenceBundle(ctx context.Context, req *lpb
 	if svcErr != nil {
 		return nil, serviceErrorToStatus(svcErr)
 	}
-	return &lpb.GetEvidenceBundleResponse{
-		Bundle: &lpb.EvidenceBundle{
-			Recommendation: recommendationDecisionToProto(bundle.Recommendation),
-		},
+	pb := &lpb.EvidenceBundle{
+		Recommendation: recommendationDecisionToProto(bundle.Recommendation),
+	}
+	if bundle.Policy != nil {
+		pb.Policy = toolPolicyToProto(*bundle.Policy)
+	}
+	if bundle.Aggregate != nil {
+		pb.Aggregate = toolStatsToProto("", *bundle.Aggregate)
+	}
+	return &lpb.GetEvidenceBundleResponse{Bundle: pb}, nil
+}
+
+func (s *LearningEvidenceServer) GetPolicy(ctx context.Context, req *lpb.GetPolicyRequest) (*lpb.GetPolicyResponse, error) {
+	pol, svcErr := s.service.GetPolicy(ctx, req.GetContextSignature(), req.GetToolId())
+	if svcErr != nil {
+		return nil, serviceErrorToStatus(svcErr)
+	}
+	return &lpb.GetPolicyResponse{Policy: toolPolicyToProto(pol)}, nil
+}
+
+func (s *LearningEvidenceServer) ListPolicies(ctx context.Context, req *lpb.ListPoliciesRequest) (*lpb.ListPoliciesResponse, error) {
+	policies, svcErr := s.service.ListPolicies(ctx, req.GetContextSignature())
+	if svcErr != nil {
+		return nil, serviceErrorToStatus(svcErr)
+	}
+	items := make([]*lpb.ToolPolicy, 0, len(policies))
+	for _, pol := range policies {
+		items = append(items, toolPolicyToProto(pol))
+	}
+	return &lpb.ListPoliciesResponse{Policies: items}, nil
+}
+
+func (s *LearningEvidenceServer) GetAggregate(ctx context.Context, req *lpb.GetAggregateRequest) (*lpb.GetAggregateResponse, error) {
+	stats, svcErr := s.service.GetAggregate(ctx, req.GetToolId())
+	if svcErr != nil {
+		return nil, serviceErrorToStatus(svcErr)
+	}
+	return &lpb.GetAggregateResponse{
+		Aggregate: toolStatsToProto(req.GetToolId(), stats),
 	}, nil
 }
+
+// --- Proto mappers ---
 
 func recommendationDecisionToProto(d domain.RecommendationDecision) *lpb.RecommendationDecision {
 	items := make([]*lpb.RecommendationItem, len(d.Recommendations))
@@ -79,7 +133,6 @@ func recommendationDecisionToProto(d domain.RecommendationDecision) *lpb.Recomme
 		},
 	}
 
-	// Map string decision_source to enum.
 	switch d.DecisionSource {
 	case app.DecisionSourceHeuristicOnly:
 		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_HEURISTIC_ONLY
@@ -90,10 +143,9 @@ func recommendationDecisionToProto(d domain.RecommendationDecision) *lpb.Recomme
 	case app.DecisionSourceThompson:
 		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_LEARNED_POLICY_TS
 	case app.DecisionSourceNeuralTS:
-		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_CONTEXTUAL_BANDIT_HYLINUCB // closest enum; TODO: add NEURAL_TS enum
+		proto.DecisionSource = lpb.DecisionSource_DECISION_SOURCE_CONTEXTUAL_BANDIT_HYLINUCB
 	}
 
-	// Map string policy_mode to enum.
 	switch d.PolicyMode {
 	case app.PolicyModeNone:
 		proto.PolicyMode = lpb.PolicyMode_POLICY_MODE_NONE
@@ -106,4 +158,30 @@ func recommendationDecisionToProto(d domain.RecommendationDecision) *lpb.Recomme
 	}
 
 	return proto
+}
+
+func toolPolicyToProto(p app.ToolPolicy) *lpb.ToolPolicy {
+	return &lpb.ToolPolicy{
+		ContextSignature: p.ContextSignature,
+		ToolId:           p.ToolID,
+		Alpha:            p.Alpha,
+		Beta:             p.Beta,
+		Confidence:       p.Confidence,
+		P95LatencyMs:     p.P95LatencyMs,
+		P95Cost:          fmt.Sprintf("%.4f", p.P95Cost),
+		ErrorRate:        p.ErrorRate,
+		NSamples:         p.NSamples,
+		FreshnessTs:      timestamppb.New(p.FreshnessTs),
+	}
+}
+
+func toolStatsToProto(toolID string, s app.ToolStats) *lpb.TelemetryAggregate {
+	return &lpb.TelemetryAggregate{
+		ToolId:        toolID,
+		Total:         int64(s.InvocationN),
+		SuccessRate:   s.SuccessRate,
+		DenyRate:      s.DenyRate,
+		P50DurationMs: s.P50Duration,
+		P95DurationMs: s.P95Duration,
+	}
 }

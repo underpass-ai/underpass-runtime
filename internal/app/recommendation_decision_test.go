@@ -254,3 +254,109 @@ func TestGetEvidenceBundle_NotFound(t *testing.T) {
 		t.Fatalf("expected not_found, got %s", svcErr.Code)
 	}
 }
+
+// ─── GetLearningStatus ────────────────────────────────────────────────────
+
+func TestGetLearningStatus(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	st := svc.GetLearningStatus(context.Background())
+	if st.Status != "active" {
+		t.Fatalf("expected active, got %s", st.Status)
+	}
+	if !st.RecommendationEvents {
+		t.Fatal("expected recommendation events enabled")
+	}
+	if !st.EvidenceProjection {
+		t.Fatal("expected evidence projection enabled")
+	}
+	if len(st.ActiveAlgorithms) == 0 || st.ActiveAlgorithms[0] != "heuristic_v1" {
+		t.Fatalf("expected heuristic_v1, got %v", st.ActiveAlgorithms)
+	}
+}
+
+// ─── GetPolicy / ListPolicies ─────────────────────────────────────────────
+
+func TestGetPolicy_NoPolicyReader(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	_, svcErr := svc.GetPolicy(context.Background(), "ctx", "tool")
+	if svcErr == nil || svcErr.Code != "not_found" {
+		t.Fatalf("expected not_found when no policy reader, got %v", svcErr)
+	}
+}
+
+func TestListPolicies_NoPolicyReader(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	_, svcErr := svc.ListPolicies(context.Background(), "ctx")
+	if svcErr == nil || svcErr.Code != "not_found" {
+		t.Fatalf("expected not_found when no policy reader, got %v", svcErr)
+	}
+}
+
+func TestGetPolicy_WithReader(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	svc.SetPolicyReader(&fakePolicyReader{
+		policy: ToolPolicy{ToolID: "fs.read_file", Alpha: 5, Beta: 1},
+		found:  true,
+	})
+	pol, svcErr := svc.GetPolicy(context.Background(), "ctx", "fs.read_file")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+	if pol.ToolID != "fs.read_file" {
+		t.Fatalf("expected fs.read_file, got %s", pol.ToolID)
+	}
+}
+
+func TestGetPolicy_NotFound(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	svc.SetPolicyReader(&fakePolicyReader{found: false})
+	_, svcErr := svc.GetPolicy(context.Background(), "ctx", "missing")
+	if svcErr == nil || svcErr.Code != "not_found" {
+		t.Fatalf("expected not_found, got %v", svcErr)
+	}
+}
+
+func TestListPolicies_WithReader(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	svc.SetPolicyReader(&fakePolicyReader{
+		policies: map[string]ToolPolicy{
+			"fs.read_file": {ToolID: "fs.read_file"},
+		},
+	})
+	policies, svcErr := svc.ListPolicies(context.Background(), "ctx")
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+	if len(policies) != 1 {
+		t.Fatalf("expected 1 policy, got %d", len(policies))
+	}
+}
+
+// ─── GetAggregate ─────────────────────────────────────────────────────────
+
+func TestGetAggregate_NotFound(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	_, svcErr := svc.GetAggregate(context.Background(), "missing")
+	if svcErr == nil || svcErr.Code != "not_found" {
+		t.Fatalf("expected not_found, got %v", svcErr)
+	}
+}
+
+// ─── Fakes ────────────────────────────────────────────────────────────────
+
+type fakePolicyReader struct {
+	policy   ToolPolicy
+	found    bool
+	policies map[string]ToolPolicy
+	err      error
+}
+
+func (f *fakePolicyReader) ReadPolicy(_ context.Context, _, _ string) (ToolPolicy, bool, error) {
+	return f.policy, f.found, f.err
+}
+func (f *fakePolicyReader) ReadPoliciesForContext(_ context.Context, _ string) (map[string]ToolPolicy, error) {
+	if f.policies == nil {
+		return map[string]ToolPolicy{}, f.err
+	}
+	return f.policies, f.err
+}

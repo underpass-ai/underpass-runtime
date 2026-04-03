@@ -26,6 +26,22 @@ func (f *fakeLearningService) GetEvidenceBundle(_ context.Context, _ string) (ap
 	return f.bundle, f.svcErr
 }
 
+func (f *fakeLearningService) GetLearningStatus(_ context.Context) app.LearningStatus {
+	return app.LearningStatus{Status: "active", ActiveAlgorithms: []string{"heuristic_v1"}, RecommendationEvents: true, EvidenceProjection: true}
+}
+
+func (f *fakeLearningService) GetPolicy(_ context.Context, _, _ string) (app.ToolPolicy, *app.ServiceError) {
+	return app.ToolPolicy{}, f.svcErr
+}
+
+func (f *fakeLearningService) ListPolicies(_ context.Context, _ string) (map[string]app.ToolPolicy, *app.ServiceError) {
+	return nil, f.svcErr
+}
+
+func (f *fakeLearningService) GetAggregate(_ context.Context, _ string) (app.ToolStats, *app.ServiceError) {
+	return app.ToolStats{}, f.svcErr
+}
+
 // ─── GetRecommendationDecision ─────────────────────────────────────────────
 
 func TestLearningServer_GetRecommendationDecision(t *testing.T) {
@@ -187,5 +203,51 @@ func TestLearningServer_GetEvidenceBundle_NotFound(t *testing.T) {
 		&lpb.GetEvidenceBundleRequest{RecommendationId: "missing"})
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestLearningServer_GetLearningStatus(t *testing.T) {
+	srv := NewLearningEvidenceServer(&fakeLearningService{})
+	resp, err := srv.GetLearningStatus(context.Background(), &lpb.GetLearningStatusRequest{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.GetStatus() != "active" {
+		t.Fatalf("expected active, got %s", resp.GetStatus())
+	}
+	if !resp.GetRuntimeRecommendationEvents() {
+		t.Fatal("expected recommendation events true")
+	}
+}
+
+func TestLearningServer_GetPolicy(t *testing.T) {
+	srv := NewLearningEvidenceServer(&fakeLearningService{})
+	_, err := srv.GetPolicy(context.Background(), &lpb.GetPolicyRequest{
+		ContextSignature: "ctx", ToolId: "tool",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLearningServer_ListPolicies(t *testing.T) {
+	srv := NewLearningEvidenceServer(&fakeLearningService{})
+	resp, err := srv.ListPolicies(context.Background(), &lpb.ListPoliciesRequest{ContextSignature: "ctx"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+}
+
+func TestLearningServer_GetAggregate(t *testing.T) {
+	srv := NewLearningEvidenceServer(&fakeLearningService{})
+	resp, err := srv.GetAggregate(context.Background(), &lpb.GetAggregateRequest{ToolId: "fs.read_file"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("expected non-nil response")
 	}
 }
