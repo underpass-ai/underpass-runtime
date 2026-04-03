@@ -84,24 +84,31 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		return RecommendationsResponse{}, &ServiceError{Code: "not_found", Message: sessionNotFound}
 	}
 
-	// Load telemetry stats for context-aware scoring
-	allStats, _ := s.telemetryQ.AllToolStats(ctx)
-
-	// Always compute context signature — needed for evidence and policy lookup.
-	digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
-	contextSig := DeriveContextSignature(session, "", digest)
-
-	// Load learned policies for the current context (if available).
+	// Try prewarmed data first, fall back to live loading.
+	var allStats map[string]ToolStats
 	var learnedPolicies map[string]ToolPolicy
-	if s.policyLearned != nil {
-		learnedPolicies, _ = s.policyLearned.ReadPoliciesForContext(ctx, contextSig)
-	}
-
-	// Load trained neural model (if available).
 	var neuralWeights *MLPWeights
-	if s.neuralModel != nil {
-		if data, found, err := s.neuralModel.ReadNeuralModel(ctx, NeuralModelValkeyKey); err == nil && found {
-			neuralWeights, _ = UnmarshalMLPWeights(data)
+	var contextSig string
+
+	if warmPolicies, warmStats, warmModel, ok := s.getWarmData(sessionID); ok {
+		learnedPolicies = warmPolicies
+		allStats = warmStats
+		if warmModel != nil {
+			neuralWeights, _ = UnmarshalMLPWeights(warmModel)
+		}
+		digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
+		contextSig = DeriveContextSignature(session, "", digest)
+	} else {
+		allStats, _ = s.telemetryQ.AllToolStats(ctx)
+		digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
+		contextSig = DeriveContextSignature(session, "", digest)
+		if s.policyLearned != nil {
+			learnedPolicies, _ = s.policyLearned.ReadPoliciesForContext(ctx, contextSig)
+		}
+		if s.neuralModel != nil {
+			if data, found, err := s.neuralModel.ReadNeuralModel(ctx, NeuralModelValkeyKey); err == nil && found {
+				neuralWeights, _ = UnmarshalMLPWeights(data)
+			}
 		}
 	}
 
