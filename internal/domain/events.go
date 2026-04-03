@@ -9,13 +9,21 @@ import (
 type EventType string
 
 const (
-	EventSessionCreated      EventType = "workspace.session.created"
-	EventSessionClosed       EventType = "workspace.session.closed"
-	EventInvocationStarted   EventType = "workspace.invocation.started"
-	EventInvocationCompleted EventType = "workspace.invocation.completed"
-	EventInvocationDenied    EventType = "workspace.invocation.denied"
-	EventArtifactStored              EventType = "workspace.artifact.stored"
-	EventRecommendationEmitted       EventType = "runtime.learning.recommendation.emitted"
+	EventSessionCreated        EventType = "workspace.session.created"
+	EventSessionClosed         EventType = "workspace.session.closed"
+	EventInvocationStarted     EventType = "workspace.invocation.started"
+	EventInvocationCompleted   EventType = "workspace.invocation.completed"
+	EventInvocationDenied      EventType = "workspace.invocation.denied"
+	EventArtifactStored        EventType = "workspace.artifact.stored"
+	EventRecommendationEmitted EventType = "runtime.learning.recommendation.emitted"
+
+	// Learning pipeline events (emitted by tool-learning service, consumed by runtime).
+	EventPolicyRunStarted   EventType = "tool_learning.run.started"
+	EventPolicyRunCompleted EventType = "tool_learning.run.completed"
+	EventPolicyRunFailed    EventType = "tool_learning.run.failed"
+	EventPolicyComputed     EventType = "tool_learning.policy.computed"
+	EventPolicyUpdated      EventType = "tool_learning.policy.updated"
+	EventSnapshotPublished  EventType = "tool_learning.snapshot.published"
 )
 
 // EventVersion is the schema version for domain events.

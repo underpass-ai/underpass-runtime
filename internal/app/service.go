@@ -1229,6 +1229,8 @@ func (s *Service) publishInvocationCompleted(ctx context.Context, session domain
 // EvidenceBundle is the compact audit package returned by GetEvidenceBundle.
 type EvidenceBundle struct {
 	Recommendation domain.RecommendationDecision `json:"recommendation"`
+	Policy         *ToolPolicy                   `json:"policy,omitempty"`
+	Aggregate      *ToolStats                    `json:"aggregate,omitempty"`
 }
 
 // GetRecommendationDecision returns a persisted recommendation decision by ID.
@@ -1244,12 +1246,97 @@ func (s *Service) GetRecommendationDecision(ctx context.Context, recommendationI
 }
 
 // GetEvidenceBundle returns a compact evidence bundle for a recommendation.
-// In P0, the bundle only contains the recommendation decision itself.
-// P1+ will add policy, run, aggregate, and event lineage.
+// Includes the decision plus any policy and aggregate data available for the
+// same context signature and top-ranked tool.
 func (s *Service) GetEvidenceBundle(ctx context.Context, recommendationID string) (EvidenceBundle, *ServiceError) {
 	d, svcErr := s.GetRecommendationDecision(ctx, recommendationID)
 	if svcErr != nil {
 		return EvidenceBundle{}, svcErr
 	}
-	return EvidenceBundle{Recommendation: d}, nil
+	bundle := EvidenceBundle{Recommendation: d}
+
+	// Enrich with policy if available.
+	if s.policyLearned != nil && d.ContextSignature != "" && len(d.Recommendations) > 0 {
+		topTool := d.Recommendations[0].ToolID
+		if pol, found, err := s.policyLearned.ReadPolicy(ctx, d.ContextSignature, topTool); err == nil && found {
+			bundle.Policy = &pol
+		}
+	}
+
+	// Enrich with aggregate if available.
+	if s.telemetryQ != nil && len(d.Recommendations) > 0 {
+		topTool := d.Recommendations[0].ToolID
+		if stats, found, err := s.telemetryQ.ToolStats(ctx, topTool); err == nil && found {
+			bundle.Aggregate = &stats
+		}
+	}
+
+	return bundle, nil
+}
+
+// LearningStatus returns a summary of the learning evidence plane.
+type LearningStatus struct {
+	Status               string   `json:"status"`
+	ActiveAlgorithms     []string `json:"active_algorithms"`
+	RecommendationEvents bool     `json:"runtime_recommendation_events"`
+	ToolLearningEvents   bool     `json:"tool_learning_events"`
+	EvidenceProjection   bool     `json:"evidence_projection_enabled"`
+}
+
+// GetLearningStatus returns the current learning pipeline status.
+func (s *Service) GetLearningStatus(_ context.Context) LearningStatus {
+	algorithms := []string{"heuristic_v1"}
+	hasPolicyReader := s.policyLearned != nil
+	if hasPolicyReader {
+		algorithms = append(algorithms, "thompson_sampling")
+	}
+	if s.neuralModel != nil {
+		algorithms = append(algorithms, "neural_ts")
+	}
+	return LearningStatus{
+		Status:               "active",
+		ActiveAlgorithms:     algorithms,
+		RecommendationEvents: true,
+		ToolLearningEvents:   hasPolicyReader,
+		EvidenceProjection:   true,
+	}
+}
+
+// GetPolicy reads a learned policy for a given context signature + tool ID.
+func (s *Service) GetPolicy(ctx context.Context, contextSig, toolID string) (ToolPolicy, *ServiceError) {
+	if s.policyLearned == nil {
+		return ToolPolicy{}, &ServiceError{Code: "not_found", Message: "policy reader not configured"}
+	}
+	pol, found, err := s.policyLearned.ReadPolicy(ctx, contextSig, toolID)
+	if err != nil {
+		return ToolPolicy{}, &ServiceError{Code: "internal", Message: "failed to read policy"}
+	}
+	if !found {
+		return ToolPolicy{}, &ServiceError{Code: "not_found", Message: "policy not found"}
+	}
+	return pol, nil
+}
+
+// ListPolicies returns all policies for a context signature.
+func (s *Service) ListPolicies(ctx context.Context, contextSig string) (map[string]ToolPolicy, *ServiceError) {
+	if s.policyLearned == nil {
+		return nil, &ServiceError{Code: "not_found", Message: "policy reader not configured"}
+	}
+	policies, err := s.policyLearned.ReadPoliciesForContext(ctx, contextSig)
+	if err != nil {
+		return nil, &ServiceError{Code: "internal", Message: "failed to list policies"}
+	}
+	return policies, nil
+}
+
+// GetAggregate returns telemetry aggregate stats for a tool.
+func (s *Service) GetAggregate(ctx context.Context, toolID string) (ToolStats, *ServiceError) {
+	stats, found, err := s.telemetryQ.ToolStats(ctx, toolID)
+	if err != nil {
+		return ToolStats{}, &ServiceError{Code: "internal", Message: "failed to read aggregate"}
+	}
+	if !found {
+		return ToolStats{}, &ServiceError{Code: "not_found", Message: "aggregate not found"}
+	}
+	return stats, nil
 }
