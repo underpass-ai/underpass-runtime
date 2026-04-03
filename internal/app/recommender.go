@@ -395,6 +395,8 @@ const (
 	AlgorithmVersionV1                   = "1.0.0"
 	PolicyModeNone                       = "none"
 	PolicyModeShadow                     = "shadow"
+	PolicyModeAssist                     = "assist"
+	PolicyModeEnforced                   = "enforced"
 	DecisionSourceHeuristicOnly          = "heuristic_only"
 	DecisionSourceHeuristicWithTelemetry = "heuristic_with_telemetry"
 	DecisionSourceHeuristicWithPolicy    = "heuristic_with_learned_policy"
