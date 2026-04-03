@@ -105,12 +105,19 @@ func (s *LearningEvidenceServer) GetAggregate(ctx context.Context, req *lpb.GetA
 func recommendationDecisionToProto(d domain.RecommendationDecision) *lpb.RecommendationDecision {
 	items := make([]*lpb.RecommendationItem, len(d.Recommendations))
 	for i, r := range d.Recommendations {
+		breakdown := make([]*lpb.ScoreComponent, len(r.ScoreBreakdown))
+		for j, sc := range r.ScoreBreakdown {
+			breakdown[j] = &lpb.ScoreComponent{
+				Name: sc.Name, Value: sc.Value, Rationale: sc.Rationale,
+			}
+		}
 		items[i] = &lpb.RecommendationItem{
-			ToolId:        r.ToolID,
-			Rank:          int32(r.Rank),
-			FinalScore:    r.FinalScore,
-			Why:           r.Why,
-			EstimatedCost: r.EstimatedCost,
+			ToolId:         r.ToolID,
+			Rank:           int32(r.Rank),
+			FinalScore:     r.FinalScore,
+			ScoreBreakdown: breakdown,
+			Why:            r.Why,
+			EstimatedCost:  r.EstimatedCost,
 		}
 	}
 

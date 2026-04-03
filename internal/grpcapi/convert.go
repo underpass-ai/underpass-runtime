@@ -302,12 +302,19 @@ func fullToolToProto(f app.FullTool) *pb.FullTool {
 }
 
 func recommendationToProto(r app.Recommendation) *pb.Recommendation {
+	breakdown := make([]*pb.ScoreComponent, len(r.ScoreBreakdown))
+	for i, sc := range r.ScoreBreakdown {
+		breakdown[i] = &pb.ScoreComponent{
+			Name: sc.Name, Value: sc.Value, Rationale: sc.Rationale,
+		}
+	}
 	return &pb.Recommendation{
-		Name:          r.Name,
-		Score:         r.Score,
-		Why:           r.Why,
-		EstimatedCost: r.EstimatedCost,
-		PolicyNotes:   r.PolicyNotes,
+		Name:           r.Name,
+		Score:          r.Score,
+		Why:            r.Why,
+		EstimatedCost:  r.EstimatedCost,
+		PolicyNotes:    r.PolicyNotes,
+		ScoreBreakdown: breakdown,
 	}
 }
 

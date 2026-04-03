@@ -433,6 +433,107 @@ func TestAcceptRecommendation_WithKPIMetrics(t *testing.T) {
 	}
 }
 
+func TestRecommendTools_ScoreBreakdown(t *testing.T) {
+	svc, _ := makeEvidenceService()
+
+	resp, svcErr := svc.RecommendTools(context.Background(), testSessionID, "read", 5)
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+	if len(resp.Recommendations) == 0 {
+		t.Fatal("expected recommendations")
+	}
+
+	rec := resp.Recommendations[0]
+	if len(rec.ScoreBreakdown) == 0 {
+		t.Fatal("expected score breakdown")
+	}
+	if rec.ScoreBreakdown[0].Name != "heuristic" {
+		t.Fatalf("expected first component 'heuristic', got %s", rec.ScoreBreakdown[0].Name)
+	}
+	if rec.ScoreBreakdown[0].Value <= 0 {
+		t.Fatal("expected positive heuristic score")
+	}
+
+	// Verify breakdown persists in decision
+	decision, svcErr := svc.GetRecommendationDecision(context.Background(), resp.RecommendationID)
+	if svcErr != nil {
+		t.Fatalf("get decision: %v", svcErr)
+	}
+	if len(decision.Recommendations[0].ScoreBreakdown) == 0 {
+		t.Fatal("expected score breakdown persisted in decision")
+	}
+}
+
+func TestRecommendTools_ScoreBreakdownWithTelemetry(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	svc.SetTelemetry(noopTelemetryRecorder{}, &fakeTelemetryQuerier{
+		stats: map[string]ToolStats{
+			"fs.read_file": {SuccessRate: 0.95, InvocationN: 20, P50Duration: 30, P95Duration: 100},
+		},
+	})
+
+	resp, svcErr := svc.RecommendTools(context.Background(), testSessionID, "read", 5)
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+
+	rec := resp.Recommendations[0]
+	hasTelemetry := false
+	for _, sc := range rec.ScoreBreakdown {
+		if sc.Name == "telemetry_boost" {
+			hasTelemetry = true
+			if sc.Value <= 0 {
+				t.Fatal("expected positive telemetry boost for 95% success rate")
+			}
+		}
+	}
+	if !hasTelemetry {
+		t.Fatal("expected telemetry_boost component in breakdown")
+	}
+}
+
+func TestRecommendTools_ScoreBreakdownWithPolicy(t *testing.T) {
+	svc, _ := makeEvidenceService()
+	svc.SetPolicyReader(&fakePolicyReader{
+		policies: map[string]ToolPolicy{
+			"fs.read_file": {
+				ToolID: "fs.read_file", ContextSignature: "gen:go:std",
+				Alpha: 90, Beta: 10, Confidence: 0.9, NSamples: 100,
+			},
+		},
+	})
+
+	resp, svcErr := svc.RecommendTools(context.Background(), testSessionID, "read", 5)
+	if svcErr != nil {
+		t.Fatalf("unexpected error: %v", svcErr)
+	}
+
+	rec := resp.Recommendations[0]
+	hasPolicy := false
+	for _, sc := range rec.ScoreBreakdown {
+		if sc.Name != "heuristic" && sc.Name != "telemetry_boost" {
+			hasPolicy = true
+		}
+	}
+	if !hasPolicy {
+		t.Fatal("expected policy scoring component in breakdown")
+	}
+}
+
+type fakeTelemetryQuerier struct {
+	stats map[string]ToolStats
+}
+
+func (f *fakeTelemetryQuerier) ToolStats(_ context.Context, name string) (ToolStats, bool, error) {
+	s, ok := f.stats[name]
+	return s, ok, nil
+}
+
+func (f *fakeTelemetryQuerier) AllToolStats(_ context.Context) (map[string]ToolStats, error) {
+	return f.stats, nil
+}
+
 func TestRejectRecommendation_WithKPIMetrics(t *testing.T) {
 	svc, _ := makeEvidenceService()
 	svc.SetKPIMetrics(NewKPIMetrics())
