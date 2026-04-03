@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,7 +94,9 @@ func (m *LocalManager) GetSession(ctx context.Context, sessionID string) (domain
 	}
 
 	if time.Now().UTC().After(session.ExpiresAt) {
-		_ = m.CloseSession(ctx, sessionID)
+		if err := m.CloseSession(ctx, sessionID); err != nil {
+			slog.Warn("failed to close expired session", "session_id", sessionID, "error", err)
+		}
 		return domain.Session{}, false, nil
 	}
 	return session, true, nil

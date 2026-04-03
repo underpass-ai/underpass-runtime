@@ -4,6 +4,7 @@ package workspace
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -223,3 +224,117 @@ func TestKubernetesManager_CloseSessionFindsPodByLabel(t *testing.T) {
 		t.Fatal("expected pod to be deleted")
 	}
 }
+
+func TestKubernetesManager_ReadyTimeout_DeleteFails(t *testing.T) {
+	client := k8sfake.NewSimpleClientset()
+	// Pod never becomes ready → readiness timeout
+	// Delete reactor returns error → exercises slog.Warn branch
+	client.PrependReactor("delete", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("delete forbidden")
+	})
+
+	manager := NewKubernetesManager(KubernetesManagerConfig{
+		Namespace:       testNamespace,
+		PodReadyTimeout: 100 * time.Millisecond,
+	}, client)
+
+	_, err := manager.CreateSession(context.Background(), app.CreateSessionRequest{
+		SessionID: "ready-timeout-del-fail",
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testK8sActorID},
+	})
+	if err == nil {
+		t.Fatal("expected readiness timeout error")
+	}
+}
+
+func TestKubernetesManager_SaveFails_DeleteFails(t *testing.T) {
+	client := k8sfake.NewSimpleClientset()
+	client.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		getAction := action.(k8stesting.GetAction)
+		tracked, err := client.Tracker().Get(corev1.SchemeGroupVersion.WithResource("pods"), testNamespace, getAction.GetName())
+		if err != nil {
+			return true, nil, err
+		}
+		pod := tracked.(*corev1.Pod).DeepCopy()
+		pod.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+		}
+		return true, pod, nil
+	})
+	client.PrependReactor("delete", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("delete forbidden")
+	})
+
+	store := &failingK8sSessionStore{saveErr: fmt.Errorf("store write failed")}
+	manager := NewKubernetesManager(KubernetesManagerConfig{
+		Namespace:       testNamespace,
+		PodReadyTimeout: 2 * time.Second,
+	}, client)
+	manager.store = store
+
+	_, err := manager.CreateSession(context.Background(), app.CreateSessionRequest{
+		SessionID: "save-del-fail",
+		Principal: domain.Principal{TenantID: testTenantID, ActorID: testK8sActorID},
+	})
+	if err == nil {
+		t.Fatal("expected session save error")
+	}
+}
+
+func TestKubernetesManager_GetSession_ExpiredCloseError(t *testing.T) {
+	client := k8sfake.NewSimpleClientset()
+	client.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		getAction := action.(k8stesting.GetAction)
+		tracked, err := client.Tracker().Get(corev1.SchemeGroupVersion.WithResource("pods"), testNamespace, getAction.GetName())
+		if err != nil {
+			return true, nil, err
+		}
+		pod := tracked.(*corev1.Pod).DeepCopy()
+		pod.Status.Conditions = []corev1.PodCondition{
+			{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+		}
+		return true, pod, nil
+	})
+
+	manager := NewKubernetesManager(KubernetesManagerConfig{
+		Namespace:       testNamespace,
+		PodReadyTimeout: 2 * time.Second,
+	}, client)
+
+	_, err := manager.CreateSession(context.Background(), app.CreateSessionRequest{
+		SessionID:       "expired-close-fail",
+		Principal:       domain.Principal{TenantID: testTenantID, ActorID: testK8sActorID},
+		ExpiresInSecond: 1,
+	})
+	if err != nil {
+		t.Fatalf("unexpected create error: %v", err)
+	}
+
+	// Force expiry
+	s, _, _ := manager.store.Get(context.Background(), "expired-close-fail")
+	s.ExpiresAt = time.Now().UTC().Add(-time.Minute)
+	_ = manager.store.Save(context.Background(), s)
+
+	// Inject delete error so CloseSession fails → slog.Warn branch
+	client.PrependReactor("delete", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("delete forbidden")
+	})
+
+	_, ok, err := manager.GetSession(context.Background(), "expired-close-fail")
+	if err != nil {
+		t.Fatalf("expected no propagated error, got %v", err)
+	}
+	if ok {
+		t.Fatal("expected expired session not found")
+	}
+}
+
+type failingK8sSessionStore struct {
+	saveErr error
+}
+
+func (f *failingK8sSessionStore) Save(_ context.Context, _ domain.Session) error { return f.saveErr }
+func (f *failingK8sSessionStore) Get(_ context.Context, _ string) (domain.Session, bool, error) {
+	return domain.Session{}, false, nil
+}
+func (f *failingK8sSessionStore) Delete(_ context.Context, _ string) error { return nil }
