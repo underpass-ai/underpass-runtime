@@ -113,6 +113,16 @@ func TestGetCrossAgentInsight(t *testing.T) {
 	}
 }
 
+func TestInsightSummary_WithData(t *testing.T) {
+	insight := BuildCrossAgentInsight("ctx", map[string]ToolStats{
+		"fs.read": {InvocationN: 50, SuccessRate: 0.9},
+	}, nil, AlgorithmIDHeuristic)
+	s := insight.InsightSummary()
+	if s == "no cross-agent data available" {
+		t.Fatal("expected summary with data")
+	}
+}
+
 func TestGetCrossAgentInsight_SessionNotFound(t *testing.T) {
 	svc2 := NewService(
 		&fakeWorkspaceManager{found: false},
