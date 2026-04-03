@@ -17,10 +17,12 @@ import (
 
 	dockerclient "github.com/docker/docker/client"
 	"github.com/nats-io/nats.go"
+	redis "github.com/redis/go-redis/v9"
 
 	lpb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/learning/v1"
 	pb "github.com/underpass-ai/underpass-runtime/gen/underpass/runtime/v1"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/audit"
+	decisionstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/decisionstore"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/eventbus"
 	invocationstoreadapter "github.com/underpass-ai/underpass-runtime/internal/adapters/invocationstore"
 	"github.com/underpass-ai/underpass-runtime/internal/adapters/policy"
@@ -150,6 +152,12 @@ func main() {
 			service.SetNeuralModelReader(nmr)
 		}
 	}
+	decisionStore, err := buildDecisionStore(logger, valkeyTLS)
+	if err != nil {
+		logger.Error("failed to initialize decision store", "error", err)
+		os.Exit(1)
+	}
+	service.SetRecommendationDecisionStore(decisionStore)
 	service.SetKPIMetrics(app.NewKPIMetrics())
 	subscribePolicyUpdated(natsConn, logger)
 	authConfig, err := grpcapi.AuthConfigFromEnv()
@@ -338,6 +346,41 @@ func buildInvocationStore(logger *slog.Logger, valkeyTLS *tls.Config) (app.Invoc
 		return store, nil
 	default:
 		return nil, fmt.Errorf("unsupported INVOCATION_STORE_BACKEND: %s", backend)
+	}
+}
+
+func buildDecisionStore(logger *slog.Logger, valkeyTLS *tls.Config) (app.RecommendationDecisionStore, error) {
+	backend := strings.ToLower(strings.TrimSpace(envOrDefault("DECISION_STORE_BACKEND", "memory")))
+	switch backend {
+	case "", "memory":
+		logger.Info("decision store initialized", "backend", "memory")
+		return app.NewInMemoryRecommendationDecisionStore(), nil
+	case "valkey":
+		address := strings.TrimSpace(os.Getenv("VALKEY_ADDR"))
+		if address == "" {
+			host := strings.TrimSpace(envOrDefault("VALKEY_HOST", "localhost"))
+			port := strings.TrimSpace(envOrDefault("VALKEY_PORT", "6379"))
+			address = fmt.Sprintf("%s:%s", host, port)
+		}
+
+		password := os.Getenv("VALKEY_PASSWORD")
+		db := parseIntOrDefault(os.Getenv("VALKEY_DB"), 0)
+		keyPrefix := envOrDefault("DECISION_STORE_KEY_PREFIX", "workspace:decision")
+		ttlSeconds := parseIntOrDefault(os.Getenv("DECISION_STORE_TTL_SECONDS"), 2592000) // 30 days
+
+		client := redis.NewClient(&redis.Options{
+			Addr:      address,
+			Password:  password,
+			DB:        db,
+			TLSConfig: valkeyTLS,
+		})
+		if err := client.Ping(context.Background()).Err(); err != nil {
+			return nil, fmt.Errorf("decision store valkey ping: %w", err)
+		}
+		logger.Info("decision store initialized", "backend", "valkey", "address", address, "db", db, "ttl_seconds", ttlSeconds)
+		return decisionstoreadapter.NewValkeyStore(client, keyPrefix, time.Duration(ttlSeconds)*time.Second), nil
+	default:
+		return nil, fmt.Errorf("unsupported DECISION_STORE_BACKEND: %s", backend)
 	}
 }
 
