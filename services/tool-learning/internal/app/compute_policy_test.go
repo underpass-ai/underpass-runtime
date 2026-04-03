@@ -581,11 +581,15 @@ func TestComputePolicyRunWindow(t *testing.T) {
 // --- Neural model training ---
 
 type fakeNeuralModelStore struct {
-	key  string
-	data []byte
+	key      string
+	data     []byte
+	writeErr error
 }
 
 func (f *fakeNeuralModelStore) WriteNeuralModel(_ context.Context, key string, data []byte) error {
+	if f.writeErr != nil {
+		return f.writeErr
+	}
 	f.key = key
 	f.data = data
 	return nil
@@ -662,5 +666,32 @@ func TestComputePolicySkipsNeuralModelWhenTooFewAggregates(t *testing.T) {
 
 	if modelStore.key != "" {
 		t.Fatal("expected no model written when < 20 aggregates")
+	}
+}
+
+func TestComputePolicyNeuralModelWriteError(t *testing.T) {
+	aggregates := make([]domain.AggregateStats, 25)
+	for i := range aggregates {
+		aggregates[i] = domain.AggregateStats{
+			ContextSignature: "io:go:standard",
+			ToolID:           fmt.Sprintf("tool.%d", i),
+			Total:            100,
+			Successes:        90,
+		}
+	}
+
+	modelStore := &fakeNeuralModelStore{writeErr: fmt.Errorf("valkey down")}
+	uc := NewComputePolicyUseCase(ComputePolicyConfig{
+		Lake:       &fakeLakeReader{aggregates: aggregates},
+		Store:      &fakePolicyStore{},
+		ModelStore: modelStore,
+		Clock:      fakeClock{now: time.Now().UTC()},
+		Logger:     slog.Default(),
+	})
+
+	// Should succeed despite model write failure (non-fatal)
+	_, err := uc.RunHourly(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error despite model write failure: %v", err)
 	}
 }
