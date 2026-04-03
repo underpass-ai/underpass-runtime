@@ -121,6 +121,37 @@ func TestCloneRepoFailure(t *testing.T) {
 	}
 }
 
+func TestLocalManager_ExpiredSession_CloseError(t *testing.T) {
+	ctx := context.Background()
+	manager := NewLocalManager(t.TempDir())
+
+	session, err := manager.CreateSession(ctx, app.CreateSessionRequest{
+		SessionID:       "session-close-err",
+		Principal:       domain.Principal{TenantID: testTenantID, ActorID: testActorID},
+		ExpiresInSecond: 1,
+	})
+	if err != nil {
+		t.Fatalf("create session failed: %v", err)
+	}
+	_ = session
+
+	// Force expiry and set root to "/" so CloseSession returns error
+	manager.mu.Lock()
+	record := manager.session["session-close-err"]
+	record.ExpiresAt = time.Now().UTC().Add(-time.Minute)
+	manager.session["session-close-err"] = record
+	manager.roots["session-close-err"] = "/"
+	manager.mu.Unlock()
+
+	_, found, err := manager.GetSession(ctx, "session-close-err")
+	if err != nil {
+		t.Fatalf("expected no propagated error, got %v", err)
+	}
+	if found {
+		t.Fatal("expected expired session not found")
+	}
+}
+
 func TestCopyDirectoryNonExistent(t *testing.T) {
 	err := copyDirectory(filepath.Join(t.TempDir(), "missing"), t.TempDir())
 	if err == nil {
