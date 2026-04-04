@@ -3,7 +3,7 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `104`
+- Total capabilities: `105`
 - Families: `25`
 
 ## api.*
@@ -118,6 +118,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `k8s.get_services` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.restart_deployment` | `cluster` | `medium` | `yes` | `reversible` | `best-effort` |
 | `k8s.rollout_status` | `cluster` | `medium` | `yes` | `none` | `guaranteed` |
+| `k8s.set_image` | `cluster` | `high` | `yes` | `irreversible` | `` |
 
 ## kafka.*
 

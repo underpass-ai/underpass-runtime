@@ -2015,6 +2015,15 @@ capabilities:
     examples:
       - '{"namespace":"underpass-runtime","deployment_name":"workspace","timeout_seconds":120}'
 
+  - name: k8s.set_image
+    description: Update a container image on a Kubernetes deployment.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"container_name":{"type":"string"},"image":{"type":"string"},"wait_for_rollout":{"type":"boolean"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":1800}},"required":["deployment_name","image"]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"container":{"type":"string"},"image":{"type":"string"},"previous_image":{"type":"string"},"rollout_status":{"type":"string"},"summary":{"type":"string"}}}'
+    scope: cluster
+    side_effects: irreversible
+    risk_level: high
+    requires_approval: true
+
   - name: k8s.restart_deployment
     description: Trigger a deployment restart by patching pod-template restart annotation.
     input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"wait_for_rollout":{"type":"boolean"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":1800},"poll_interval_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["deployment_name"]}'

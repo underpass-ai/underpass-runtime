@@ -31,6 +31,7 @@ func K8sBundle() Bundle {
 				tooladapter.NewK8sApplyManifestHandler(client, ns),
 				tooladapter.NewK8sRolloutStatusHandler(client, ns),
 				tooladapter.NewK8sRestartDeploymentHandler(client, ns),
+				tooladapter.NewK8sSetImageHandler(client, ns),
 			}
 		},
 	}
