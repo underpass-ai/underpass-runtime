@@ -18,10 +18,10 @@ func TestRegistryDefaults_ProducesAllHandlers(t *testing.T) {
 
 	handlers := registry.Handlers(localConfig())
 
-	// Expected handler count across 6 default bundles:
-	// core=23, repo=33, secops=7, messaging=9, data=9, image=10 = 91
-	if len(handlers) != 91 {
-		t.Fatalf("expected 91 default handlers, got %d", len(handlers))
+	// Expected handler count across 9 default bundles:
+	// core=23, repo=33, secops=7, messaging=9, data=9, image=10, github=3, observability=1 = 95
+	if len(handlers) != 95 {
+		t.Fatalf("expected 95 default handlers, got %d", len(handlers))
 	}
 }
 
@@ -45,9 +45,9 @@ func TestRegistryDisable_ExcludesBundle(t *testing.T) {
 
 	handlers := registry.Handlers(localConfig())
 
-	// Without messaging (9) and data (9) = 91 - 18 = 73
-	if len(handlers) != 73 {
-		t.Fatalf("expected 73 handlers with messaging+data disabled, got %d", len(handlers))
+	// Without messaging (9) and data (9) = 95 - 18 = 77
+	if len(handlers) != 77 {
+		t.Fatalf("expected 77 handlers with messaging+data disabled, got %d", len(handlers))
 	}
 
 	for _, h := range handlers {
@@ -59,7 +59,7 @@ func TestRegistryDisable_ExcludesBundle(t *testing.T) {
 }
 
 func TestRegistryDisableAll_ProducesZeroHandlers(t *testing.T) {
-	registry := NewRegistry("core", "repo", "secops", "messaging", "data", "image", "docker")
+	registry := NewRegistry("core", "repo", "secops", "messaging", "data", "image", "docker", "github", "observability")
 	registry.RegisterDefaults()
 
 	handlers := registry.Handlers(localConfig())
