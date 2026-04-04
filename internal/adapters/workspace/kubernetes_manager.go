@@ -333,6 +333,7 @@ func (m *KubernetesManager) sessionPod(req app.CreateSessionRequest, sessionID, 
 						"GIT_AUTH_TOKEN=$(tr -d '\\n' < '" + gitAuthMountPath + "/token'); " +
 						"printf 'default login %s password %s\\n' \"$GIT_AUTH_USER\" \"$GIT_AUTH_TOKEN\" > \"$HOME/.netrc\" && chmod 600 \"$HOME/.netrc\"; fi; " +
 						"sleep infinity"},
+				Env:             m.runnerEnv(gitAuthSecretName),
 				WorkingDir:      m.cfg.WorkspaceDir,
 				VolumeMounts:    runnerVolumeMounts,
 				SecurityContext: &corev1.SecurityContext{
@@ -444,6 +445,24 @@ func (m *KubernetesManager) gitAuthSecretName(metadata map[string]string) string
 		}
 	}
 	return strings.TrimSpace(m.cfg.GitAuthSecretName)
+}
+
+func (m *KubernetesManager) runnerEnv(gitAuthSecretName string) []corev1.EnvVar {
+	if strings.TrimSpace(gitAuthSecretName) == "" {
+		return nil
+	}
+	return []corev1.EnvVar{
+		{
+			Name: "GH_TOKEN",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: gitAuthSecretName},
+					Key:                  "token",
+					Optional:             boolPtr(true),
+				},
+			},
+		},
+	}
 }
 
 func (m *KubernetesManager) resolveRunnerImage(metadata map[string]string) (string, error) {
