@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -198,5 +199,81 @@ func (h *GitHubMergePRHandler) Invoke(ctx context.Context, session domain.Sessio
 	return app.ToolRunResult{
 		Output:   map[string]any{"merged": true, "branch": request.Branch, "method": request.Method, "output": strings.TrimSpace(result.Output)},
 		ExitCode: result.ExitCode,
+	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// github.watch_run
+// ---------------------------------------------------------------------------
+
+type GitHubWatchRunHandler struct {
+	runner app.CommandRunner
+}
+
+func NewGitHubWatchRunHandler(runner app.CommandRunner) *GitHubWatchRunHandler {
+	return &GitHubWatchRunHandler{runner: runner}
+}
+
+func (h *GitHubWatchRunHandler) Name() string { return "github.watch_run" }
+
+func (h *GitHubWatchRunHandler) Invoke(ctx context.Context, session domain.Session, args json.RawMessage) (app.ToolRunResult, *domain.Error) {
+	request := struct {
+		Branch string `json:"branch"`
+		RunID  int    `json:"run_id"`
+	}{}
+	if err := json.Unmarshal(args, &request); err != nil {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid github.watch_run args", Retryable: false}
+	}
+	if request.RunID == 0 && strings.TrimSpace(request.Branch) == "" {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "branch or run_id is required", Retryable: false}
+	}
+
+	runID := request.RunID
+
+	// Resolve run ID from branch when not provided directly.
+	if runID == 0 {
+		listResult, listErr := h.runner.Run(ctx, session, app.CommandSpec{
+			Cwd:      session.WorkspacePath,
+			Command:  "gh",
+			Args:     []string{"run", "list", "--branch", request.Branch, "--limit", "1", "--json", "databaseId", "-q", ".[0].databaseId"},
+			MaxBytes: 4096,
+		})
+		if listErr != nil {
+			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: fmt.Sprintf("failed to list runs: %v", listErr), Retryable: true}
+		}
+		id, parseErr := strconv.Atoi(strings.TrimSpace(listResult.Output))
+		if parseErr != nil {
+			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: "no workflow run found for branch", Retryable: true}
+		}
+		runID = id
+	}
+
+	// Block until the run completes. --exit-status makes gh return non-zero
+	// on failure, so the exit code alone tells us the outcome.
+	result, err := h.runner.Run(ctx, session, app.CommandSpec{
+		Cwd:      session.WorkspacePath,
+		Command:  "gh",
+		Args:     []string{"run", "watch", strconv.Itoa(runID), "--exit-status"},
+		MaxBytes: 64 * 1024,
+	})
+
+	status := "passed"
+	exitCode := 0
+	output := ""
+	if err != nil {
+		status = "failed"
+		exitCode = 1
+		output = err.Error()
+	} else {
+		output = strings.TrimSpace(result.Output)
+		if result.ExitCode != 0 {
+			status = "failed"
+			exitCode = result.ExitCode
+		}
+	}
+
+	return app.ToolRunResult{
+		Output:   map[string]any{"status": status, "run_id": runID, "branch": request.Branch, "output": output},
+		ExitCode: exitCode,
 	}, nil
 }
