@@ -55,6 +55,8 @@ func (r *Registry) RegisterDefaults() {
 	r.Register(DataBundle())
 	r.Register(ImageBundle())
 	r.Register(DockerBundle())
+	r.Register(GitHubBundle())
+	r.Register(ObservabilityBundle())
 }
 
 // Handlers builds all handlers from registered, non-disabled bundles.
