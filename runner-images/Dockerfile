@@ -76,8 +76,10 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-too
     rustup component add rustfmt clippy rust-src
 RUN groupadd -g 1000 runner && \
     useradd -m -u 1000 -g 1000 -s /bin/bash runner && \
-    mkdir -p /workspace/repo && \
-    chown -R runner:runner /workspace
+    mkdir -p /workspace/repo /workspace/.cargo && \
+    chown -R runner:runner /workspace && \
+    chmod -R a+rw /usr/local/cargo/registry 2>/dev/null || true
+ENV CARGO_HOME=/workspace/.cargo
 WORKDIR /workspace/repo
 USER runner
 CMD ["sh", "-lc", "sleep infinity"]
