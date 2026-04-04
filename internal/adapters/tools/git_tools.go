@@ -668,6 +668,7 @@ func (h *GitPushHandler) Invoke(ctx context.Context, session domain.Session, arg
 		Refspec        string `json:"refspec"`
 		SetUpstream    bool   `json:"set_upstream"`
 		ForceWithLease bool   `json:"force_with_lease"`
+		CleanupRef     string `json:"cleanup_ref"`
 	}{
 		Remote: gitRemoteOrigin,
 	}
@@ -675,6 +676,19 @@ func (h *GitPushHandler) Invoke(ctx context.Context, session domain.Session, arg
 		if json.Unmarshal(args, &request) != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.push args", Retryable: false}
 		}
+	}
+
+	// Best-effort delete of a remote ref before pushing. This allows
+	// idempotent re-runs when the branch already exists on the remote.
+	if cleanupRef := strings.TrimSpace(request.CleanupRef); cleanupRef != "" {
+		if !gitRefspecAllowed(session, cleanupRef) {
+			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodePolicyDenied, Message: errRefspecOutsideAllowlist, Retryable: false}
+		}
+		remote := strings.TrimSpace(request.Remote)
+		if remote == "" {
+			remote = gitRemoteOrigin
+		}
+		executeGit(ctx, h.runner, session, []string{"push", remote, ":" + cleanupRef}, nil, 64*1024) //nolint:errcheck // best-effort
 	}
 
 	var flags []string

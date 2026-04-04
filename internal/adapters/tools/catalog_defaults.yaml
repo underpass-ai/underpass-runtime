@@ -1154,7 +1154,7 @@ capabilities:
 
   - name: git.push
     description: Push commits to an allowlisted remote/refspec.
-    input_schema: '{"type":"object","properties":{"remote":{"type":"string"},"refspec":{"type":"string"},"set_upstream":{"type":"boolean"},"force_with_lease":{"type":"boolean"}},"required":[]}'
+    input_schema: '{"type":"object","properties":{"remote":{"type":"string"},"refspec":{"type":"string"},"set_upstream":{"type":"boolean"},"force_with_lease":{"type":"boolean"},"cleanup_ref":{"type":"string","description":"Remote ref to delete before pushing (best-effort)"}},"required":[]}'
     output_schema: '{"type":"object","properties":{"remote":{"type":"string"},"refspec":{"type":"string"},"pushed":{"type":"boolean"},"output":{"type":"string"}}}'
     scope: repo
     side_effects: irreversible
