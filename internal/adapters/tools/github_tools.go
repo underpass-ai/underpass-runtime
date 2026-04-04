@@ -231,21 +231,32 @@ func (h *GitHubWatchRunHandler) Invoke(ctx context.Context, session domain.Sessi
 	runID := request.RunID
 
 	// Resolve run ID from branch when not provided directly.
+	// GitHub Actions may take a few seconds to register the run after a push,
+	// so retry for up to 60 seconds.
 	if runID == 0 {
-		listResult, listErr := h.runner.Run(ctx, session, app.CommandSpec{
-			Cwd:      session.WorkspacePath,
-			Command:  "gh",
-			Args:     []string{"run", "list", "--branch", request.Branch, "--limit", "1", "--json", "databaseId", "-q", ".[0].databaseId"},
-			MaxBytes: 4096,
-		})
-		if listErr != nil {
-			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: fmt.Sprintf("failed to list runs: %v", listErr), Retryable: true}
+		deadline := time.Now().Add(60 * time.Second)
+		for runID == 0 && time.Now().Before(deadline) {
+			listResult, listErr := h.runner.Run(ctx, session, app.CommandSpec{
+				Cwd:      session.WorkspacePath,
+				Command:  "gh",
+				Args:     []string{"run", "list", "--branch", request.Branch, "--limit", "1", "--json", "databaseId", "-q", ".[0].databaseId"},
+				MaxBytes: 4096,
+			})
+			if listErr == nil {
+				if id, parseErr := strconv.Atoi(strings.TrimSpace(listResult.Output)); parseErr == nil {
+					runID = id
+					break
+				}
+			}
+			select {
+			case <-ctx.Done():
+				return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeTimeout, Message: "context cancelled waiting for workflow run", Retryable: false}
+			case <-time.After(5 * time.Second):
+			}
 		}
-		id, parseErr := strconv.Atoi(strings.TrimSpace(listResult.Output))
-		if parseErr != nil {
-			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: "no workflow run found for branch", Retryable: true}
+		if runID == 0 {
+			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: "no workflow run found for branch after 60s", Retryable: true}
 		}
-		runID = id
 	}
 
 	// Block until the run completes. --exit-status makes gh return non-zero
