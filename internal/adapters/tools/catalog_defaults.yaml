@@ -2562,3 +2562,49 @@ capabilities:
         - field: source
           workspace_relative: true
 
+  # ---------------------------------------------------------------------------
+  # GitHub tools
+  # ---------------------------------------------------------------------------
+
+  - name: github.create_pr
+    description: Create a pull request on GitHub via gh CLI.
+    input_schema: '{"type":"object","properties":{"title":{"type":"string"},"body":{"type":"string"},"base":{"type":"string"},"head":{"type":"string"}},"required":["title","head"]}'
+    output_schema: '{"type":"object","properties":{"pr_url":{"type":"string"},"base":{"type":"string"},"head":{"type":"string"}}}'
+    scope: external
+    side_effects: irreversible
+    risk_level: medium
+    requires_approval: true
+
+  - name: github.check_pr_status
+    description: Poll CI check status on a pull request branch.
+    input_schema: '{"type":"object","properties":{"branch":{"type":"string"},"timeout_seconds":{"type":"integer"},"required_checks":{"type":"array","items":{"type":"string"}}},"required":["branch"]}'
+    output_schema: '{"type":"object","properties":{"status":{"type":"string"},"checks":{"type":"array"}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+
+  - name: github.merge_pr
+    description: Merge a pull request on GitHub via gh CLI.
+    input_schema: '{"type":"object","properties":{"branch":{"type":"string"},"method":{"type":"string","enum":["squash","rebase","merge"]},"delete_branch":{"type":"boolean"}},"required":["branch"]}'
+    output_schema: '{"type":"object","properties":{"merged":{"type":"boolean"},"branch":{"type":"string"},"method":{"type":"string"}}}'
+    scope: external
+    side_effects: irreversible
+    risk_level: high
+    requires_approval: true
+
+  - name: github.watch_run
+    description: Watch a GitHub Actions workflow run until completion.
+    input_schema: '{"type":"object","properties":{"branch":{"type":"string"},"run_id":{"type":"integer"}}}'
+    output_schema: '{"type":"object","properties":{"status":{"type":"string"},"run_id":{"type":"integer"},"branch":{"type":"string"}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+
+  - name: prometheus.query
+    description: Query Prometheus and optionally wait for a threshold condition.
+    input_schema: '{"type":"object","properties":{"query":{"type":"string"},"url":{"type":"string"},"expected_below":{"type":"number"},"expected_above":{"type":"number"},"timeout_seconds":{"type":"integer"}},"required":["query"]}'
+    output_schema: '{"type":"object","properties":{"value":{"type":"number"},"met":{"type":"boolean"}}}'
+    scope: external
+    side_effects: none
+    risk_level: low
+

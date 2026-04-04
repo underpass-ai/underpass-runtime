@@ -3,8 +3,8 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `101`
-- Families: `23`
+- Total capabilities: `104`
+- Families: `25`
 
 ## api.*
 
@@ -55,7 +55,6 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | --- | --- | --- | --- | --- | --- |
 | `fs.copy` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.delete` | `workspace` | `high` | `yes` | `irreversible` | `best-effort` |
-| `fs.edit` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 | `fs.list` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.mkdir` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.move` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
@@ -74,13 +73,21 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `git.checkout` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `git.commit` | `repo` | `medium` | `yes` | `irreversible` | `none` |
 | `git.diff` | `repo` | `low` | `no` | `none` | `guaranteed` |
-| `git.diff_file` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.fetch` | `repo` | `medium` | `yes` | `reversible` | `best-effort` |
 | `git.log` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.pull` | `repo` | `medium` | `yes` | `reversible` | `best-effort` |
 | `git.push` | `repo` | `high` | `yes` | `irreversible` | `best-effort` |
 | `git.show` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.status` | `repo` | `low` | `no` | `none` | `guaranteed` |
+
+## github.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `github.check_pr_status` | `external` | `low` | `no` | `none` | `` |
+| `github.create_pr` | `external` | `medium` | `yes` | `irreversible` | `` |
+| `github.merge_pr` | `external` | `high` | `yes` | `irreversible` | `` |
+| `github.watch_run` | `external` | `low` | `no` | `none` | `` |
 
 ## go.*
 
@@ -144,6 +151,12 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `node.lint` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `node.test` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `node.typecheck` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
+
+## prometheus.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `prometheus.query` | `external` | `low` | `no` | `none` | `` |
 
 ## python.*
 
