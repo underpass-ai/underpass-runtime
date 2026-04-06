@@ -327,13 +327,13 @@ jobs:
           fetch-depth: 0
 
       - name: Download coverage (docker-local)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: coverage-docker-local
           path: .
 
       - name: Download coverage (k8s)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: coverage-k8s
           path: .
