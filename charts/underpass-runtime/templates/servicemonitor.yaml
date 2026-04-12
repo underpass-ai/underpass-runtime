@@ -13,7 +13,7 @@ spec:
     matchLabels:
       {{- include "underpass-runtime.selectorLabels" . | nindent 6 }}
   endpoints:
-    - port: http
+    - port: metrics
       path: {{ .Values.serviceMonitor.path }}
       interval: {{ .Values.serviceMonitor.interval }}
 {{- end }}

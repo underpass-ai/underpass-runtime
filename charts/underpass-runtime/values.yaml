@@ -261,6 +261,24 @@ telemetry:
     # -- Path to CA certificate for OTLP TLS
     caPath: ""
 
+# ---------------------------------------------------------------------------
+# OpenTelemetry Collector (optional, managed by this chart)
+# ---------------------------------------------------------------------------
+
+otelCollector:
+  # -- Deploy an OTel Collector sidecar service
+  enabled: false
+  image:
+    repository: docker.io/otel/opentelemetry-collector-contrib
+    tag: "0.127.0"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
 # -- Optional ingress for an external vLLM service used by some deployments
 vllm:
   ingress:

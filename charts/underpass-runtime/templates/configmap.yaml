@@ -122,6 +122,8 @@ data:
   WORKSPACE_OTEL_ENABLED: "true"
   {{- if .Values.telemetry.otel.endpoint }}
   WORKSPACE_OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.telemetry.otel.endpoint | quote }}
+  {{- else if (default dict .Values.otelCollector).enabled }}
+  WORKSPACE_OTEL_EXPORTER_OTLP_ENDPOINT: {{ printf "%s-otel-collector:4317" (include "underpass-runtime.fullname" .) | quote }}
   {{- end }}
   {{- if .Values.telemetry.otel.insecure }}
   WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE: "true"
