@@ -3,8 +3,8 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `107`
-- Families: `25`
+- Total capabilities: `109`
+- Families: `26`
 
 ## api.*
 
@@ -56,6 +56,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `fs.copy` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.delete` | `workspace` | `high` | `yes` | `irreversible` | `best-effort` |
 | `fs.edit` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
+| `fs.glob` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.list` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.mkdir` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.move` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
@@ -237,4 +238,10 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `security.scan_container` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `security.scan_dependencies` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `security.scan_secrets` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+
+## shell.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `shell.exec` | `workspace` | `high` | `yes` | `reversible` | `best-effort` |
 

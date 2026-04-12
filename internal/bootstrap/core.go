@@ -21,6 +21,8 @@ func CoreBundle() Bundle {
 				tooladapter.NewFSEditHandler(cfg.CommandRunner),
 				tooladapter.NewFSPatchHandler(cfg.CommandRunner),
 				tooladapter.NewFSSearchHandler(cfg.CommandRunner),
+				tooladapter.NewFSGlobHandler(cfg.CommandRunner),
+				tooladapter.NewShellExecHandler(cfg.CommandRunner),
 				tooladapter.NewConnListProfilesHandler(),
 				tooladapter.NewConnDescribeProfileHandler(),
 				tooladapter.NewGitStatusHandler(cfg.CommandRunner),

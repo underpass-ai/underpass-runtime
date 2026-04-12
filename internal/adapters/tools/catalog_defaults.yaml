@@ -375,6 +375,59 @@ capabilities:
     examples:
       - '{"path":".","pattern":"TODO","max_results":50}'
 
+  - name: fs.glob
+    description: Find files by glob pattern within the workspace. Supports doublestar patterns (e.g. **/*.go, src/**/*.ts). Returns file paths only, no content. Use this to orient in a codebase before reading or editing files.
+    input_schema: '{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern with doublestar support (e.g. **/*.go, src/**/test_*.py)"},"path":{"type":"string","description":"Subdirectory to search in (default: workspace root)"},"max_files":{"type":"integer","minimum":1,"maximum":5000,"description":"Maximum files to return (default: 1000)"}},"required":["pattern"]}'
+    output_schema: '{"type":"object","properties":{"matches":{"type":"array","items":{"type":"string"}},"count":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 512
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"pattern":"**/*.go"}'
+      - '{"pattern":"**/Dockerfile","path":"services"}'
+
+  - name: shell.exec
+    description: Execute a shell command in the workspace. Runs via sh -lc in the session workspace directory. Use for any operation not covered by specialized tools (make, pip, cargo, curl, etc.). Output is captured and returned.
+    input_schema: '{"type":"object","properties":{"command":{"type":"string","description":"Shell command to execute (max 4096 chars)"},"stdin":{"type":"string","description":"Optional stdin to pipe to the command"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600,"description":"Command timeout (default: 60s, max: 600s)"},"cwd":{"type":"string","description":"Working directory relative to workspace (default: workspace root)"}},"required":["command"]}'
+    output_schema: '{"type":"object","properties":{"command":{"type":"string"},"exit_code":{"type":"integer"},"stdout":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: high
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 600
+      output_limit_kb: 1024
+    preconditions:
+      - command must not exceed 4096 characters
+    postconditions:
+      - workspace state may change depending on the command
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: command
+          max_length: 4096
+      path_fields:
+        - field: cwd
+          workspace_relative: true
+    examples:
+      - '{"command":"make test"}'
+      - '{"command":"pip install -r requirements.txt","timeout_seconds":120}'
+      - '{"command":"cargo check","cwd":"services/rust-svc"}'
+
   - name: conn.list_profiles
     description: List governable external connection profiles visible to the session principal.
     input_schema: '{"type":"object","properties":{},"required":[]}'
