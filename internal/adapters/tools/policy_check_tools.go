@@ -53,11 +53,6 @@ func (h *PolicyCheckHandler) Invoke(_ context.Context, session domain.Session, a
 		return policyCheckResult(request.ToolName, false, "tool not found in catalog"), nil
 	}
 
-	// Check: requires approval?
-	if cap.RequiresApproval {
-		// Not a denial, but worth noting.
-	}
-
 	// Check: risk level.
 	riskNote := ""
 	if cap.RiskLevel == domain.RiskHigh {
@@ -109,7 +104,8 @@ func policyCheckArgs(policy domain.PolicyMetadata, rawArgs json.RawMessage, sess
 	var violations []string
 
 	// Validate arg fields.
-	for _, af := range policy.ArgFields {
+	for i := range policy.ArgFields {
+		af := &policy.ArgFields[i]
 		val, ok := argMap[af.Field]
 		if !ok {
 			continue

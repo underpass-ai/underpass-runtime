@@ -85,7 +85,8 @@ func suggestRankTools(caps []domain.Capability, task, scopeFilter, familyFilter 
 	words := strings.Fields(taskLower)
 
 	var results []toolSuggestion
-	for _, cap := range caps {
+	for i := range caps {
+		cap := &caps[i]
 		if scopeFilter != "" && string(cap.Scope) != scopeFilter {
 			continue
 		}
@@ -93,12 +94,12 @@ func suggestRankTools(caps []domain.Capability, task, scopeFilter, familyFilter 
 			continue
 		}
 
-		score := suggestScore(cap, taskLower, words)
+		score := suggestScore(*cap, taskLower, words)
 		if score <= 0 {
 			continue
 		}
 
-		why := suggestExplain(cap, taskLower, words)
+		why := suggestExplain(*cap, taskLower, words)
 		results = append(results, toolSuggestion{
 			Name:        cap.Name,
 			Score:       score,
