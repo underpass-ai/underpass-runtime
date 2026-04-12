@@ -250,7 +250,7 @@ func (h *GitHubWatchRunHandler) Invoke(ctx context.Context, session domain.Sessi
 			}
 			select {
 			case <-ctx.Done():
-				return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeTimeout, Message: "context cancelled waiting for workflow run", Retryable: false}
+				return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeTimeout, Message: "context canceled waiting for workflow run", Retryable: false}
 			case <-time.After(5 * time.Second):
 			}
 		}
