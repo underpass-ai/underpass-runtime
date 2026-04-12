@@ -375,6 +375,103 @@ capabilities:
     examples:
       - '{"path":".","pattern":"TODO","max_results":50}'
 
+  - name: fs.read_lines
+    description: Read a specific range of lines from a file with line numbers. Essential for navigating large files without loading them entirely. Returns numbered lines and total line count.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file"},"start_line":{"type":"integer","minimum":1,"description":"First line to read (1-based, default 1)"},"end_line":{"type":"integer","minimum":1,"description":"Last line to read (default 100, max range 500 lines)"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"start_line":{"type":"integer"},"end_line":{"type":"integer"},"total_lines":{"type":"integer"},"content":{"type":"string"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 256
+    preconditions:
+      - path must exist and be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go","start_line":1,"end_line":50}'
+      - '{"path":"internal/app/service.go","start_line":100,"end_line":150}'
+
+  - name: fs.insert
+    description: Insert text at a specific line number without replacing existing content. Line 0 prepends before line 1. Complements fs.edit for adding new code (imports, functions, etc.) at precise positions. Supports undo via workspace.undo_edit.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file"},"line":{"type":"integer","minimum":0,"description":"Line number to insert after (0 = prepend before first line)"},"content":{"type":"string","description":"Text to insert (newline appended if missing)"}},"required":["path","line","content"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"inserted_at":{"type":"integer"},"total_lines":{"type":"integer"},"sha256":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 64
+    preconditions:
+      - path must exist and be inside allowed_paths
+    postconditions:
+      - file contents change in place
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go","line":5,"content":"import \"fmt\""}'
+      - '{"path":"src/handler.go","line":0,"content":"package handlers\n"}'
+
+  - name: workspace.undo_edit
+    description: Revert the last edit to a specific file. Restores the file to its state before the most recent fs.edit, fs.write_file, or fs.insert operation. Single-level undo — only the last mutation can be reverted.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file to undo"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"restored":{"type":"boolean"},"sha256":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 64
+    preconditions:
+      - an undo snapshot must exist for the file
+    postconditions:
+      - file reverted to previous state
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go"}'
+
+  - name: repo.tree
+    description: Show the directory tree structure of the workspace. Provides instant codebase orientation with configurable depth and ignore patterns. Directories sorted first, common noise directories (.git, node_modules, etc.) excluded by default.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Subdirectory to tree (default: workspace root)"},"max_depth":{"type":"integer","minimum":1,"maximum":10,"description":"Maximum directory depth (default: 3)"},"show_files":{"type":"boolean","description":"Show files in addition to directories (default: true)"},"ignore":{"type":"string","description":"Comma-separated directory names to ignore (default: .git,node_modules,.venv,__pycache__,vendor,...)"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"tree":{"type":"string"},"entries":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 256
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"max_depth":2}'
+      - '{"path":"internal","max_depth":4,"show_files":false}'
+
   - name: fs.glob
     description: Find files by glob pattern within the workspace. Supports doublestar patterns (e.g. **/*.go, src/**/*.ts). Returns file paths only, no content. Use this to orient in a codebase before reading or editing files.
     input_schema: '{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern with doublestar support (e.g. **/*.go, src/**/test_*.py)"},"path":{"type":"string","description":"Subdirectory to search in (default: workspace root)"},"max_files":{"type":"integer","minimum":1,"maximum":5000,"description":"Maximum files to return (default: 1000)"}},"required":["pattern"]}'

@@ -3,8 +3,8 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `109`
-- Families: `26`
+- Total capabilities: `113`
+- Families: `27`
 
 ## api.*
 
@@ -57,11 +57,13 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `fs.delete` | `workspace` | `high` | `yes` | `irreversible` | `best-effort` |
 | `fs.edit` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 | `fs.glob` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+| `fs.insert` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 | `fs.list` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.mkdir` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.move` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.patch` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 | `fs.read_file` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+| `fs.read_lines` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.search` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.stat` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.write_file` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
@@ -213,6 +215,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `repo.symbol_search` | `repo` | `low` | `no` | `none` | `best-effort` |
 | `repo.test` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `repo.test_failures_summary` | `repo` | `low` | `no` | `reversible` | `best-effort` |
+| `repo.tree` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `repo.validate` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 
 ## rust.*
@@ -244,4 +247,10 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | Tool | Scope | Risk | Approval | Side Effects | Idempotency |
 | --- | --- | --- | --- | --- | --- |
 | `shell.exec` | `workspace` | `high` | `yes` | `reversible` | `best-effort` |
+
+## workspace.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `workspace.undo_edit` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 
