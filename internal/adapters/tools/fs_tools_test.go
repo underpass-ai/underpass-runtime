@@ -284,10 +284,10 @@ func TestFSEditHandler_ReplaceAll(t *testing.T) {
 
 	// With replace_all, should succeed.
 	result, err := handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
-		testFSKeyPath:  "repeated.txt",
-		"old_string":   "foo",
-		"new_string":   "qux",
-		"replace_all":  true,
+		testFSKeyPath: "repeated.txt",
+		"old_string":  "foo",
+		"new_string":  "qux",
+		"replace_all": true,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected fs.edit error: %#v", err)
