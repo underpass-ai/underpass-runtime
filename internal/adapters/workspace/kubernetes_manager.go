@@ -333,9 +333,9 @@ func (m *KubernetesManager) sessionPod(req app.CreateSessionRequest, sessionID, 
 						"GIT_AUTH_TOKEN=$(tr -d '\\n' < '" + gitAuthMountPath + "/token'); " +
 						"printf 'default login %s password %s\\n' \"$GIT_AUTH_USER\" \"$GIT_AUTH_TOKEN\" > \"$HOME/.netrc\" && chmod 600 \"$HOME/.netrc\"; fi; " +
 						"sleep infinity"},
-				Env:             m.runnerEnv(gitAuthSecretName),
-				WorkingDir:      m.cfg.WorkspaceDir,
-				VolumeMounts:    runnerVolumeMounts,
+				Env:          m.runnerEnv(gitAuthSecretName),
+				WorkingDir:   m.cfg.WorkspaceDir,
+				VolumeMounts: runnerVolumeMounts,
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: boolPtr(false),
 					ReadOnlyRootFilesystem:   boolPtr(m.cfg.ReadOnlyRootFS),
