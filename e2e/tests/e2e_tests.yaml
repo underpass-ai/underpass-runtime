@@ -134,3 +134,11 @@ workspace_tests:
     kind: "learning"
     timeout_override: 300
     tags: ["learning", "neural-ts", "contextual-bandit", "valkey", "recommendations"]
+
+  - id: "22"
+    name: "22-swe-agent-tools"
+    job_name: "e2e-swe-agent-tools"
+    tier: "core"
+    kind: "workspace"
+    timeout_override: 600
+    tags: ["workspace", "swe", "tools", "fs", "shell", "git", "repo", "policy", "suggest", "undo"]
