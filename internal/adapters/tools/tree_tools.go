@@ -135,7 +135,7 @@ func buildTree(lines *[]string, count *int, truncated *bool, dir, workspacePath,
 		if entry.IsDir() {
 			*lines = append(*lines, prefix+connector+name+"/")
 			*count++
-			buildTree(lines, count, truncated, filepath.Join(dir, name), workspacePath, childPrefix, depth+1, maxDepth, showFiles, ignoreSet)
+			_ = buildTree(lines, count, truncated, filepath.Join(dir, name), workspacePath, childPrefix, depth+1, maxDepth, showFiles, ignoreSet)
 		} else if showFiles {
 			*lines = append(*lines, prefix+connector+name)
 			*count++

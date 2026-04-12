@@ -77,7 +77,7 @@ func (h *FSReadLinesHandler) invokeLocal(path, resolved string, startLine, endLi
 		}
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: err.Error(), Retryable: false}
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck // read-only file handle
 
 	var lines []string
 	totalLines := 0
@@ -87,13 +87,6 @@ func (h *FSReadLinesHandler) invokeLocal(path, resolved string, startLine, endLi
 		if totalLines >= startLine && totalLines <= endLine {
 			lines = append(lines, fmt.Sprintf("%d\t%s", totalLines, scanner.Text()))
 		}
-		if totalLines > endLine {
-			// Keep counting total lines.
-		}
-	}
-	// Count remaining lines without storing.
-	for scanner.Scan() {
-		totalLines++
 	}
 
 	content := strings.Join(lines, "\n")
@@ -132,7 +125,7 @@ func (h *FSReadLinesHandler) invokeRemote(
 	content := strings.TrimSpace(parts[0])
 	totalLines := 0
 	if len(parts) > 1 {
-		fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &totalLines)
+		fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &totalLines) //nolint:errcheck // best-effort parse
 	}
 
 	return app.ToolRunResult{

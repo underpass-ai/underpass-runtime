@@ -73,7 +73,7 @@ func (h *WorkspaceUndoEditHandler) invokeLocal(path, resolved, workspacePath str
 	}
 
 	// Remove snapshot after successful undo — only one level of undo.
-	os.Remove(snapshotPath)
+	_ = os.Remove(snapshotPath)
 
 	hash := sha256.Sum256(snapshot)
 	return app.ToolRunResult{
@@ -133,8 +133,8 @@ func SaveUndoSnapshot(workspacePath, resolved string) {
 	}
 
 	snapshotFile := undoSnapshotPath(workspacePath, rel)
-	os.MkdirAll(filepath.Dir(snapshotFile), 0o755)
-	os.WriteFile(snapshotFile, content, 0o644)
+	_ = os.MkdirAll(filepath.Dir(snapshotFile), 0o755)
+	_ = os.WriteFile(snapshotFile, content, 0o644)
 }
 
 func undoSnapshotPath(workspacePath, relativePath string) string {
