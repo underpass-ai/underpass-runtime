@@ -495,6 +495,45 @@ func runGit(t *testing.T, cwd string, args ...string) {
 	}
 }
 
+func TestGitPushHandler_CleanupRef(t *testing.T) {
+	root := initGitRepo(t)
+	remotePath := initBareGitRepo(t)
+	runGit(t, root, "remote", "add", testGitRemoteOrigin, remotePath)
+	runGit(t, root, "push", testGitRemoteOrigin, "HEAD:refs/heads/to-delete")
+
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+
+	push := &GitPushHandler{}
+	// Push with cleanup_ref deletes the remote branch first then pushes.
+	_, err := push.Invoke(context.Background(), session, mustJSONGit(t, map[string]any{
+		"remote":      testGitRemoteOrigin,
+		"refspec":     "HEAD:refs/heads/main",
+		"cleanup_ref": "to-delete",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected push with cleanup_ref error: %#v", err)
+	}
+}
+
+func TestGitPushHandler_CleanupRefPolicyDenied(t *testing.T) {
+	root := initGitRepo(t)
+	session := domain.Session{
+		WorkspacePath: root,
+		AllowedPaths:  []string{"."},
+		Metadata:      map[string]string{"allowed_git_ref_prefixes": "refs/heads/release/"},
+	}
+
+	push := &GitPushHandler{}
+	_, err := push.Invoke(context.Background(), session, mustJSONGit(t, map[string]any{
+		"remote":      testGitRemoteOrigin,
+		"refspec":     "HEAD:refs/heads/release/v1",
+		"cleanup_ref": "forbidden-branch",
+	}))
+	if err == nil || err.Code != app.ErrorCodePolicyDenied {
+		t.Fatalf("expected policy denial for cleanup_ref, got %#v", err)
+	}
+}
+
 func mustJSONGit(t *testing.T, payload any) json.RawMessage {
 	t.Helper()
 	data, err := json.Marshal(payload)

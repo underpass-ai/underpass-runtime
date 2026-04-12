@@ -445,3 +445,150 @@ func TestK8sApplyManifestHandler_EmptyManifestAndNoObjects(t *testing.T) {
 		t.Fatalf("expected invalid_argument for empty YAML manifest, got %#v", err)
 	}
 }
+
+func TestK8sSetImageHandler_HappyPath(t *testing.T) {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-app", Namespace: testK8sNamespaceSandbox},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "app", Image: "myapp:v1"},
+						{Name: "sidecar", Image: "sidecar:v1"},
+					},
+				},
+			},
+		},
+	}
+	client := k8sfake.NewSimpleClientset(deployment)
+	handler := NewK8sSetImageHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	// Update specific container.
+	result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"namespace":       testK8sNamespaceSandbox,
+		"deployment_name": "my-app",
+		"container_name":  "app",
+		"image":           "myapp:v2",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected set_image error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["previous_image"] != "myapp:v1" {
+		t.Fatalf("expected previous_image=myapp:v1, got %v", output["previous_image"])
+	}
+	if output["image"] != "myapp:v2" {
+		t.Fatalf("expected image=myapp:v2, got %v", output["image"])
+	}
+
+	// Verify the deployment was actually updated.
+	updated, _ := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "my-app", metav1.GetOptions{})
+	if updated.Spec.Template.Spec.Containers[0].Image != "myapp:v2" {
+		t.Fatalf("expected container image updated, got %s", updated.Spec.Template.Spec.Containers[0].Image)
+	}
+}
+
+func TestK8sSetImageHandler_FirstContainerDefault(t *testing.T) {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-app", Namespace: testK8sNamespaceSandbox},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "app", Image: "myapp:v1"}},
+				},
+			},
+		},
+	}
+	client := k8sfake.NewSimpleClientset(deployment)
+	handler := NewK8sSetImageHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	// No container_name → updates first container.
+	_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"namespace":       testK8sNamespaceSandbox,
+		"deployment_name": "my-app",
+		"image":           "myapp:v3",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %#v", err)
+	}
+	updated, _ := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "my-app", metav1.GetOptions{})
+	if updated.Spec.Template.Spec.Containers[0].Image != "myapp:v3" {
+		t.Fatalf("expected first container updated, got %s", updated.Spec.Template.Spec.Containers[0].Image)
+	}
+}
+
+func TestK8sSetImageHandler_Validation(t *testing.T) {
+	client := k8sfake.NewSimpleClientset()
+	handler := NewK8sSetImageHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	// Missing deployment_name.
+	_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"image": "myapp:v1",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected deployment_name required, got %#v", err)
+	}
+
+	// Missing image.
+	_, err = handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"deployment_name": "my-app",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected image required, got %#v", err)
+	}
+
+	// Nil client.
+	nilHandler := NewK8sSetImageHandler(nil, testK8sNamespaceDefault)
+	_, err = nilHandler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"deployment_name": "my-app",
+		"image":           "myapp:v1",
+	}))
+	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected nil client error, got %#v", err)
+	}
+
+	// Deployment not found.
+	_, err = handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"namespace":       testK8sNamespaceSandbox,
+		"deployment_name": "nonexistent",
+		"image":           "myapp:v1",
+	}))
+	if err == nil || err.Code != app.ErrorCodeNotFound {
+		t.Fatalf("expected not found, got %#v", err)
+	}
+
+	// Container not found.
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "has-containers", Namespace: testK8sNamespaceSandbox},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "app", Image: "myapp:v1"}},
+				},
+			},
+		},
+	}
+	clientWithDeploy := k8sfake.NewSimpleClientset(deployment)
+	handlerWithDeploy := NewK8sSetImageHandler(clientWithDeploy, testK8sNamespaceDefault)
+	_, err = handlerWithDeploy.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"namespace":       testK8sNamespaceSandbox,
+		"deployment_name": "has-containers",
+		"container_name":  "nonexistent-container",
+		"image":           "myapp:v2",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected container not found, got %#v", err)
+	}
+}
+
+func mustK8sJSON(t *testing.T, v any) json.RawMessage {
+	t.Helper()
+	data, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	return data
+}
