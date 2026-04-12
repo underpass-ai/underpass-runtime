@@ -260,6 +260,36 @@ func TestGitDiffFileHandler_Validation(t *testing.T) {
 	}
 }
 
+func TestGitDiffFileHandler_InvalidJSON(t *testing.T) {
+	root := initGitRepo(t)
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	handler := NewGitDiffFileHandler(nil)
+	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{bad`))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected invalid JSON error, got %#v", err)
+	}
+}
+
+func TestGitDiffFileHandler_NoChanges(t *testing.T) {
+	root := initGitRepo(t)
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	handler := NewGitDiffFileHandler(nil)
+
+	// File exists but has no changes → empty diff, no error.
+	result, err := handler.Invoke(context.Background(), session, mustJSONGit(t, map[string]any{
+		"path": testGitMainTxt,
+		"stat": true,
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error for unchanged file: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	diffText := output["diff"].(string)
+	if strings.TrimSpace(diffText) != "" {
+		t.Fatalf("expected empty diff for unchanged file, got: %q", diffText)
+	}
+}
+
 func TestGitHandlers_LifecycleOperations(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)

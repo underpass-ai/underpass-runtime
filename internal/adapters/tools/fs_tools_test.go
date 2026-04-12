@@ -412,6 +412,109 @@ func TestFSEditHandler_KubernetesRuntimeUsesRunner(t *testing.T) {
 	}
 }
 
+func TestFSEditHandler_KubernetesRemoteErrors(t *testing.T) {
+	session := domain.Session{
+		WorkspacePath: t.TempDir(),
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	ctx := context.Background()
+	args := mustJSON(t, map[string]any{
+		testFSKeyPath: "app.go",
+		"old_string":  "hello",
+		"new_string":  "goodbye",
+	})
+
+	// Nil runner → execution error.
+	handler := NewFSEditHandler(nil)
+	_, err := handler.Invoke(ctx, session, args)
+	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected nil runner error, got %#v", err)
+	}
+
+	// Read fails → execution error.
+	readFail := &fakeFSCommandRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			return app.CommandResult{Output: "read error"}, fmt.Errorf("cat failed")
+		},
+	}
+	_, err = NewFSEditHandler(readFail).Invoke(ctx, session, args)
+	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected read error, got %#v", err)
+	}
+
+	// old_string not found in remote file.
+	notFound := &fakeFSCommandRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			return app.CommandResult{ExitCode: 0, Output: "nothing here"}, nil
+		},
+	}
+	_, err = NewFSEditHandler(notFound).Invoke(ctx, session, args)
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected not found error, got %#v", err)
+	}
+
+	// Ambiguous match in remote file.
+	ambiguous := &fakeFSCommandRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			return app.CommandResult{ExitCode: 0, Output: "hello foo hello bar hello"}, nil
+		},
+	}
+	_, err = NewFSEditHandler(ambiguous).Invoke(ctx, session, args)
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected ambiguous match error, got %#v", err)
+	}
+
+	// replace_all in remote file.
+	callCount := 0
+	replaceAllRunner := &fakeFSCommandRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			callCount++
+			if callCount == 1 {
+				return app.CommandResult{ExitCode: 0, Output: "hello foo hello"}, nil
+			}
+			return app.CommandResult{ExitCode: 0, Output: ""}, nil
+		},
+	}
+	result, err := NewFSEditHandler(replaceAllRunner).Invoke(ctx, session, mustJSON(t, map[string]any{
+		testFSKeyPath: "app.go",
+		"old_string":  "hello",
+		"new_string":  "goodbye",
+		"replace_all": true,
+	}))
+	if err != nil {
+		t.Fatalf("unexpected replace_all remote error: %#v", err)
+	}
+	if result.Output.(map[string]any)["replacements"] != 2 {
+		t.Fatalf("expected 2 replacements, got %v", result.Output.(map[string]any)["replacements"])
+	}
+
+	// Write fails after successful read.
+	writeCallCount := 0
+	writeFail := &fakeFSCommandRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			writeCallCount++
+			if writeCallCount == 1 {
+				return app.CommandResult{ExitCode: 0, Output: "hello world"}, nil
+			}
+			return app.CommandResult{Output: "write failed"}, fmt.Errorf("disk full")
+		},
+	}
+	_, err = NewFSEditHandler(writeFail).Invoke(ctx, session, args)
+	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected write error, got %#v", err)
+	}
+}
+
+func TestFSEditHandler_InvalidJSON(t *testing.T) {
+	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
+	handler := NewFSEditHandler(nil)
+	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{invalid`))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected invalid JSON error, got %#v", err)
+	}
+}
+
 func TestFSPatchHandler_ValidationAndExecution(t *testing.T) {
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"src"}}
 	handler := NewFSPatchHandler(nil)
