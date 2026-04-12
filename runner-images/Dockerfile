@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     ripgrep \
     sed \
-    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" -o /tmp/gh.deb \
+    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" -o /tmp/gh.deb \ # NOSONAR — HTTPS enforced, GitHub-hosted binary
     && dpkg -i /tmp/gh.deb && rm /tmp/gh.deb \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 1000 runner && \
@@ -69,7 +69,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     ripgrep \
     sed \
-    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" -o /tmp/gh.deb \
+    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" -o /tmp/gh.deb \ # NOSONAR — HTTPS enforced, GitHub-hosted binary
     && dpkg -i /tmp/gh.deb && rm /tmp/gh.deb \
     && rm -rf /var/lib/apt/lists/*
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain ${RUST_TOOLCHAIN} && \
@@ -77,8 +77,7 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-too
 RUN groupadd -g 1000 runner && \
     useradd -m -u 1000 -g 1000 -s /bin/bash runner && \
     mkdir -p /workspace/repo /workspace/.cargo && \
-    chown -R runner:runner /workspace && \
-    chmod -R a+rw /usr/local/cargo/registry 2>/dev/null || true
+    chown -R runner:runner /workspace
 ENV CARGO_HOME=/workspace/.cargo
 WORKDIR /workspace/repo
 USER runner

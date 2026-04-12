@@ -3,7 +3,7 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `105`
+- Total capabilities: `107`
 - Families: `25`
 
 ## api.*
@@ -55,6 +55,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | --- | --- | --- | --- | --- | --- |
 | `fs.copy` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.delete` | `workspace` | `high` | `yes` | `irreversible` | `best-effort` |
+| `fs.edit` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 | `fs.list` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.mkdir` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.move` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
@@ -73,6 +74,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `git.checkout` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `git.commit` | `repo` | `medium` | `yes` | `irreversible` | `none` |
 | `git.diff` | `repo` | `low` | `no` | `none` | `guaranteed` |
+| `git.diff_file` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.fetch` | `repo` | `medium` | `yes` | `reversible` | `best-effort` |
 | `git.log` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.pull` | `repo` | `medium` | `yes` | `reversible` | `best-effort` |
