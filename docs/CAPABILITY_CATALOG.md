@@ -3,8 +3,8 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `101`
-- Families: `23`
+- Total capabilities: `107`
+- Families: `25`
 
 ## api.*
 
@@ -82,6 +82,15 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `git.show` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.status` | `repo` | `low` | `no` | `none` | `guaranteed` |
 
+## github.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `github.check_pr_status` | `external` | `low` | `no` | `none` | `` |
+| `github.create_pr` | `external` | `medium` | `yes` | `irreversible` | `` |
+| `github.merge_pr` | `external` | `high` | `yes` | `irreversible` | `` |
+| `github.watch_run` | `external` | `low` | `no` | `none` | `` |
+
 ## go.*
 
 | Tool | Scope | Risk | Approval | Side Effects | Idempotency |
@@ -111,6 +120,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `k8s.get_services` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.restart_deployment` | `cluster` | `medium` | `yes` | `reversible` | `best-effort` |
 | `k8s.rollout_status` | `cluster` | `medium` | `yes` | `none` | `guaranteed` |
+| `k8s.set_image` | `cluster` | `high` | `yes` | `irreversible` | `` |
 
 ## kafka.*
 
@@ -144,6 +154,12 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `node.lint` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `node.test` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `node.typecheck` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
+
+## prometheus.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `prometheus.query` | `external` | `low` | `no` | `none` | `` |
 
 ## python.*
 

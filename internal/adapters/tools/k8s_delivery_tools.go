@@ -67,6 +67,11 @@ type K8sRestartDeploymentHandler struct {
 	defaultNamespace string
 }
 
+type K8sSetImageHandler struct {
+	client           kubernetes.Interface
+	defaultNamespace string
+}
+
 type k8sManifestDocument struct {
 	APIVersion string
 	Kind       string
@@ -87,6 +92,10 @@ func NewK8sRestartDeploymentHandler(client kubernetes.Interface, defaultNamespac
 	return &K8sRestartDeploymentHandler{client: client, defaultNamespace: strings.TrimSpace(defaultNamespace)}
 }
 
+func NewK8sSetImageHandler(client kubernetes.Interface, defaultNamespace string) *K8sSetImageHandler {
+	return &K8sSetImageHandler{client: client, defaultNamespace: strings.TrimSpace(defaultNamespace)}
+}
+
 func (h *K8sApplyManifestHandler) Name() string {
 	return "k8s.apply_manifest"
 }
@@ -97,6 +106,10 @@ func (h *K8sRolloutStatusHandler) Name() string {
 
 func (h *K8sRestartDeploymentHandler) Name() string {
 	return "k8s.restart_deployment"
+}
+
+func (h *K8sSetImageHandler) Name() string {
+	return "k8s.set_image"
 }
 
 func (h *K8sApplyManifestHandler) Invoke(ctx context.Context, session domain.Session, args json.RawMessage) (app.ToolRunResult, *domain.Error) {
@@ -521,6 +534,87 @@ func (h *K8sRestartDeploymentHandler) Invoke(ctx context.Context, session domain
 	output[k8sDelivKeyOutput] = summary
 	output[k8sDelivKeyExitCode] = 0
 	return k8sResult(output, "k8s-restart-deployment-report.json"), nil
+}
+
+func (h *K8sSetImageHandler) Invoke(ctx context.Context, session domain.Session, args json.RawMessage) (app.ToolRunResult, *domain.Error) {
+	request := struct {
+		Namespace      string `json:"namespace"`
+		DeploymentName string `json:"deployment_name"`
+		ContainerName  string `json:"container_name"`
+		Image          string `json:"image"`
+		WaitForRollout bool   `json:"wait_for_rollout"`
+		TimeoutSeconds int    `json:"timeout_seconds"`
+	}{
+		TimeoutSeconds: k8sRolloutDefaultTimeoutSeconds,
+	}
+	if err := decodeK8sArgs(args, &request); err != nil {
+		return app.ToolRunResult{}, err
+	}
+	if err := ensureK8sClient(h.client); err != nil {
+		return app.ToolRunResult{}, err
+	}
+	deploymentName := strings.TrimSpace(request.DeploymentName)
+	if deploymentName == "" {
+		return app.ToolRunResult{}, k8sInvalidArgument("deployment_name is required")
+	}
+	image := strings.TrimSpace(request.Image)
+	if image == "" {
+		return app.ToolRunResult{}, k8sInvalidArgument("image is required")
+	}
+
+	namespace := resolveK8sNamespace(request.Namespace, session, h.defaultNamespace)
+	deployment, err := h.client.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeNotFound, Message: "deployment not found", Retryable: false}
+	}
+	if err != nil {
+		return app.ToolRunResult{}, k8sExecutionFailed(fmt.Sprintf("k8s get deployment failed: %v", err), true)
+	}
+
+	containerName := strings.TrimSpace(request.ContainerName)
+	updated := false
+	var previousImage string
+	for i := range deployment.Spec.Template.Spec.Containers {
+		c := &deployment.Spec.Template.Spec.Containers[i]
+		if containerName == "" || c.Name == containerName {
+			previousImage = c.Image
+			c.Image = image
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		return app.ToolRunResult{}, k8sInvalidArgument(fmt.Sprintf("container %q not found in deployment", containerName))
+	}
+
+	_, updateErr := h.client.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+	if updateErr != nil {
+		return app.ToolRunResult{}, k8sExecutionFailed(fmt.Sprintf("k8s set image failed: %v", updateErr), true)
+	}
+
+	output := map[string]any{
+		k8sDelivKeyNamespace:  namespace,
+		k8sDelivKeyDeployment: deploymentName,
+		"container":           containerName,
+		"image":               image,
+		"previous_image":      previousImage,
+	}
+
+	if request.WaitForRollout {
+		timeout := time.Duration(clampInt(request.TimeoutSeconds, 1, 1800, k8sRolloutDefaultTimeoutSeconds)) * time.Second
+		snapshot, waitErr := waitForDeploymentRollout(ctx, h.client, namespace, deploymentName, timeout, time.Second)
+		if waitErr != nil {
+			return app.ToolRunResult{}, waitErr
+		}
+		output["rollout"] = snapshot
+		output["rollout_status"] = k8sDelivStatusCompleted
+	}
+
+	summary := fmt.Sprintf("set image %s/%s container=%s image=%s", namespace, deploymentName, containerName, image)
+	output[k8sDelivKeySummary] = summary
+	output[k8sDelivKeyOutput] = summary
+	output[k8sDelivKeyExitCode] = 0
+	return k8sResult(output, "k8s-set-image-report.json"), nil
 }
 
 func decodeK8sManifestDocuments(raw string, maxObjects int) ([]k8sManifestDocument, *domain.Error) {

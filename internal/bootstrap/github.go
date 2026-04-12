@@ -4,7 +4,7 @@ import (
 	tooladapter "github.com/underpass-ai/underpass-runtime/internal/adapters/tools"
 )
 
-// GitHubBundle returns GitHub API tools: create_pr, check_pr_status, merge_pr.
+// GitHubBundle returns GitHub API tools: create_pr, check_pr_status, merge_pr, watch_run.
 func GitHubBundle() Bundle {
 	return Bundle{
 		Name: "github",
@@ -13,6 +13,7 @@ func GitHubBundle() Bundle {
 				tooladapter.NewGitHubCreatePRHandler(cfg.CommandRunner),
 				tooladapter.NewGitHubCheckPRStatusHandler(cfg.CommandRunner),
 				tooladapter.NewGitHubMergePRHandler(cfg.CommandRunner),
+				tooladapter.NewGitHubWatchRunHandler(cfg.CommandRunner),
 			}
 		},
 	}

@@ -2,6 +2,7 @@
 
 FROM docker.io/library/debian:bookworm-slim AS base
 ENV DEBIAN_FRONTEND=noninteractive
+ARG GH_VERSION=2.62.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
@@ -18,6 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     ripgrep \
     sed \
+    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" -o /tmp/gh.deb \ # NOSONAR — HTTPS enforced, GitHub-hosted binary
+    && dpkg -i /tmp/gh.deb && rm /tmp/gh.deb \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 1000 runner && \
     useradd -m -u 1000 -g 1000 -s /bin/bash runner && \
@@ -39,6 +42,7 @@ ENV RUSTUP_HOME=/usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo
 ENV PATH=/usr/local/go/bin:/usr/local/cargo/bin:${PATH}
 ARG RUST_TOOLCHAIN=stable
+ARG GH_VERSION=2.62.0
 COPY --from=golang /usr/local/go /usr/local/go
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
@@ -65,13 +69,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     ripgrep \
     sed \
+    && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.deb" -o /tmp/gh.deb \ # NOSONAR — HTTPS enforced, GitHub-hosted binary
+    && dpkg -i /tmp/gh.deb && rm /tmp/gh.deb \
     && rm -rf /var/lib/apt/lists/*
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain ${RUST_TOOLCHAIN} && \
     rustup component add rustfmt clippy rust-src
 RUN groupadd -g 1000 runner && \
     useradd -m -u 1000 -g 1000 -s /bin/bash runner && \
-    mkdir -p /workspace/repo && \
+    mkdir -p /workspace/repo /workspace/.cargo && \
     chown -R runner:runner /workspace
+ENV CARGO_HOME=/workspace/.cargo
 WORKDIR /workspace/repo
 USER runner
 CMD ["sh", "-lc", "sleep infinity"]

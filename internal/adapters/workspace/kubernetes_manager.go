@@ -280,20 +280,24 @@ func (m *KubernetesManager) sessionPod(req app.CreateSessionRequest, sessionID, 
 		},
 	}
 	initVolumeMounts := []corev1.VolumeMount{workspaceVolumeMount}
+	runnerVolumeMounts := []corev1.VolumeMount{workspaceVolumeMount}
 	if hasGitAuth {
-		volumes = append(volumes, corev1.Volume{
+		gitAuthVolume := corev1.Volume{
 			Name: "git-auth",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: gitAuthSecretName,
 				},
 			},
-		})
-		initVolumeMounts = append(initVolumeMounts, corev1.VolumeMount{
+		}
+		gitAuthMount := corev1.VolumeMount{
 			Name:      "git-auth",
 			MountPath: gitAuthMountPath,
 			ReadOnly:  true,
-		})
+		}
+		volumes = append(volumes, gitAuthVolume)
+		initVolumeMounts = append(initVolumeMounts, gitAuthMount)
+		runnerVolumeMounts = append(runnerVolumeMounts, gitAuthMount)
 	}
 
 	runnerImage, err := m.resolveRunnerImage(req.Metadata)
@@ -322,9 +326,16 @@ func (m *KubernetesManager) sessionPod(req app.CreateSessionRequest, sessionID, 
 				Name:            m.cfg.RunnerContainerName,
 				Image:           runnerImage,
 				ImagePullPolicy: corev1.PullIfNotPresent,
-				Command:         []string{"sh", "-lc", "sleep infinity"},
-				WorkingDir:      m.cfg.WorkspaceDir,
-				VolumeMounts:    []corev1.VolumeMount{workspaceVolumeMount},
+				Command: []string{"sh", "-lc",
+					"if [ -f '" + gitAuthMountPath + "/.netrc' ]; then cp '" + gitAuthMountPath + "/.netrc' \"$HOME/.netrc\" && chmod 600 \"$HOME/.netrc\"; " +
+						"elif [ -f '" + gitAuthMountPath + "/token' ]; then " +
+						"GIT_AUTH_USER=$(cat '" + gitAuthMountPath + "/username' 2>/dev/null || echo oauth2); " +
+						"GIT_AUTH_TOKEN=$(tr -d '\\n' < '" + gitAuthMountPath + "/token'); " +
+						"printf 'default login %s password %s\\n' \"$GIT_AUTH_USER\" \"$GIT_AUTH_TOKEN\" > \"$HOME/.netrc\" && chmod 600 \"$HOME/.netrc\"; fi; " +
+						"sleep infinity"},
+				Env:          m.runnerEnv(gitAuthSecretName),
+				WorkingDir:   m.cfg.WorkspaceDir,
+				VolumeMounts: runnerVolumeMounts,
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: boolPtr(false),
 					ReadOnlyRootFilesystem:   boolPtr(m.cfg.ReadOnlyRootFS),
@@ -434,6 +445,24 @@ func (m *KubernetesManager) gitAuthSecretName(metadata map[string]string) string
 		}
 	}
 	return strings.TrimSpace(m.cfg.GitAuthSecretName)
+}
+
+func (m *KubernetesManager) runnerEnv(gitAuthSecretName string) []corev1.EnvVar {
+	if strings.TrimSpace(gitAuthSecretName) == "" {
+		return nil
+	}
+	return []corev1.EnvVar{
+		{
+			Name: "GH_TOKEN",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: gitAuthSecretName},
+					Key:                  "token",
+					Optional:             boolPtr(true),
+				},
+			},
+		},
+	}
 }
 
 func (m *KubernetesManager) resolveRunnerImage(metadata map[string]string) (string, error) {

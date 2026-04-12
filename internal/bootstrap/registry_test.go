@@ -19,9 +19,9 @@ func TestRegistryDefaults_ProducesAllHandlers(t *testing.T) {
 	handlers := registry.Handlers(localConfig())
 
 	// Expected handler count across 9 default bundles:
-	// core=25, repo=33, secops=7, messaging=9, data=9, image=10, github=3, observability=1 = 97
-	if len(handlers) != 97 {
-		t.Fatalf("expected 97 default handlers, got %d", len(handlers))
+	// core=25, repo=33, secops=7, messaging=9, data=9, image=10, github=4, observability=1 = 98
+	if len(handlers) != 98 {
+		t.Fatalf("expected 98 default handlers, got %d", len(handlers))
 	}
 }
 
@@ -45,9 +45,9 @@ func TestRegistryDisable_ExcludesBundle(t *testing.T) {
 
 	handlers := registry.Handlers(localConfig())
 
-	// Without messaging (9) and data (9) = 97 - 18 = 79
-	if len(handlers) != 79 {
-		t.Fatalf("expected 79 handlers with messaging+data disabled, got %d", len(handlers))
+	// Without messaging (9) and data (9) = 98 - 18 = 80
+	if len(handlers) != 80 {
+		t.Fatalf("expected 80 handlers with messaging+data disabled, got %d", len(handlers))
 	}
 
 	for _, h := range handlers {
