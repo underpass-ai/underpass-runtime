@@ -1210,42 +1210,15 @@ func (h *FSEditHandler) invokeLocal(path, resolved, oldStr, newStr string, repla
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: err.Error(), Retryable: false}
 	}
 
-	original := string(content)
-	count := strings.Count(original, oldStr)
-	if count == 0 {
-		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "old_string not found in file", Retryable: false}
-	}
-	if !replaceAll && count > 1 {
-		return app.ToolRunResult{}, &domain.Error{
-			Code:      app.ErrorCodeInvalidArgument,
-			Message:   fmt.Sprintf("old_string has %d matches; use replace_all or provide more context to make it unique", count),
-			Retryable: false,
-		}
-	}
-
-	var replaced string
-	var replacements int
-	if replaceAll {
-		replaced = strings.ReplaceAll(original, oldStr, newStr)
-		replacements = count
-	} else {
-		replaced = strings.Replace(original, oldStr, newStr, 1)
-		replacements = 1
+	replaced, replacements, applyErr := fsEditApply(string(content), oldStr, newStr, replaceAll)
+	if applyErr != nil {
+		return app.ToolRunResult{}, applyErr
 	}
 
 	if err := os.WriteFile(resolved, []byte(replaced), 0o644); err != nil {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: err.Error(), Retryable: false}
 	}
-
-	hash := sha256.Sum256([]byte(replaced))
-	return app.ToolRunResult{
-		Output: map[string]any{
-			"path":         filepath.Clean(path),
-			"replacements": replacements,
-			"sha256":       hex.EncodeToString(hash[:]),
-		},
-		Logs: []domain.LogLine{{At: time.Now().UTC(), Channel: fsKeyStdout, Message: fmt.Sprintf("edited %d occurrence(s)", replacements)}},
-	}, nil
+	return fsEditResult(path, replaced, replacements), nil
 }
 
 func (h *FSEditHandler) invokeRemote(
@@ -1259,41 +1232,45 @@ func (h *FSEditHandler) invokeRemote(
 		return app.ToolRunResult{}, runErr
 	}
 
-	// Read the file from the container.
 	readResult, readErr := runShellCommand(ctx, runner, session, fmt.Sprintf("cat %s", shellQuote(resolved)), nil, 1024*1024)
 	if readErr != nil {
 		return app.ToolRunResult{}, toFSRunnerError(readErr, readResult.Output)
 	}
 
-	original := readResult.Output
+	replaced, replacements, applyErr := fsEditApply(readResult.Output, oldStr, newStr, replaceAll)
+	if applyErr != nil {
+		return app.ToolRunResult{}, applyErr
+	}
+
+	writeResult, writeErr := runShellCommand(ctx, runner, session, fmt.Sprintf("cat > %s", shellQuote(resolved)), []byte(replaced), 256*1024)
+	if writeErr != nil {
+		return app.ToolRunResult{}, toFSRunnerError(writeErr, writeResult.Output)
+	}
+	return fsEditResult(path, replaced, replacements), nil
+}
+
+// fsEditApply performs the search-and-replace on original, returning the
+// modified string, replacement count, or an error if old_string is missing
+// or ambiguous.
+func fsEditApply(original, oldStr, newStr string, replaceAll bool) (string, int, *domain.Error) {
 	count := strings.Count(original, oldStr)
 	if count == 0 {
-		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "old_string not found in file", Retryable: false}
+		return "", 0, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "old_string not found in file", Retryable: false}
 	}
 	if !replaceAll && count > 1 {
-		return app.ToolRunResult{}, &domain.Error{
+		return "", 0, &domain.Error{
 			Code:      app.ErrorCodeInvalidArgument,
 			Message:   fmt.Sprintf("old_string has %d matches; use replace_all or provide more context to make it unique", count),
 			Retryable: false,
 		}
 	}
-
-	var replaced string
-	var replacements int
 	if replaceAll {
-		replaced = strings.ReplaceAll(original, oldStr, newStr)
-		replacements = count
-	} else {
-		replaced = strings.Replace(original, oldStr, newStr, 1)
-		replacements = 1
+		return strings.ReplaceAll(original, oldStr, newStr), count, nil
 	}
+	return strings.Replace(original, oldStr, newStr, 1), 1, nil
+}
 
-	// Write back to the container.
-	writeResult, writeErr := runShellCommand(ctx, runner, session, fmt.Sprintf("cat > %s", shellQuote(resolved)), []byte(replaced), 256*1024)
-	if writeErr != nil {
-		return app.ToolRunResult{}, toFSRunnerError(writeErr, writeResult.Output)
-	}
-
+func fsEditResult(path, replaced string, replacements int) app.ToolRunResult {
 	hash := sha256.Sum256([]byte(replaced))
 	return app.ToolRunResult{
 		Output: map[string]any{
@@ -1302,7 +1279,7 @@ func (h *FSEditHandler) invokeRemote(
 			"sha256":       hex.EncodeToString(hash[:]),
 		},
 		Logs: []domain.LogLine{{At: time.Now().UTC(), Channel: fsKeyStdout, Message: fmt.Sprintf("edited %d occurrence(s)", replacements)}},
-	}, nil
+	}
 }
 
 func (h *FSPatchHandler) Name() string {
