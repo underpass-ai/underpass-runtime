@@ -104,3 +104,38 @@ func mustTreeJSON(t *testing.T, v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
 }
+
+func TestRepoTreeHandler_KubernetesRuntime(t *testing.T) {
+	session := domain.Session{
+		WorkspacePath: t.TempDir(),
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	runner := &fakeShellRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			return app.CommandResult{ExitCode: 0, Output: "./src\n./src/main.go\n./docs\n"}, nil
+		},
+	}
+	handler := NewRepoTreeHandler(runner)
+	result, err := handler.Invoke(context.Background(), session, mustTreeJSON(t, map[string]any{}))
+	if err != nil {
+		t.Fatalf("unexpected error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["entries"] != 3 {
+		t.Fatalf("expected 3 entries, got %v", output["entries"])
+	}
+}
+
+func TestRepoTreeHandler_NilRunner(t *testing.T) {
+	session := domain.Session{
+		WorkspacePath: t.TempDir(),
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	handler := NewRepoTreeHandler(nil)
+	_, err := handler.Invoke(context.Background(), session, mustTreeJSON(t, map[string]any{}))
+	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected nil runner error, got %#v", err)
+	}
+}

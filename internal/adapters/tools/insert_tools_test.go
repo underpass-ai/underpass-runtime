@@ -113,3 +113,46 @@ func mustInsertJSON(t *testing.T, v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
 }
+
+func TestFSInsertHandler_KubernetesRuntime(t *testing.T) {
+	session := domain.Session{
+		WorkspacePath: t.TempDir(),
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	callCount := 0
+	runner := &fakeShellRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			callCount++
+			if callCount == 1 {
+				return app.CommandResult{ExitCode: 0, Output: "line1\nline2\n"}, nil
+			}
+			return app.CommandResult{ExitCode: 0, Output: ""}, nil
+		},
+	}
+	handler := NewFSInsertHandler(runner)
+	result, err := handler.Invoke(context.Background(), session, mustInsertJSON(t, map[string]any{
+		"path": "test.go", "line": 1, "content": "inserted",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %#v", err)
+	}
+	if result.Output.(map[string]any)["inserted_at"] != 1 {
+		t.Fatalf("expected inserted_at=1")
+	}
+}
+
+func TestFSInsertHandler_NilRunner(t *testing.T) {
+	session := domain.Session{
+		WorkspacePath: t.TempDir(),
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	handler := NewFSInsertHandler(nil)
+	_, err := handler.Invoke(context.Background(), session, mustInsertJSON(t, map[string]any{
+		"path": "test.go", "line": 1, "content": "x",
+	}))
+	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected nil runner error, got %#v", err)
+	}
+}

@@ -125,3 +125,57 @@ func mustUndoJSON(t *testing.T, v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
 }
+
+func TestWorkspaceUndoEdit_AfterWrite(t *testing.T) {
+	root := t.TempDir()
+	original := "original"
+	os.WriteFile(filepath.Join(root, "file.txt"), []byte(original), 0o644)
+
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+
+	writeHandler := NewFSWriteHandler(nil)
+	_, err := writeHandler.Invoke(context.Background(), session, mustUndoJSON(t, map[string]any{
+		"path": "file.txt", "content": "overwritten",
+	}))
+	if err != nil {
+		t.Fatalf("write failed: %#v", err)
+	}
+
+	undoHandler := NewWorkspaceUndoEditHandler(nil)
+	_, err = undoHandler.Invoke(context.Background(), session, mustUndoJSON(t, map[string]any{"path": "file.txt"}))
+	if err != nil {
+		t.Fatalf("undo failed: %#v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(root, "file.txt"))
+	if string(data) != original {
+		t.Fatalf("expected original after undo, got: %q", string(data))
+	}
+}
+
+func TestWorkspaceUndoEdit_KubernetesRuntime(t *testing.T) {
+	session := domain.Session{
+		WorkspacePath: t.TempDir(),
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+
+	callCount := 0
+	runner := &fakeShellRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			callCount++
+			if callCount == 1 {
+				return app.CommandResult{ExitCode: 0, Output: "snapshot content"}, nil
+			}
+			return app.CommandResult{ExitCode: 0, Output: ""}, nil
+		},
+	}
+	handler := NewWorkspaceUndoEditHandler(runner)
+	result, err := handler.Invoke(context.Background(), session, mustUndoJSON(t, map[string]any{"path": "file.txt"}))
+	if err != nil {
+		t.Fatalf("unexpected error: %#v", err)
+	}
+	if result.Output.(map[string]any)["restored"] != true {
+		t.Fatalf("expected restored=true")
+	}
+}

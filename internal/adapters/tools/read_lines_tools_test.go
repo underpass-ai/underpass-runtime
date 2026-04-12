@@ -87,3 +87,42 @@ func mustReadLinesJSON(t *testing.T, v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
 }
+
+func TestFSReadLinesHandler_KubernetesRuntime(t *testing.T) {
+	session := domain.Session{
+		WorkspacePath: t.TempDir(),
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	handler := NewFSReadLinesHandler(&fakeShellRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			return app.CommandResult{ExitCode: 0, Output: "3  line3\n4  line4\n5  line5\n---TOTAL---\n10"}, nil
+		},
+	})
+
+	result, err := handler.Invoke(context.Background(), session, mustReadLinesJSON(t, map[string]any{
+		"path": "test.txt", "start_line": 3, "end_line": 5,
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["total_lines"] != 10 {
+		t.Fatalf("expected 10 total lines, got %v", output["total_lines"])
+	}
+}
+
+func TestFSReadLinesHandler_NilRunner(t *testing.T) {
+	session := domain.Session{
+		WorkspacePath: t.TempDir(),
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	handler := NewFSReadLinesHandler(nil)
+	_, err := handler.Invoke(context.Background(), session, mustReadLinesJSON(t, map[string]any{
+		"path": "test.txt",
+	}))
+	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected nil runner error, got %#v", err)
+	}
+}
