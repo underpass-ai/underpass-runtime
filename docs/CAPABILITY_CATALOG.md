@@ -3,8 +3,8 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `107`
-- Families: `25`
+- Total capabilities: `115`
+- Families: `29`
 
 ## api.*
 
@@ -56,11 +56,14 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `fs.copy` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.delete` | `workspace` | `high` | `yes` | `irreversible` | `best-effort` |
 | `fs.edit` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
+| `fs.glob` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+| `fs.insert` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 | `fs.list` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.mkdir` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.move` | `workspace` | `medium` | `no` | `reversible` | `best-effort` |
 | `fs.patch` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 | `fs.read_file` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+| `fs.read_lines` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.search` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.stat` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `fs.write_file` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
@@ -155,6 +158,12 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `node.test` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `node.typecheck` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 
+## policy.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `policy.check` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+
 ## prometheus.*
 
 | Tool | Scope | Risk | Approval | Side Effects | Idempotency |
@@ -212,6 +221,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `repo.symbol_search` | `repo` | `low` | `no` | `none` | `best-effort` |
 | `repo.test` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `repo.test_failures_summary` | `repo` | `low` | `no` | `reversible` | `best-effort` |
+| `repo.tree` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `repo.validate` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 
 ## rust.*
@@ -237,4 +247,22 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `security.scan_container` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `security.scan_dependencies` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `security.scan_secrets` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+
+## shell.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `shell.exec` | `workspace` | `high` | `yes` | `reversible` | `best-effort` |
+
+## tool.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `tool.suggest` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+
+## workspace.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `workspace.undo_edit` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 

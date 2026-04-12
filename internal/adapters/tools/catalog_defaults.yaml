@@ -375,6 +375,195 @@ capabilities:
     examples:
       - '{"path":".","pattern":"TODO","max_results":50}'
 
+  - name: fs.read_lines
+    description: Read a specific range of lines from a file with line numbers. Essential for navigating large files without loading them entirely. Returns numbered lines and total line count.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file"},"start_line":{"type":"integer","minimum":1,"description":"First line to read (1-based, default 1)"},"end_line":{"type":"integer","minimum":1,"description":"Last line to read (default 100, max range 500 lines)"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"start_line":{"type":"integer"},"end_line":{"type":"integer"},"total_lines":{"type":"integer"},"content":{"type":"string"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 256
+    preconditions:
+      - path must exist and be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go","start_line":1,"end_line":50}'
+      - '{"path":"internal/app/service.go","start_line":100,"end_line":150}'
+
+  - name: fs.insert
+    description: Insert text at a specific line number without replacing existing content. Line 0 prepends before line 1. Complements fs.edit for adding new code (imports, functions, etc.) at precise positions. Supports undo via workspace.undo_edit.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file"},"line":{"type":"integer","minimum":0,"description":"Line number to insert after (0 = prepend before first line)"},"content":{"type":"string","description":"Text to insert (newline appended if missing)"}},"required":["path","line","content"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"inserted_at":{"type":"integer"},"total_lines":{"type":"integer"},"sha256":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 64
+    preconditions:
+      - path must exist and be inside allowed_paths
+    postconditions:
+      - file contents change in place
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go","line":5,"content":"import \"fmt\""}'
+      - '{"path":"src/handler.go","line":0,"content":"package handlers\n"}'
+
+  - name: workspace.undo_edit
+    description: Revert the last edit to a specific file. Restores the file to its state before the most recent fs.edit, fs.write_file, or fs.insert operation. Single-level undo — only the last mutation can be reverted.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file to undo"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"restored":{"type":"boolean"},"sha256":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 64
+    preconditions:
+      - an undo snapshot must exist for the file
+    postconditions:
+      - file reverted to previous state
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go"}'
+
+  - name: repo.tree
+    description: Show the directory tree structure of the workspace. Provides instant codebase orientation with configurable depth and ignore patterns. Directories sorted first, common noise directories (.git, node_modules, etc.) excluded by default.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Subdirectory to tree (default: workspace root)"},"max_depth":{"type":"integer","minimum":1,"maximum":10,"description":"Maximum directory depth (default: 3)"},"show_files":{"type":"boolean","description":"Show files in addition to directories (default: true)"},"ignore":{"type":"string","description":"Comma-separated directory names to ignore (default: .git,node_modules,.venv,__pycache__,vendor,...)"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"tree":{"type":"string"},"entries":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 256
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"max_depth":2}'
+      - '{"path":"internal","max_depth":4,"show_files":false}'
+
+  - name: fs.glob
+    description: Find files by glob pattern within the workspace. Supports doublestar patterns (e.g. **/*.go, src/**/*.ts). Returns file paths only, no content. Use this to orient in a codebase before reading or editing files.
+    input_schema: '{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern with doublestar support (e.g. **/*.go, src/**/test_*.py)"},"path":{"type":"string","description":"Subdirectory to search in (default: workspace root)"},"max_files":{"type":"integer","minimum":1,"maximum":5000,"description":"Maximum files to return (default: 1000)"}},"required":["pattern"]}'
+    output_schema: '{"type":"object","properties":{"matches":{"type":"array","items":{"type":"string"}},"count":{"type":"integer"},"truncated":{"type":"boolean"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 512
+    preconditions:
+      - path must be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"pattern":"**/*.go"}'
+      - '{"pattern":"**/Dockerfile","path":"services"}'
+
+  - name: shell.exec
+    description: Execute a shell command in the workspace. Runs via sh -lc in the session workspace directory. Use for any operation not covered by specialized tools (make, pip, cargo, curl, etc.). Output is captured and returned.
+    input_schema: '{"type":"object","properties":{"command":{"type":"string","description":"Shell command to execute (max 4096 chars)"},"stdin":{"type":"string","description":"Optional stdin to pipe to the command"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600,"description":"Command timeout (default: 60s, max: 600s)"},"cwd":{"type":"string","description":"Working directory relative to workspace (default: workspace root)"}},"required":["command"]}'
+    output_schema: '{"type":"object","properties":{"command":{"type":"string"},"exit_code":{"type":"integer"},"stdout":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: high
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 600
+      output_limit_kb: 1024
+    preconditions:
+      - command must not exceed 4096 characters
+    postconditions:
+      - workspace state may change depending on the command
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: command
+          max_length: 4096
+      path_fields:
+        - field: cwd
+          workspace_relative: true
+    examples:
+      - '{"command":"make test"}'
+      - '{"command":"pip install -r requirements.txt","timeout_seconds":120}'
+      - '{"command":"cargo check","cwd":"services/rust-svc"}'
+
+  - name: tool.suggest
+    description: Recommend tools for a task described in natural language. Returns ranked suggestions with scores, explanations, and risk levels. Agents use this to discover the right tool instead of guessing. Optional filters by scope (workspace/repo) or family (fs/git/shell/etc.).
+    input_schema: '{"type":"object","properties":{"task":{"type":"string","description":"Natural language description of what you want to do"},"top_k":{"type":"integer","minimum":1,"maximum":20,"description":"Max suggestions to return (default 5)"},"scope":{"type":"string","description":"Filter by scope (workspace, repo, etc.)"},"family":{"type":"string","description":"Filter by tool family prefix (fs, git, shell, etc.)"}},"required":["task"]}'
+    output_schema: '{"type":"object","properties":{"task":{"type":"string"},"suggestions":{"type":"array"},"count":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 5
+      output_limit_kb: 64
+    preconditions: []
+    postconditions:
+      - no side effects
+    cost_hint: low
+    examples:
+      - '{"task":"edit a specific function in a Go file"}'
+      - '{"task":"find all test files in the project","family":"fs"}'
+      - '{"task":"run the test suite and check for failures"}'
+
+  - name: policy.check
+    description: Validate whether a tool invocation would be allowed by the policy engine WITHOUT executing it. Returns allowed/denied with specific violation details. Use this to pre-validate actions before attempting them, avoiding wasted tool calls and policy denials.
+    input_schema: '{"type":"object","properties":{"tool_name":{"type":"string","description":"Name of the tool to check (e.g. shell.exec, fs.edit)"},"args":{"type":"object","description":"The arguments you would pass to the tool"}},"required":["tool_name"]}'
+    output_schema: '{"type":"object","properties":{"tool_name":{"type":"string"},"allowed":{"type":"boolean"},"reason":{"type":"string"},"requires_approval":{"type":"boolean"},"risk_level":{"type":"string"},"violations":{"type":"array","items":{"type":"string"}}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 5
+      output_limit_kb: 16
+    preconditions: []
+    postconditions:
+      - no side effects, no execution
+    cost_hint: low
+    examples:
+      - '{"tool_name":"shell.exec","args":{"command":"make test"}}'
+      - '{"tool_name":"fs.edit","args":{"path":"../../../etc/passwd","old_string":"root","new_string":"hacked"}}'
+
   - name: conn.list_profiles
     description: List governable external connection profiles visible to the session principal.
     input_schema: '{"type":"object","properties":{},"required":[]}'
