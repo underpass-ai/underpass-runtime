@@ -62,8 +62,8 @@ func TestRegistryWithK8s_ProducesAllHandlers(t *testing.T) {
 	}
 	handlers := registry.Handlers(cfg)
 
-	// 96 default + 12 k8s = 108
-	if len(handlers) != 108 {
-		t.Fatalf("expected 108 handlers with k8s, got %d", len(handlers))
+	// 97 default + 12 k8s = 109
+	if len(handlers) != 109 {
+		t.Fatalf("expected 109 handlers with k8s, got %d", len(handlers))
 	}
 }

@@ -25,6 +25,7 @@ func CoreBundle() Bundle {
 				tooladapter.NewConnDescribeProfileHandler(),
 				tooladapter.NewGitStatusHandler(cfg.CommandRunner),
 				tooladapter.NewGitDiffHandler(cfg.CommandRunner),
+				tooladapter.NewGitDiffFileHandler(cfg.CommandRunner),
 				tooladapter.NewGitApplyPatchHandler(cfg.CommandRunner),
 				tooladapter.NewGitCheckoutHandler(cfg.CommandRunner),
 				tooladapter.NewGitLogHandler(cfg.CommandRunner),

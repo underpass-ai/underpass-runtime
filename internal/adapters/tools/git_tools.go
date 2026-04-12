@@ -43,6 +43,10 @@ func NewGitLogHandler(runner app.CommandRunner) *GitLogHandler {
 	return &GitLogHandler{runner: runner}
 }
 
+func NewGitDiffFileHandler(runner app.CommandRunner) *GitDiffFileHandler {
+	return &GitDiffFileHandler{runner: runner}
+}
+
 func NewGitShowHandler(runner app.CommandRunner) *GitShowHandler {
 	return &GitShowHandler{runner: runner}
 }
@@ -84,6 +88,10 @@ type GitCheckoutHandler struct {
 }
 
 type GitLogHandler struct {
+	runner app.CommandRunner
+}
+
+type GitDiffFileHandler struct {
 	runner app.CommandRunner
 }
 
@@ -344,6 +352,86 @@ func (h *GitLogHandler) Invoke(ctx context.Context, session domain.Session, args
 			"count":       len(entries),
 			"entries":     entries,
 		},
+	}
+	if runErr != nil {
+		return result, runErr
+	}
+	return result, nil
+}
+
+// ---------------------------------------------------------------------------
+// git.diff_file — diff a single file against a ref
+// ---------------------------------------------------------------------------
+
+func (h *GitDiffFileHandler) Name() string {
+	return "git.diff_file"
+}
+
+func (h *GitDiffFileHandler) Invoke(ctx context.Context, session domain.Session, args json.RawMessage) (app.ToolRunResult, *domain.Error) {
+	request := struct {
+		Path    string `json:"path"`
+		Ref     string `json:"ref"`
+		Stat    bool   `json:"stat"`
+		Context int    `json:"context"`
+	}{
+		Ref:     "HEAD",
+		Stat:    false,
+		Context: -1, // sentinel: use git default (3)
+	}
+
+	if json.Unmarshal(args, &request) != nil {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid git.diff_file args", Retryable: false}
+	}
+	if strings.TrimSpace(request.Path) == "" {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "path is required", Retryable: false}
+	}
+
+	if _, pathErr := resolvePath(session, request.Path); pathErr != nil {
+		return app.ToolRunResult{}, pathErr
+	}
+
+	ref := strings.TrimSpace(request.Ref)
+	if ref == "" {
+		ref = "HEAD"
+	}
+	if !gitRefAllowed(session, ref) {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodePolicyDenied, Message: errRefOutsideAllowlist, Retryable: false}
+	}
+
+	// Build stat command: git diff --stat <ref> -- <path>
+	var statOutput string
+	if request.Stat {
+		statCmd := []string{"diff", "--stat", ref, "--", request.Path}
+		statResult, statErr := executeGit(ctx, h.runner, session, statCmd, nil, 256*1024)
+		if statErr != nil {
+			return app.ToolRunResult{}, statErr
+		}
+		statOutput = strings.TrimSpace(statResult.Output)
+	}
+
+	// Build diff command: git diff [-U<n>] <ref> -- <path>
+	diffCmd := []string{"diff", "--no-color"}
+	if request.Context >= 0 {
+		diffCmd = append(diffCmd, fmt.Sprintf("-U%d", request.Context))
+	}
+	diffCmd = append(diffCmd, ref, "--", request.Path)
+
+	commandResult, runErr := executeGit(ctx, h.runner, session, diffCmd, nil, 1024*1024)
+
+	output := map[string]any{
+		gitKeyCommand: append([]string{"git"}, diffCmd...),
+		"ref":         ref,
+		"path":        request.Path,
+		"diff":        commandResult.Output,
+	}
+	if request.Stat {
+		output["stat"] = statOutput
+	}
+
+	result := app.ToolRunResult{
+		ExitCode: commandResult.ExitCode,
+		Logs:     []domain.LogLine{{At: time.Now().UTC(), Channel: gitKeyStdout, Message: commandResult.Output}},
+		Output:   output,
 	}
 	if runErr != nil {
 		return result, runErr

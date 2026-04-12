@@ -3,7 +3,7 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `100`
+- Total capabilities: `101`
 - Families: `23`
 
 ## api.*
@@ -74,6 +74,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `git.checkout` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `git.commit` | `repo` | `medium` | `yes` | `irreversible` | `none` |
 | `git.diff` | `repo` | `low` | `no` | `none` | `guaranteed` |
+| `git.diff_file` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.fetch` | `repo` | `medium` | `yes` | `reversible` | `best-effort` |
 | `git.log` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.pull` | `repo` | `medium` | `yes` | `reversible` | `best-effort` |

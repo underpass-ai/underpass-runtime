@@ -938,6 +938,32 @@ capabilities:
     examples:
       - '{"staged":false}'
 
+  - name: git.diff_file
+    description: Diff a single file against a git ref. Returns the unified diff for one specific file, optionally with stat summary and configurable context lines. Use this instead of git.diff when you need to inspect changes to a known file.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file within the workspace"},"ref":{"type":"string","description":"Git ref to diff against (default HEAD). Can be a branch, tag, or commit SHA"},"stat":{"type":"boolean","description":"Include --stat summary (insertions/deletions)"},"context":{"type":"integer","minimum":0,"maximum":50,"description":"Number of context lines around changes (default: git default of 3)"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"ref":{"type":"string"},"path":{"type":"string"},"diff":{"type":"string"},"stat":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      max_retries: 1
+      output_limit_kb: 1024
+    preconditions:
+      - workspace must contain a git repository
+      - path must be inside allowed_paths
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go","ref":"HEAD"}'
+      - '{"path":"src/main.go","ref":"main","stat":true,"context":5}'
+
   - name: git.apply_patch
     description: Apply a unified diff patch using git apply.
     input_schema: '{"type":"object","properties":{"patch":{"type":"string"},"check":{"type":"boolean"}},"required":["patch"]}'
