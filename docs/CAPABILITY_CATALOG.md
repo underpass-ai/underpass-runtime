@@ -3,8 +3,8 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `113`
-- Families: `27`
+- Total capabilities: `115`
+- Families: `29`
 
 ## api.*
 
@@ -158,6 +158,12 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `node.test` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `node.typecheck` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 
+## policy.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `policy.check` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+
 ## prometheus.*
 
 | Tool | Scope | Risk | Approval | Side Effects | Idempotency |
@@ -247,6 +253,12 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | Tool | Scope | Risk | Approval | Side Effects | Idempotency |
 | --- | --- | --- | --- | --- | --- |
 | `shell.exec` | `workspace` | `high` | `yes` | `reversible` | `best-effort` |
+
+## tool.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `tool.suggest` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 
 ## workspace.*
 

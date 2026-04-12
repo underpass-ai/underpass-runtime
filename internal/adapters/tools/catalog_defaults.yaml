@@ -525,6 +525,45 @@ capabilities:
       - '{"command":"pip install -r requirements.txt","timeout_seconds":120}'
       - '{"command":"cargo check","cwd":"services/rust-svc"}'
 
+  - name: tool.suggest
+    description: Recommend tools for a task described in natural language. Returns ranked suggestions with scores, explanations, and risk levels. Agents use this to discover the right tool instead of guessing. Optional filters by scope (workspace/repo) or family (fs/git/shell/etc.).
+    input_schema: '{"type":"object","properties":{"task":{"type":"string","description":"Natural language description of what you want to do"},"top_k":{"type":"integer","minimum":1,"maximum":20,"description":"Max suggestions to return (default 5)"},"scope":{"type":"string","description":"Filter by scope (workspace, repo, etc.)"},"family":{"type":"string","description":"Filter by tool family prefix (fs, git, shell, etc.)"}},"required":["task"]}'
+    output_schema: '{"type":"object","properties":{"task":{"type":"string"},"suggestions":{"type":"array"},"count":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 5
+      output_limit_kb: 64
+    preconditions: []
+    postconditions:
+      - no side effects
+    cost_hint: low
+    examples:
+      - '{"task":"edit a specific function in a Go file"}'
+      - '{"task":"find all test files in the project","family":"fs"}'
+      - '{"task":"run the test suite and check for failures"}'
+
+  - name: policy.check
+    description: Validate whether a tool invocation would be allowed by the policy engine WITHOUT executing it. Returns allowed/denied with specific violation details. Use this to pre-validate actions before attempting them, avoiding wasted tool calls and policy denials.
+    input_schema: '{"type":"object","properties":{"tool_name":{"type":"string","description":"Name of the tool to check (e.g. shell.exec, fs.edit)"},"args":{"type":"object","description":"The arguments you would pass to the tool"}},"required":["tool_name"]}'
+    output_schema: '{"type":"object","properties":{"tool_name":{"type":"string"},"allowed":{"type":"boolean"},"reason":{"type":"string"},"requires_approval":{"type":"boolean"},"risk_level":{"type":"string"},"violations":{"type":"array","items":{"type":"string"}}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 5
+      output_limit_kb: 16
+    preconditions: []
+    postconditions:
+      - no side effects, no execution
+    cost_hint: low
+    examples:
+      - '{"tool_name":"shell.exec","args":{"command":"make test"}}'
+      - '{"tool_name":"fs.edit","args":{"path":"../../../etc/passwd","old_string":"root","new_string":"hacked"}}'
+
   - name: conn.list_profiles
     description: List governable external connection profiles visible to the session principal.
     input_schema: '{"type":"object","properties":{},"required":[]}'

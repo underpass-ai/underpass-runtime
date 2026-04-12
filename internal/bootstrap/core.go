@@ -27,6 +27,8 @@ func CoreBundle() Bundle {
 				tooladapter.NewShellExecHandler(cfg.CommandRunner),
 				tooladapter.NewWorkspaceUndoEditHandler(cfg.CommandRunner),
 				tooladapter.NewRepoTreeHandler(cfg.CommandRunner),
+				tooladapter.NewToolSuggestHandler(),
+				tooladapter.NewPolicyCheckHandler(),
 				tooladapter.NewConnListProfilesHandler(),
 				tooladapter.NewConnDescribeProfileHandler(),
 				tooladapter.NewGitStatusHandler(cfg.CommandRunner),
