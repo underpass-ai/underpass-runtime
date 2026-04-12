@@ -307,6 +307,31 @@ capabilities:
     examples:
       - '{"path":"README.md"}'
 
+  - name: fs.edit
+    description: Surgical search-and-replace edit on a single file. Finds old_string and replaces with new_string. Fails if old_string is not found or is ambiguous (multiple matches without replace_all).
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file within the workspace"},"old_string":{"type":"string","description":"Exact text to find in the file"},"new_string":{"type":"string","description":"Replacement text (use empty string to delete)"},"replace_all":{"type":"boolean","description":"Replace all occurrences. When false (default), old_string must be unique in the file"}},"required":["path","old_string","new_string"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"replacements":{"type":"integer"},"sha256":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 64
+    preconditions:
+      - path must exist and be inside allowed_paths
+      - old_string must be found in the file
+    postconditions:
+      - file contents change in place
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go","old_string":"fmt.Println(\"hello\")","new_string":"fmt.Println(\"world\")","replace_all":false}'
+
   - name: fs.patch
     description: Apply a unified diff patch to files in the workspace.
     input_schema: '{"type":"object","properties":{"unified_diff":{"type":"string"},"strategy":{"type":"string","enum":["apply","reject_on_conflict"]}},"required":["unified_diff"]}'

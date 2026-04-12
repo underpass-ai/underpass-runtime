@@ -228,6 +228,190 @@ func TestFSHandlers_KubernetesRuntimeRequiresRunner(t *testing.T) {
 	}
 }
 
+func TestFSEditHandler_LocalReplace(t *testing.T) {
+	root := t.TempDir()
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	handler := NewFSEditHandler(nil)
+
+	// Create a file with known content.
+	srcPath := filepath.Join(root, "main.go")
+	os.WriteFile(srcPath, []byte("fmt.Println(\"hello\")\nfmt.Println(\"world\")\n"), 0o644)
+
+	// Replace unique string.
+	result, err := handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyPath: "main.go",
+		"old_string":  "fmt.Println(\"hello\")",
+		"new_string":  "fmt.Println(\"goodbye\")",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected fs.edit error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["replacements"] != 1 {
+		t.Fatalf("expected 1 replacement, got %v", output["replacements"])
+	}
+
+	// Verify file content.
+	data, _ := os.ReadFile(srcPath)
+	if !strings.Contains(string(data), "goodbye") {
+		t.Fatalf("expected file to contain 'goodbye', got: %s", string(data))
+	}
+	if strings.Contains(string(data), "hello") {
+		t.Fatalf("expected 'hello' to be replaced")
+	}
+}
+
+func TestFSEditHandler_ReplaceAll(t *testing.T) {
+	root := t.TempDir()
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	handler := NewFSEditHandler(nil)
+
+	srcPath := filepath.Join(root, "repeated.txt")
+	os.WriteFile(srcPath, []byte("foo bar foo baz foo\n"), 0o644)
+
+	// Without replace_all, should fail on ambiguous match.
+	_, err := handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyPath: "repeated.txt",
+		"old_string":  "foo",
+		"new_string":  "qux",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected ambiguous match error, got %#v", err)
+	}
+	if !strings.Contains(err.Message, "3 matches") {
+		t.Fatalf("expected message to mention 3 matches, got: %s", err.Message)
+	}
+
+	// With replace_all, should succeed.
+	result, err := handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyPath:  "repeated.txt",
+		"old_string":   "foo",
+		"new_string":   "qux",
+		"replace_all":  true,
+	}))
+	if err != nil {
+		t.Fatalf("unexpected fs.edit error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["replacements"] != 3 {
+		t.Fatalf("expected 3 replacements, got %v", output["replacements"])
+	}
+
+	data, _ := os.ReadFile(srcPath)
+	if strings.Contains(string(data), "foo") {
+		t.Fatalf("expected all 'foo' replaced, got: %s", string(data))
+	}
+}
+
+func TestFSEditHandler_Validation(t *testing.T) {
+	root := t.TempDir()
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	handler := NewFSEditHandler(nil)
+
+	srcPath := filepath.Join(root, "test.txt")
+	os.WriteFile(srcPath, []byte("some content\n"), 0o644)
+
+	// Missing path.
+	_, err := handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		"old_string": "x",
+		"new_string": "y",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected path required error, got %#v", err)
+	}
+
+	// Missing old_string.
+	_, err = handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyPath: "test.txt",
+		"old_string":  "",
+		"new_string":  "y",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected old_string required error, got %#v", err)
+	}
+
+	// old_string == new_string.
+	_, err = handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyPath: "test.txt",
+		"old_string":  "same",
+		"new_string":  "same",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected same string error, got %#v", err)
+	}
+
+	// old_string not found.
+	_, err = handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyPath: "test.txt",
+		"old_string":  "nonexistent",
+		"new_string":  "replacement",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected not found error, got %#v", err)
+	}
+
+	// File does not exist.
+	_, err = handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyPath: "missing.txt",
+		"old_string":  "x",
+		"new_string":  "y",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected file not exist error, got %#v", err)
+	}
+
+	// Path escapes workspace.
+	restricted := domain.Session{WorkspacePath: root, AllowedPaths: []string{"src"}}
+	_, err = handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyPath: "../etc/passwd",
+		"old_string":  "x",
+		"new_string":  "y",
+	}))
+	_ = restricted
+	if err == nil {
+		t.Fatalf("expected path escape error")
+	}
+}
+
+func TestFSEditHandler_KubernetesRuntimeUsesRunner(t *testing.T) {
+	root := t.TempDir()
+	session := domain.Session{
+		WorkspacePath: root,
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+
+	callCount := 0
+	runner := &fakeFSCommandRunner{
+		run: func(_ context.Context, _ domain.Session, spec app.CommandSpec) (app.CommandResult, error) {
+			callCount++
+			if callCount == 1 {
+				// First call: read the file.
+				return app.CommandResult{ExitCode: 0, Output: "hello world"}, nil
+			}
+			// Second call: write back.
+			return app.CommandResult{ExitCode: 0, Output: ""}, nil
+		},
+	}
+	handler := NewFSEditHandler(runner)
+
+	result, err := handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyPath: "app.go",
+		"old_string":  "hello",
+		"new_string":  "goodbye",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected fs.edit error: %#v", err)
+	}
+	if callCount != 2 {
+		t.Fatalf("expected 2 runner calls (read + write), got %d", callCount)
+	}
+	output := result.Output.(map[string]any)
+	if output["replacements"] != 1 {
+		t.Fatalf("expected 1 replacement, got %v", output["replacements"])
+	}
+}
+
 func TestFSPatchHandler_ValidationAndExecution(t *testing.T) {
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"src"}}
 	handler := NewFSPatchHandler(nil)
