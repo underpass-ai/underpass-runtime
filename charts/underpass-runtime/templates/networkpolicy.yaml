@@ -40,8 +40,10 @@ spec:
           protocol: TCP
     {{- end }}
     {{- if .Values.telemetry.otel.enabled }}
-    # OTLP collector
+    # OTLP collector (gRPC + HTTP)
     - ports:
+        - port: 4317
+          protocol: TCP
         - port: 4318
           protocol: TCP
     {{- end }}

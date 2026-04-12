@@ -127,7 +127,22 @@ spec:
                 {{- /* NATS */}}
                 - name: NATS_URL
                   value: {{ $.Values.toolLearning.nats.url | quote }}
-                {{- /* Valkey TLS — env vars for future Go-level support */}}
+                {{- /* NATS TLS */}}
+                {{- if ne (default "disabled" $.Values.natsTls.mode) "disabled" }}
+                - name: NATS_TLS_MODE
+                  value: {{ $.Values.natsTls.mode | quote }}
+                {{- if and $.Values.natsTls.existingSecret $.Values.natsTls.keys.ca }}
+                - name: NATS_TLS_CA_PATH
+                  value: {{ printf "%s/%s" $.Values.natsTls.mountPath $.Values.natsTls.keys.ca | quote }}
+                {{- end }}
+                {{- if and $.Values.natsTls.keys.cert $.Values.natsTls.keys.key }}
+                - name: NATS_TLS_CERT_PATH
+                  value: {{ printf "%s/%s" $.Values.natsTls.mountPath $.Values.natsTls.keys.cert | quote }}
+                - name: NATS_TLS_KEY_PATH
+                  value: {{ printf "%s/%s" $.Values.natsTls.mountPath $.Values.natsTls.keys.key | quote }}
+                {{- end }}
+                {{- end }}
+                {{- /* Valkey TLS */}}
                 {{- if $.Values.valkeyTls.enabled }}
                 - name: VALKEY_TLS_ENABLED
                   value: "true"

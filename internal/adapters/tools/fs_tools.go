@@ -75,6 +75,10 @@ type FSStatHandler struct {
 	runner app.CommandRunner
 }
 
+type FSEditHandler struct {
+	runner app.CommandRunner
+}
+
 type FSPatchHandler struct {
 	runner app.CommandRunner
 }
@@ -121,6 +125,10 @@ func NewFSDeleteHandler(runner app.CommandRunner) *FSDeleteHandler {
 
 func NewFSStatHandler(runner app.CommandRunner) *FSStatHandler {
 	return &FSStatHandler{runner: runner}
+}
+
+func NewFSEditHandler(runner app.CommandRunner) *FSEditHandler {
+	return &FSEditHandler{runner: runner}
 }
 
 func NewFSPatchHandler(runner app.CommandRunner) *FSPatchHandler {
@@ -1151,6 +1159,127 @@ func (h *FSStatHandler) invokeRemote(
 		Output: output,
 		Logs:   []domain.LogLine{{At: time.Now().UTC(), Channel: fsKeyStdout, Message: "stat collected"}},
 	}, nil
+}
+
+// ---------------------------------------------------------------------------
+// fs.edit — surgical search-and-replace on a single file
+// ---------------------------------------------------------------------------
+
+func (h *FSEditHandler) Name() string {
+	return "fs.edit"
+}
+
+func (h *FSEditHandler) Invoke(ctx context.Context, session domain.Session, args json.RawMessage) (app.ToolRunResult, *domain.Error) {
+	request := struct {
+		Path       string `json:"path"`
+		OldString  string `json:"old_string"`
+		NewString  string `json:"new_string"`
+		ReplaceAll bool   `json:"replace_all"`
+	}{}
+
+	if json.Unmarshal(args, &request) != nil {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid fs.edit args", Retryable: false}
+	}
+	if request.Path == "" {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: fsErrPathRequired, Retryable: false}
+	}
+	if request.OldString == "" {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "old_string is required", Retryable: false}
+	}
+	if request.OldString == request.NewString {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "old_string and new_string must differ", Retryable: false}
+	}
+
+	resolved, pathErr := resolvePath(session, request.Path)
+	if pathErr != nil {
+		return app.ToolRunResult{}, pathErr
+	}
+
+	if isKubernetesRuntime(session) {
+		return h.invokeRemote(ctx, session, request.Path, resolved, request.OldString, request.NewString, request.ReplaceAll)
+	}
+	return h.invokeLocal(request.Path, resolved, request.OldString, request.NewString, request.ReplaceAll)
+}
+
+func (h *FSEditHandler) invokeLocal(path, resolved, oldStr, newStr string, replaceAll bool) (app.ToolRunResult, *domain.Error) {
+	content, err := os.ReadFile(resolved)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: fsErrPathNotExist, Retryable: false}
+		}
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: err.Error(), Retryable: false}
+	}
+
+	replaced, replacements, applyErr := fsEditApply(string(content), oldStr, newStr, replaceAll)
+	if applyErr != nil {
+		return app.ToolRunResult{}, applyErr
+	}
+
+	if err := os.WriteFile(resolved, []byte(replaced), 0o644); err != nil {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: err.Error(), Retryable: false}
+	}
+	return fsEditResult(path, replaced, replacements), nil
+}
+
+func (h *FSEditHandler) invokeRemote(
+	ctx context.Context,
+	session domain.Session,
+	path, resolved, oldStr, newStr string,
+	replaceAll bool,
+) (app.ToolRunResult, *domain.Error) {
+	runner, runErr := resolveKubernetesRunner(h.runner)
+	if runErr != nil {
+		return app.ToolRunResult{}, runErr
+	}
+
+	readResult, readErr := runShellCommand(ctx, runner, session, fmt.Sprintf("cat %s", shellQuote(resolved)), nil, 1024*1024)
+	if readErr != nil {
+		return app.ToolRunResult{}, toFSRunnerError(readErr, readResult.Output)
+	}
+
+	replaced, replacements, applyErr := fsEditApply(readResult.Output, oldStr, newStr, replaceAll)
+	if applyErr != nil {
+		return app.ToolRunResult{}, applyErr
+	}
+
+	writeResult, writeErr := runShellCommand(ctx, runner, session, fmt.Sprintf("cat > %s", shellQuote(resolved)), []byte(replaced), 256*1024)
+	if writeErr != nil {
+		return app.ToolRunResult{}, toFSRunnerError(writeErr, writeResult.Output)
+	}
+	return fsEditResult(path, replaced, replacements), nil
+}
+
+// fsEditApply performs the search-and-replace on original, returning the
+// modified string, replacement count, or an error if old_string is missing
+// or ambiguous.
+func fsEditApply(original, oldStr, newStr string, replaceAll bool) (string, int, *domain.Error) {
+	count := strings.Count(original, oldStr)
+	if count == 0 {
+		return "", 0, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "old_string not found in file", Retryable: false}
+	}
+	if !replaceAll && count > 1 {
+		return "", 0, &domain.Error{
+			Code:      app.ErrorCodeInvalidArgument,
+			Message:   fmt.Sprintf("old_string has %d matches; use replace_all or provide more context to make it unique", count),
+			Retryable: false,
+		}
+	}
+	if replaceAll {
+		return strings.ReplaceAll(original, oldStr, newStr), count, nil
+	}
+	return strings.Replace(original, oldStr, newStr, 1), 1, nil
+}
+
+func fsEditResult(path, replaced string, replacements int) app.ToolRunResult {
+	hash := sha256.Sum256([]byte(replaced))
+	return app.ToolRunResult{
+		Output: map[string]any{
+			"path":         filepath.Clean(path),
+			"replacements": replacements,
+			"sha256":       hex.EncodeToString(hash[:]),
+		},
+		Logs: []domain.LogLine{{At: time.Now().UTC(), Channel: fsKeyStdout, Message: fmt.Sprintf("edited %d occurrence(s)", replacements)}},
+	}
 }
 
 func (h *FSPatchHandler) Name() string {

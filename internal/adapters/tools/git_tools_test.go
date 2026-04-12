@@ -161,6 +161,135 @@ func coerceToMapSlice(t *testing.T, raw any, label string) []map[string]any {
 	return result
 }
 
+func TestGitDiffFileHandler_SingleFile(t *testing.T) {
+	root := initGitRepo(t)
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	ctx := context.Background()
+
+	// Modify the file so there's something to diff.
+	filePath := filepath.Join(root, testGitMainTxt)
+	os.WriteFile(filePath, []byte("line1\nline2-changed\n"), 0o644)
+
+	handler := NewGitDiffFileHandler(nil)
+
+	// Basic diff against HEAD.
+	result, err := handler.Invoke(ctx, session, mustJSONGit(t, map[string]any{
+		"path": testGitMainTxt,
+	}))
+	if err != nil {
+		t.Fatalf("unexpected git.diff_file error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	diffText := output["diff"].(string)
+	if !strings.Contains(diffText, "-line2") {
+		t.Fatalf("expected diff to show removed line2, got: %s", diffText)
+	}
+	if !strings.Contains(diffText, "+line2-changed") {
+		t.Fatalf("expected diff to show added line2-changed, got: %s", diffText)
+	}
+	if output["ref"] != "HEAD" {
+		t.Fatalf("expected ref=HEAD, got %v", output["ref"])
+	}
+
+	// With stat.
+	result, err = handler.Invoke(ctx, session, mustJSONGit(t, map[string]any{
+		"path": testGitMainTxt,
+		"stat": true,
+	}))
+	if err != nil {
+		t.Fatalf("unexpected git.diff_file stat error: %#v", err)
+	}
+	output = result.Output.(map[string]any)
+	statText, ok := output["stat"].(string)
+	if !ok || !strings.Contains(statText, testGitMainTxt) {
+		t.Fatalf("expected stat to mention file, got: %v", output["stat"])
+	}
+
+	// With custom context lines.
+	result, err = handler.Invoke(ctx, session, mustJSONGit(t, map[string]any{
+		"path":    testGitMainTxt,
+		"context": 0,
+	}))
+	if err != nil {
+		t.Fatalf("unexpected git.diff_file context error: %#v", err)
+	}
+	output = result.Output.(map[string]any)
+	diffText = output["diff"].(string)
+	// With 0 context, line1 (unchanged) should not appear in the diff body.
+	lines := strings.Split(diffText, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, " line1") {
+			t.Fatalf("expected no context lines with context=0, but found: %s", line)
+		}
+	}
+}
+
+func TestGitDiffFileHandler_Validation(t *testing.T) {
+	root := initGitRepo(t)
+	ctx := context.Background()
+	handler := NewGitDiffFileHandler(nil)
+
+	// Missing path.
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	_, err := handler.Invoke(ctx, session, mustJSONGit(t, map[string]any{}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected path required error, got %#v", err)
+	}
+
+	// Path outside allowed_paths.
+	restricted := domain.Session{WorkspacePath: root, AllowedPaths: []string{"src"}}
+	_, err = handler.Invoke(ctx, restricted, mustJSONGit(t, map[string]any{
+		"path": "../etc/passwd",
+	}))
+	if err == nil {
+		t.Fatalf("expected path escape error")
+	}
+
+	// Ref outside allowlist.
+	refSession := domain.Session{
+		WorkspacePath: root,
+		AllowedPaths:  []string{"."},
+		Metadata:      map[string]string{"allowed_git_ref_prefixes": "main,release/"},
+	}
+	_, err = handler.Invoke(ctx, refSession, mustJSONGit(t, map[string]any{
+		"path": testGitMainTxt,
+		"ref":  "evil-branch",
+	}))
+	if err == nil || err.Code != app.ErrorCodePolicyDenied {
+		t.Fatalf("expected ref policy error, got %#v", err)
+	}
+}
+
+func TestGitDiffFileHandler_InvalidJSON(t *testing.T) {
+	root := initGitRepo(t)
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	handler := NewGitDiffFileHandler(nil)
+	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{bad`))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected invalid JSON error, got %#v", err)
+	}
+}
+
+func TestGitDiffFileHandler_NoChanges(t *testing.T) {
+	root := initGitRepo(t)
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	handler := NewGitDiffFileHandler(nil)
+
+	// File exists but has no changes → empty diff, no error.
+	result, err := handler.Invoke(context.Background(), session, mustJSONGit(t, map[string]any{
+		"path": testGitMainTxt,
+		"stat": true,
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error for unchanged file: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	diffText := output["diff"].(string)
+	if strings.TrimSpace(diffText) != "" {
+		t.Fatalf("expected empty diff for unchanged file, got: %q", diffText)
+	}
+}
+
 func TestGitHandlers_LifecycleOperations(t *testing.T) {
 	root := initGitRepo(t)
 	remotePath := initBareGitRepo(t)
