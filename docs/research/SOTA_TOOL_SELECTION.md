@@ -7,7 +7,7 @@ Last updated: 2026-03-31.
 
 ## Problem Statement
 
-An AI agent runtime with 99 tools across 23 families must recommend the best
+An AI agent runtime with 123 tools across 23 families must recommend the best
 tools for a given task. The current system (v1) uses Thompson Sampling with
 Beta-Binomial posteriors tracking simple success/failure per tool. This survey
 covers approaches for a more robust v2 that considers context, tool metadata,
@@ -36,7 +36,7 @@ only in the final linear layer. Decouples representation learning from
 exploration.
 
 **Applicability**: Encode task context (language, framework, project type) through
-deep layers. UCB exploration over 99 tools in learned feature space. Immediately
+deep layers. UCB exploration over 123 tools in learned feature space. Immediately
 recommends tools for task types seen before, even for new tool-task pairs.
 
 **vs. v1**: Context-conditional. Regret O(sqrt(T)) vs linear for context-free TS

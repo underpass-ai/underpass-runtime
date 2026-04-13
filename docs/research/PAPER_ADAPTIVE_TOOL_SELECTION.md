@@ -20,7 +20,7 @@ into tool selection improve recommendation quality compared to context-free
 Thompson Sampling?
 
 **RQ2**: Does exploiting the hierarchical structure of tool families (23 families,
-99 tools) accelerate convergence compared to flat arm selection?
+123 tools) accelerate convergence compared to flat arm selection?
 
 **RQ3**: How does non-stationary adaptation (sliding window / discounting)
 affect recommendation quality when tool effectiveness changes (new versions,
@@ -63,7 +63,7 @@ speed compared to binary task-level reward?
 ### Environment
 
 All experiments run on Underpass Runtime — a governed execution plane with:
-- 99 tools across 23 families
+- 123 tools across 23 families
 - Policy engine (RBAC, risk gating, approval workflows)
 - Thompson Sampling pipeline (DuckDB over Parquet, Valkey policies)
 - Full telemetry (invocation status, duration, output size, artifacts)

@@ -134,7 +134,7 @@ The original design has been fully implemented and extended:
 - CronJob-based offline computation is unchanged.
 - Cold start behavior is unchanged (heuristic scorer covers it).
 
-See [Algorithm Architecture](ARCHITECTURE_ALGORITHMS.md) for the full
+See [Algorithm Architecture](../ARCHITECTURE_ALGORITHMS.md) for the full
 current implementation.
 
 ## Alternatives Considered
