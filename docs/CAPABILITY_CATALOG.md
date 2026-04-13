@@ -3,8 +3,8 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `115`
-- Families: `29`
+- Total capabilities: `119`
+- Families: `30`
 
 ## api.*
 
@@ -91,6 +91,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | --- | --- | --- | --- | --- | --- |
 | `github.check_pr_status` | `external` | `low` | `no` | `none` | `` |
 | `github.create_pr` | `external` | `medium` | `yes` | `irreversible` | `` |
+| `github.get_issue` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `github.merge_pr` | `external` | `high` | `yes` | `irreversible` | `` |
 | `github.watch_run` | `external` | `low` | `no` | `none` | `` |
 
@@ -219,6 +220,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `repo.stacktrace_summary` | `repo` | `low` | `no` | `reversible` | `best-effort` |
 | `repo.static_analysis` | `repo` | `low` | `no` | `none` | `best-effort` |
 | `repo.symbol_search` | `repo` | `low` | `no` | `none` | `best-effort` |
+| `repo.symbols` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `repo.test` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `repo.test_failures_summary` | `repo` | `low` | `no` | `reversible` | `best-effort` |
 | `repo.tree` | `workspace` | `low` | `no` | `none` | `guaranteed` |
@@ -259,6 +261,13 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | Tool | Scope | Risk | Approval | Side Effects | Idempotency |
 | --- | --- | --- | --- | --- | --- |
 | `tool.suggest` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+
+## web.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `web.fetch` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+| `web.search` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 
 ## workspace.*
 

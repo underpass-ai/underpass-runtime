@@ -564,6 +564,86 @@ capabilities:
       - '{"tool_name":"shell.exec","args":{"command":"make test"}}'
       - '{"tool_name":"fs.edit","args":{"path":"../../../etc/passwd","old_string":"root","new_string":"hacked"}}'
 
+  - name: web.fetch
+    description: Fetch content from a URL and return it as text. Enables agents to read API documentation, library changelogs, error messages on Stack Overflow, and package registry pages. Auto-upgrades HTTP to HTTPS.
+    input_schema: '{"type":"object","properties":{"url":{"type":"string","description":"URL to fetch (auto-prepends https:// if missing)"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":120,"description":"Request timeout (default 30s)"}},"required":["url"]}'
+    output_schema: '{"type":"object","properties":{"url":{"type":"string"},"status_code":{"type":"integer"},"content":{"type":"string"},"content_type":{"type":"string"},"truncated":{"type":"boolean"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 120
+      output_limit_kb: 512
+    preconditions: []
+    postconditions:
+      - read-only HTTP GET
+    cost_hint: medium
+    examples:
+      - '{"url":"https://docs.python.org/3/library/json.html"}'
+
+  - name: web.search
+    description: Search the web using DuckDuckGo and return result URLs. Enables agents to find documentation, Stack Overflow answers, and library references when they encounter unknown errors or APIs.
+    input_schema: '{"type":"object","properties":{"query":{"type":"string","description":"Search query"},"max_results":{"type":"integer","minimum":1,"maximum":10,"description":"Maximum results (default 5)"}},"required":["query"]}'
+    output_schema: '{"type":"object","properties":{"query":{"type":"string"},"results":{"type":"array"},"count":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 64
+    preconditions: []
+    postconditions:
+      - read-only search
+    cost_hint: low
+    examples:
+      - '{"query":"golang context timeout best practices"}'
+
+  - name: github.get_issue
+    description: Read a GitHub issue by number including title, body, labels, assignees, and comments. Completes the issue-to-PR loop — agents can read the issue that triggered their work.
+    input_schema: '{"type":"object","properties":{"number":{"type":"integer","minimum":1,"description":"Issue number"},"repo":{"type":"string","description":"Optional owner/repo (defaults to current repo)"}},"required":["number"]}'
+    output_schema: '{"type":"object","properties":{"number":{"type":"integer"},"title":{"type":"string"},"body":{"type":"string"},"state":{"type":"string"},"labels":{"type":"array"},"assignees":{"type":"array"},"comments":{"type":"array"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 256
+    preconditions:
+      - gh CLI must be available and authenticated
+    postconditions:
+      - read-only
+    cost_hint: low
+    examples:
+      - '{"number":42}'
+      - '{"number":1,"repo":"org/repo"}'
+
+  - name: repo.symbols
+    description: Extract function, type, class, and import declarations from a source file WITHOUT reading the entire content. Returns a structured outline with kind, name, line number, and signature. Critical for small models that need to understand a file structure without consuming their full context window. Supports Go, Python, JavaScript, TypeScript, Rust, Java, C/C++, Ruby.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the source file"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"language":{"type":"string"},"symbols":{"type":"array","items":{"type":"object","properties":{"kind":{"type":"string"},"name":{"type":"string"},"line":{"type":"integer"},"signature":{"type":"string"}}}},"count":{"type":"integer"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 128
+    preconditions:
+      - path must exist and be inside allowed_paths
+    postconditions:
+      - no file system mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go"}'
+      - '{"path":"internal/app/service.py"}'
+
   - name: conn.list_profiles
     description: List governable external connection profiles visible to the session principal.
     input_schema: '{"type":"object","properties":{},"required":[]}'
