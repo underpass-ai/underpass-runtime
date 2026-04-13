@@ -3,7 +3,7 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `119`
+- Total capabilities: `123`
 - Families: `30`
 
 ## api.*
@@ -73,6 +73,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | Tool | Scope | Risk | Approval | Side Effects | Idempotency |
 | --- | --- | --- | --- | --- | --- |
 | `git.apply_patch` | `repo` | `medium` | `yes` | `reversible` | `best-effort` |
+| `git.blame` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.branch_list` | `repo` | `low` | `no` | `none` | `guaranteed` |
 | `git.checkout` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `git.commit` | `repo` | `medium` | `yes` | `irreversible` | `none` |
@@ -92,7 +93,9 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `github.check_pr_status` | `external` | `low` | `no` | `none` | `` |
 | `github.create_pr` | `external` | `medium` | `yes` | `irreversible` | `` |
 | `github.get_issue` | `workspace` | `low` | `no` | `none` | `guaranteed` |
+| `github.list_issues` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `github.merge_pr` | `external` | `high` | `yes` | `irreversible` | `` |
+| `github.review_comments` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `github.watch_run` | `external` | `low` | `no` | `none` | `` |
 
 ## go.*
@@ -223,6 +226,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `repo.symbols` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `repo.test` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `repo.test_failures_summary` | `repo` | `low` | `no` | `reversible` | `best-effort` |
+| `repo.test_file` | `workspace` | `medium` | `yes` | `reversible` | `best-effort` |
 | `repo.tree` | `workspace` | `low` | `no` | `none` | `guaranteed` |
 | `repo.validate` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 

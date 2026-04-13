@@ -644,6 +644,89 @@ capabilities:
       - '{"path":"src/main.go"}'
       - '{"path":"internal/app/service.py"}'
 
+  - name: git.blame
+    description: Line-by-line blame for a file, showing who changed each line and when. Optional line range. Use before editing to understand code history and ownership.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Relative path to the file"},"start_line":{"type":"integer","minimum":1,"description":"First line (optional)"},"end_line":{"type":"integer","minimum":1,"description":"Last line (optional)"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"blame":{"type":"string"}}}'
+    scope: repo
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 512
+    preconditions:
+      - workspace must contain a git repository
+    postconditions:
+      - no repository mutation
+    cost_hint: low
+    policy:
+      path_fields:
+        - field: path
+          workspace_relative: true
+    examples:
+      - '{"path":"src/main.go","start_line":10,"end_line":20}'
+
+  - name: github.list_issues
+    description: List GitHub issues with optional state and label filters. Agents can prioritize work from the issue backlog.
+    input_schema: '{"type":"object","properties":{"state":{"type":"string","enum":["open","closed","all"],"description":"Issue state filter (default open)"},"labels":{"type":"string","description":"Comma-separated label filter"},"limit":{"type":"integer","minimum":1,"maximum":50,"description":"Max issues (default 10)"},"repo":{"type":"string","description":"Optional owner/repo"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"issues":{"type":"array"},"count":{"type":"integer"},"state":{"type":"string"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 256
+    preconditions:
+      - gh CLI must be available and authenticated
+    postconditions:
+      - read-only
+    cost_hint: low
+    examples:
+      - '{"state":"open","limit":5}'
+      - '{"labels":"bug","repo":"org/repo"}'
+
+  - name: github.review_comments
+    description: Read PR review comments and review decision. Enables agents to address review feedback in code review workflows.
+    input_schema: '{"type":"object","properties":{"branch":{"type":"string","description":"Branch name or PR number"},"repo":{"type":"string","description":"Optional owner/repo"}},"required":["branch"]}'
+    output_schema: '{"type":"object","properties":{"reviews":{"type":"array"},"comments":{"type":"array"},"reviewDecision":{"type":"string"}}}'
+    scope: workspace
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 256
+    preconditions:
+      - gh CLI must be available and authenticated
+    postconditions:
+      - read-only
+    cost_hint: low
+    examples:
+      - '{"branch":"feat/my-feature"}'
+
+  - name: repo.test_file
+    description: Run tests for a specific file or package instead of the full suite. Supports Go, Python, JavaScript/TypeScript, and Rust. Returns pass/fail with output. Faster feedback after targeted edits.
+    input_schema: '{"type":"object","properties":{"path":{"type":"string","description":"Path to test file (e.g. internal/app/service_test.go)"},"pattern":{"type":"string","description":"Test name pattern filter (e.g. TestMyFunction)"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":600,"description":"Test timeout (default 120s)"}},"required":["path"]}'
+    output_schema: '{"type":"object","properties":{"path":{"type":"string"},"command":{"type":"string"},"passed":{"type":"boolean"},"exit_code":{"type":"integer"},"output":{"type":"string"}}}'
+    scope: workspace
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 600
+      output_limit_kb: 512
+    preconditions:
+      - language toolchain must be available in the workspace
+    postconditions:
+      - test artifacts may be generated
+    cost_hint: medium
+    examples:
+      - '{"path":"internal/app/service_test.go"}'
+      - '{"path":"tests/test_auth.py","pattern":"test_login"}'
+
   - name: conn.list_profiles
     description: List governable external connection profiles visible to the session principal.
     input_schema: '{"type":"object","properties":{},"required":[]}'
