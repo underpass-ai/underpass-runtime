@@ -307,7 +307,6 @@ Architecture decisions: [docs/adr/](docs/adr/)
 | [underpass-observability](https://github.com/underpass-ai/underpass-observability) | Grafana, Loki, OTEL Collector, Prometheus, alert relay |
 | [rehydration-kernel](https://github.com/underpass-ai/rehydration-kernel) | Surgical context from knowledge graphs |
 | [swe-ai-fleet](https://github.com/underpass-ai/swe-ai-fleet) | Multi-agent SWE platform |
-| [underpass-demo](https://github.com/underpass-ai/underpass-demo) | See it working together |
 
 ## Legal
 
