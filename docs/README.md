@@ -57,7 +57,7 @@
 
 | Document | Description |
 |---|---|
-| [Capability Catalog](CAPABILITY_CATALOG.md) | Auto-generated catalog of 99 tools |
+| [Capability Catalog](CAPABILITY_CATALOG.md) | Auto-generated catalog of 123 tools |
 | [Tool Catalog Guide](TOOL_CATALOG_GUIDE.md) | How to add new tools |
 | [Runner Images](RUNNER_IMAGES.md) | 6 runner profiles (base, toolchains, secops, container, k6, fat) |
 | [vLLM Setup](VLLM_SETUP.md) | vLLM integration for LLM-driven agents |

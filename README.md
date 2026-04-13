@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
 
-A governed execution plane for AI agents that code. **114 real-world tools**
+A governed execution plane for AI agents that code. \*\*123 real-world tools\*\*
 (filesystem, git, shell, build, test, deploy, security scan, web access)
 inside isolated workspaces — every invocation policy-checked, telemetry-recorded,
 and artifact-preserved.

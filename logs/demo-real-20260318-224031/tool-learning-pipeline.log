@@ -1,0 +1,8 @@
+{"time":"2026-03-18T21:40:13.519683645Z","level":"INFO","msg":"adapter ready","adapter":"duckdb-lake-reader","bucket":"telemetry-lake"}
+{"time":"2026-03-18T21:40:13.520733507Z","level":"INFO","msg":"adapter ready","adapter":"valkey-policy-store","addr":"valkey:6379"}
+{"time":"2026-03-18T21:40:13.521414182Z","level":"INFO","msg":"adapter ready","adapter":"nats-publisher","url":"nats://nats:4222"}
+{"time":"2026-03-18T21:40:13.521452192Z","level":"INFO","msg":"adapter ready","adapter":"s3-audit-store","bucket":"policy-audit"}
+{"time":"2026-03-18T21:40:13.521458592Z","level":"INFO","msg":"tool-learning service starting","schedule":"hourly","version":"0.1.0"}
+{"time":"2026-03-18T21:40:13.521472793Z","level":"INFO","msg":"policy computation started","schedule":"hourly","from":"2026-03-18T20:40:13Z","to":"2026-03-18T21:40:13Z"}
+{"time":"2026-03-18T21:40:13.54631485Z","level":"INFO","msg":"policy computation completed","schedule":"hourly","aggregates_read":16,"policies_written":16,"policies_filtered":0,"duration_ms":24}
+{"time":"2026-03-18T21:40:13.546326991Z","level":"INFO","msg":"policy computation succeeded","aggregates_read":16,"policies_written":16,"policies_filtered":0,"duration_ms":24}

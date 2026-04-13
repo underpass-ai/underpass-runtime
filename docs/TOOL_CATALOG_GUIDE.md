@@ -8,7 +8,7 @@ modify capabilities.
 
 ```
 internal/adapters/tools/
-  catalog_defaults.yaml   # Source of truth — all 99 capabilities
+  catalog_defaults.yaml   # Source of truth — all 123 capabilities
   catalog_defaults.go     # go:embed loader → []domain.Capability
 ```
 
