@@ -48,6 +48,7 @@ type Service struct {
 	neuralModel     NeuralModelReader
 	decisionStore   RecommendationDecisionStore
 	warmCaches      *sessionWarmCaches
+	hylinucb        *HyLinUCBManager
 	tracer          trace.Tracer
 
 	// sessionInvCount tracks invocation count per session for first-tool metric.
@@ -89,6 +90,7 @@ func NewService(
 		qualityObserver: noopQualityObserver{},
 		decisionStore:   NewInMemoryRecommendationDecisionStore(),
 		warmCaches:      newSessionWarmCaches(),
+		hylinucb:        NewHyLinUCBManager(),
 		tracer:          otel.Tracer("workspace.service"),
 	}
 }
