@@ -51,7 +51,15 @@ const (
 	workspaceBackendLocal  = "local"
 	workspaceBackendDocker = "docker"
 	defaultNamespace       = "underpass-runtime"
+
+	hintConfig = "See docs/CONFIGURATION.md"
+	hintTLS    = "See docs/DEPLOYMENT-TLS.md"
 )
+
+func fatal(logger *slog.Logger, msg string, hint string, err error) {
+	logger.Error(msg, "error", err, "hint", hint)
+	os.Exit(1)
+}
 
 func main() {
 	logger := slog.New(tlsutil.NewTraceLogHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLogLevel(os.Getenv("LOG_LEVEL"))})))
@@ -89,24 +97,20 @@ func main() {
 	// --- TLS setup ---
 	valkeyTLS, err := buildValkeyTLS(logger)
 	if err != nil {
-		logger.Error("failed to build Valkey TLS config", "error", err)
-		os.Exit(1)
+		fatal(logger, "failed to build Valkey TLS config — check VALKEY_TLS_* env vars", hintTLS, err)
 	}
 	natsTLS, err := buildNATSTLS(logger)
 	if err != nil {
-		logger.Error("failed to build NATS TLS config", "error", err)
-		os.Exit(1)
+		fatal(logger, "failed to build NATS TLS config — check NATS_TLS_* env vars", hintTLS, err)
 	}
 	serverTLS, err := buildServerTLS(logger)
 	if err != nil {
-		logger.Error("failed to build server TLS config", "error", err)
-		os.Exit(1)
+		fatal(logger, "failed to build server TLS config — check WORKSPACE_TLS_* env vars", hintTLS, err)
 	}
 
 	sessionStore, err := buildSessionStore(logger, valkeyTLS)
 	if err != nil {
-		logger.Error("failed to initialize session store", "error", err)
-		os.Exit(1)
+		fatal(logger, "failed to initialize session store — check SESSION_STORE_BACKEND and VALKEY_* config", hintConfig, err)
 	}
 
 	workspaceManager, err := buildWorkspaceManager(workspaceBackend, workspaceRoot, k8s, sessionStore)
@@ -162,8 +166,7 @@ func main() {
 	subscribePolicyUpdated(natsConn, logger)
 	authConfig, err := grpcapi.AuthConfigFromEnv()
 	if err != nil {
-		logger.Error("failed to initialize auth configuration", "error", err)
-		os.Exit(1)
+		fatal(logger, "failed to initialize auth configuration — check AUTH_MODE env var", hintConfig, err)
 	}
 	grpcServer := grpcapi.NewServer(service, authConfig, logger)
 
@@ -196,10 +199,17 @@ func main() {
 		logger.Info("metrics server listening", "port", metricsPort)
 		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("metrics server failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	startGRPCServer(srv, port, workspaceRoot, serverTLS, logger)
+
+	logger.Info("service ready",
+		"port", port,
+		"metrics_port", metricsPort,
+		"workspace_backend", workspaceBackend,
+	)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -638,8 +648,7 @@ func buildEventBus(ctx context.Context, logger *slog.Logger, natsTLS *tls.Config
 			natsTLS,
 		)
 		if err != nil {
-			logger.Error("failed to connect to NATS event bus, falling back to noop", "error", err)
-			return eventbus.NewNoopPublisher(logger), nil, nil
+			fatal(logger, "NATS event bus connection failed — check EVENT_BUS_NATS_URL and NATS TLS config", hintConfig, err)
 		}
 
 		// Outbox backed by Valkey if available, otherwise use NATS directly.
@@ -678,8 +687,7 @@ func buildOutboxRelay(ctx context.Context, logger *slog.Logger, downstream app.E
 
 	outbox, err := eventbus.NewOutboxPublisherFromAddress(ctx, address, password, db, keyPrefix, valkeyTLS)
 	if err != nil {
-		logger.Warn("outbox valkey connection failed, skipping outbox relay", "error", err)
-		return nil, nil
+		fatal(logger, "outbox valkey connection failed — check VALKEY_HOST/VALKEY_PORT or set EVENT_BUS_OUTBOX=false", hintConfig, err)
 	}
 
 	relay := eventbus.NewOutboxRelay(outbox, downstream, logger)
@@ -717,9 +725,7 @@ func buildTelemetry(ctx context.Context, logger *slog.Logger, valkeyTLS *tls.Con
 			ctx, address, password, db, keyPrefix, time.Duration(ttlSeconds)*time.Second, valkeyTLS,
 		)
 		if err != nil {
-			logger.Warn("telemetry valkey connection failed, falling back to memory", "error", err)
-			agg := telemetryadapter.NewInMemoryAggregator()
-			return agg, agg, nil
+			fatal(logger, "telemetry valkey connection failed — check VALKEY_HOST/VALKEY_PORT and TLS config", hintConfig, err)
 		}
 
 		intervalSec := parseIntOrDefault(os.Getenv("TELEMETRY_AGGREGATION_INTERVAL_SECONDS"), 300)

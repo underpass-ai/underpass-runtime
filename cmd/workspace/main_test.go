@@ -285,21 +285,22 @@ func TestBuildEventBus_Default(t *testing.T) {
 	}
 }
 
-func TestBuildEventBus_NATSFallbackToNoop(t *testing.T) {
-	// No NATS server running — should fall back to noop
-	t.Setenv("EVENT_BUS", "nats")
-	t.Setenv("EVENT_BUS_NATS_URL", "nats://127.0.0.1:14222") // unreachable port
+func TestBuildEventBus_NATSFailsFast(t *testing.T) {
+	// With fail-fast, NATS connection failure calls fatal() / os.Exit(1).
+	// We cannot test os.Exit in-process, so we verify that EVENT_BUS=none
+	// still works as expected (the only valid non-NATS path).
+	t.Setenv("EVENT_BUS", "none")
 	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
 
 	pub, nc, stop := buildEventBus(context.Background(), logger, nil, nil)
 	if pub == nil {
-		t.Fatal("expected non-nil publisher (noop fallback)")
+		t.Fatal("expected non-nil publisher for EVENT_BUS=none")
 	}
 	if nc != nil {
-		t.Fatal("expected nil nats connection on fallback")
+		t.Fatal("expected nil nats connection for none bus")
 	}
 	if stop != nil {
-		t.Fatal("expected nil stop func on fallback")
+		t.Fatal("expected nil stop func for none bus")
 	}
 }
 
@@ -329,36 +330,9 @@ func TestBuildOutboxRelay_DefaultDisabled(t *testing.T) {
 	}
 }
 
-func TestBuildOutboxRelay_EnabledNoValkey(t *testing.T) {
-	t.Setenv("EVENT_BUS_OUTBOX", "true")
-	t.Setenv("VALKEY_ADDR", "127.0.0.1:16379") // unreachable
-	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-
-	pub, stop := buildOutboxRelay(context.Background(), logger, nil, nil)
-	if pub != nil {
-		t.Fatal("expected nil publisher when valkey unreachable")
-	}
-	if stop != nil {
-		t.Fatal("expected nil stop func when valkey unreachable")
-	}
-}
-
-func TestBuildOutboxRelay_EnabledHostPort(t *testing.T) {
-	t.Setenv("EVENT_BUS_OUTBOX", "true")
-	_ = os.Unsetenv("VALKEY_ADDR")
-	t.Setenv("VALKEY_HOST", "127.0.0.1")
-	t.Setenv("VALKEY_PORT", "16379") // unreachable
-	t.Setenv("EVENT_BUS_OUTBOX_KEY_PREFIX", "test:outbox")
-	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-
-	pub, stop := buildOutboxRelay(context.Background(), logger, nil, nil)
-	if pub != nil {
-		t.Fatal("expected nil publisher when valkey unreachable via host:port")
-	}
-	if stop != nil {
-		t.Fatal("expected nil stop func when valkey unreachable via host:port")
-	}
-}
+// TestBuildOutboxRelay_EnabledNoValkey and _EnabledHostPort removed:
+// With fail-fast, unreachable Valkey calls fatal() / os.Exit(1).
+// Cannot test os.Exit in-process. The disabled path is tested below.
 
 func TestBuildEventBus_UnknownValue(t *testing.T) {
 	t.Setenv("EVENT_BUS", "kafka") // unsupported, falls to default
@@ -458,22 +432,9 @@ func TestBuildTelemetry_Memory(t *testing.T) {
 	}
 }
 
-func TestBuildTelemetry_ValkeyFallback(t *testing.T) {
-	t.Setenv("TELEMETRY_BACKEND", "valkey")
-	t.Setenv("VALKEY_ADDR", "127.0.0.1:16379") // unreachable
-	logger := slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil))
-
-	rec, q, stop := buildTelemetry(context.Background(), logger, nil)
-	if rec == nil {
-		t.Fatal("expected non-nil recorder (fallback)")
-	}
-	if q == nil {
-		t.Fatal("expected non-nil querier (fallback)")
-	}
-	if stop != nil {
-		t.Fatal("expected nil stop func on valkey fallback")
-	}
-}
+// TestBuildTelemetry_ValkeyFallback removed:
+// With fail-fast, unreachable Valkey calls fatal() / os.Exit(1).
+// The memory backend path is tested via TestBuildTelemetry_Memory.
 
 func TestBuildServerTLS_Disabled(t *testing.T) {
 	_ = os.Unsetenv("WORKSPACE_TLS_MODE")
