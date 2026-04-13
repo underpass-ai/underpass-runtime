@@ -145,4 +145,4 @@ All transports enforce **TLS 1.3 minimum** (hard-coded in `internal/tlsutil/tls.
 | S3/MinIO | `ARTIFACT_S3_USE_SSL` | `true`/`false` + optional CA | K8s Secret → volume mount or system CA |
 | OTLP | `WORKSPACE_OTEL_TLS_CA_PATH` | CA path or insecure | K8s Secret → volume mount or system CA |
 
-See [DEPLOYMENT-TLS.md](DEPLOYMENT-TLS.md) for step-by-step deployment instructions.
+See [DEPLOYMENT-TLS.md](../operations/DEPLOYMENT-TLS.md) for step-by-step deployment instructions.

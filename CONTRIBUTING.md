@@ -57,8 +57,8 @@ rationale.
 ## Documentation
 
 - **[docs/README.md](docs/README.md)** — Documentation index
-- **[docs/security-model.md](docs/security-model.md)** — Trust boundaries and threat model
-- **[docs/testing.md](docs/testing.md)** — Test matrix, coverage gates, E2E tiers
+- **[docs/architecture/security-model.md](docs/architecture/security-model.md)** — Trust boundaries and threat model
+- **[docs/development/testing.md](docs/development/testing.md)** — Test matrix, coverage gates, E2E tiers
 - **[docs/adr/](docs/adr/)** — Architecture Decision Records
 - **[docs/operations/](docs/operations/)** — Deployment and cluster prerequisites
 - **[docs/runbooks/](docs/runbooks/)** — Incident response, scaling, TLS rotation
@@ -70,9 +70,9 @@ existing format (Context, Decision, Consequences, Alternatives Considered).
 
 - **Unit tests**: Hand-written fakes (no gomock/testify/mock). All tests run without real infrastructure.
 - **Core coverage gate**: 80% minimum on `internal/app`, `internal/adapters/audit`, `internal/adapters/policy`, `internal/adapters/sessionstore`, `internal/adapters/invocationstore`.
-- **E2E tests**: Python tests in `e2e/tests/`, deployed as K8s Jobs. See [docs/testing.md](docs/testing.md).
+- **E2E tests**: Python tests in `e2e/tests/`, deployed as K8s Jobs. See [docs/development/testing.md](docs/development/testing.md).
 
-See [docs/testing.md](docs/testing.md) for the full test matrix and how to
+See [docs/development/testing.md](docs/development/testing.md) for the full test matrix and how to
 run tests at each level.
 
 ## Code Style
@@ -93,7 +93,7 @@ run tests at each level.
 ## Security
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and
-[docs/security-model.md](docs/security-model.md) for the threat model.
+[docs/architecture/security-model.md](docs/architecture/security-model.md) for the threat model.
 
 ## Reporting Issues
 

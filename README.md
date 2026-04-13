@@ -179,7 +179,7 @@ Selection is automatic. The active algorithm is visible in every response:
 }
 ```
 
-See [Algorithm Architecture](docs/ARCHITECTURE_ALGORITHMS.md) for the
+See [Algorithm Architecture](docs/architecture/ARCHITECTURE_ALGORITHMS.md) for the
 full technical design.
 
 ## E2E tested on live mTLS cluster
@@ -288,12 +288,12 @@ Start here:
 
 | Doc | What you learn |
 |-----|---------------|
-| [Algorithm Architecture](docs/ARCHITECTURE_ALGORITHMS.md) | How recommendations work — scoring, NeuralTS, selection |
+| [Algorithm Architecture](docs/architecture/ARCHITECTURE_ALGORITHMS.md) | How recommendations work — scoring, NeuralTS, selection |
 | [Configuration Reference](docs/CONFIGURATION.md) | 80+ environment variables |
 | [Helm Install Guide](docs/HELM_INSTALL.md) | Deploy to Kubernetes with mTLS |
-| [TLS Guide](docs/DEPLOYMENT-TLS.md) | mTLS for all 5 transports |
-| [Evidence Plane](docs/EVIDENCE_PLANE.md) | Recommendation traceability |
-| [CI Automation](docs/CI_AUTOMATION.md) | Image builds, registry, versioning |
+| [TLS Guide](docs/operations/DEPLOYMENT-TLS.md) | mTLS for all 5 transports |
+| [Evidence Plane](docs/architecture/EVIDENCE_PLANE.md) | Recommendation traceability |
+| [CI Automation](docs/operations/CI_AUTOMATION.md) | Image builds, registry, versioning |
 | [Tool Catalog Guide](docs/TOOL_CATALOG_GUIDE.md) | How to add new tools |
 | [E2E Evidence](e2e/README.md) | Test results with logs |
 
