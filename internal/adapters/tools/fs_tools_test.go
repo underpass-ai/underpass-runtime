@@ -386,10 +386,14 @@ func TestFSEditHandler_KubernetesRuntimeUsesRunner(t *testing.T) {
 		run: func(_ context.Context, _ domain.Session, spec app.CommandSpec) (app.CommandResult, error) {
 			callCount++
 			if callCount == 1 {
-				// First call: read the file.
+				// First call: undo snapshot (cp).
+				return app.CommandResult{ExitCode: 0, Output: ""}, nil
+			}
+			if callCount == 2 {
+				// Second call: read the file.
 				return app.CommandResult{ExitCode: 0, Output: "hello world"}, nil
 			}
-			// Second call: write back.
+			// Third call: write back.
 			return app.CommandResult{ExitCode: 0, Output: ""}, nil
 		},
 	}
@@ -403,8 +407,8 @@ func TestFSEditHandler_KubernetesRuntimeUsesRunner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected fs.edit error: %#v", err)
 	}
-	if callCount != 2 {
-		t.Fatalf("expected 2 runner calls (read + write), got %d", callCount)
+	if callCount != 3 {
+		t.Fatalf("expected 3 runner calls (snapshot + read + write), got %d", callCount)
 	}
 	output := result.Output.(map[string]any)
 	if output["replacements"] != 1 {
@@ -471,9 +475,12 @@ func TestFSEditHandler_KubernetesRemoteErrors(t *testing.T) {
 		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
 			callCount++
 			if callCount == 1 {
-				return app.CommandResult{ExitCode: 0, Output: "hello foo hello"}, nil
+				return app.CommandResult{ExitCode: 0, Output: ""}, nil // snapshot
 			}
-			return app.CommandResult{ExitCode: 0, Output: ""}, nil
+			if callCount == 2 {
+				return app.CommandResult{ExitCode: 0, Output: "hello foo hello"}, nil // read
+			}
+			return app.CommandResult{ExitCode: 0, Output: ""}, nil // write
 		},
 	}
 	result, err := NewFSEditHandler(replaceAllRunner).Invoke(ctx, session, mustJSON(t, map[string]any{
@@ -495,9 +502,12 @@ func TestFSEditHandler_KubernetesRemoteErrors(t *testing.T) {
 		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
 			writeCallCount++
 			if writeCallCount == 1 {
-				return app.CommandResult{ExitCode: 0, Output: "hello world"}, nil
+				return app.CommandResult{ExitCode: 0, Output: ""}, nil // snapshot
 			}
-			return app.CommandResult{Output: "write failed"}, fmt.Errorf("disk full")
+			if writeCallCount == 2 {
+				return app.CommandResult{ExitCode: 0, Output: "hello world"}, nil // read
+			}
+			return app.CommandResult{Output: "write failed"}, fmt.Errorf("disk full") // write
 		},
 	}
 	_, err = NewFSEditHandler(writeFail).Invoke(ctx, session, args)

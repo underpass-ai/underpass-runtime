@@ -484,7 +484,9 @@ func (h *FSWriteHandler) Invoke(ctx context.Context, session domain.Session, arg
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "content exceeds 1MB limit", Retryable: false}
 	}
 
-	if !isKubernetesRuntime(session) {
+	if isKubernetesRuntime(session) {
+		SaveUndoSnapshotRemote(ctx, h.runner, session, resolved)
+	} else {
 		SaveUndoSnapshot(session.WorkspacePath, resolved)
 	}
 
@@ -1199,7 +1201,9 @@ func (h *FSEditHandler) Invoke(ctx context.Context, session domain.Session, args
 		return app.ToolRunResult{}, pathErr
 	}
 
-	if !isKubernetesRuntime(session) {
+	if isKubernetesRuntime(session) {
+		SaveUndoSnapshotRemote(ctx, h.runner, session, resolved)
+	} else {
 		SaveUndoSnapshot(session.WorkspacePath, resolved)
 	}
 

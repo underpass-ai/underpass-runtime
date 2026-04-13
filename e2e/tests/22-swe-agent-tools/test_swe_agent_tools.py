@@ -178,14 +178,20 @@ class SWEAgentToolsE2E(WorkspaceE2EBase):
 
             # ---------------------------------------------------------------
             # Step 7: workspace.undo_edit — revert the insert
-            # NOTE: undo snapshots are stored locally in the runtime pod,
-            # but in K8s the workspace lives in the runner pod. This tool
-            # works in local/Docker runtime but needs remote snapshot
-            # support for K8s. Skipped in E2E until that's implemented.
             # ---------------------------------------------------------------
-            print_step(7, "workspace.undo_edit — skipped (K8s snapshot pending)")
-            self.record_step("workspace_undo_edit", "skipped", {"reason": "K8s remote snapshot not yet implemented"})
-            print_info("workspace.undo_edit: skipped in K8s E2E (local-only for now)")
+            print_step(7, "workspace.undo_edit — revert the insert")
+            status, body, inv = self.invoke(
+                session_id=sid,
+                tool_name="workspace.undo_edit",
+                args={"path": "src/main.go"},
+                approved=True,
+            )
+            self.assert_invocation_succeeded(invocation=inv, body=body, label="workspace.undo_edit")
+            output = self._inv_output(inv)
+            if output.get("restored") is not True:
+                raise RuntimeError("Expected restored=true")
+            self.record_step("workspace_undo_edit", "passed")
+            print_success("workspace.undo_edit: file restored")
 
             # ---------------------------------------------------------------
             # Step 8: git.diff_file — diff edited file against HEAD

@@ -58,7 +58,9 @@ func (h *FSInsertHandler) Invoke(ctx context.Context, session domain.Session, ar
 		return app.ToolRunResult{}, pathErr
 	}
 
-	if !isKubernetesRuntime(session) {
+	if isKubernetesRuntime(session) {
+		SaveUndoSnapshotRemote(ctx, h.runner, session, resolved)
+	} else {
 		SaveUndoSnapshot(session.WorkspacePath, resolved)
 	}
 

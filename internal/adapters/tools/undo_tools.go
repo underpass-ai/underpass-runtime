@@ -137,6 +137,23 @@ func SaveUndoSnapshot(workspacePath, resolved string) {
 	_ = os.WriteFile(snapshotFile, content, 0o644)
 }
 
+// SaveUndoSnapshotRemote saves undo snapshot via CommandRunner for K8s workspaces.
+func SaveUndoSnapshotRemote(ctx context.Context, runner app.CommandRunner, session domain.Session, resolved string) {
+	if runner == nil {
+		return
+	}
+	rel, err := filepath.Rel(session.WorkspacePath, resolved)
+	if err != nil {
+		return
+	}
+	snapshotFile := undoSnapshotPath(session.WorkspacePath, rel)
+	script := fmt.Sprintf("mkdir -p %s && cp %s %s 2>/dev/null || true",
+		shellQuote(filepath.Dir(snapshotFile)),
+		shellQuote(resolved),
+		shellQuote(snapshotFile))
+	_, _ = runShellCommand(ctx, runner, session, script, nil, 64*1024)
+}
+
 func undoSnapshotPath(workspacePath, relativePath string) string {
 	safe := strings.ReplaceAll(filepath.Clean(relativePath), string(filepath.Separator), "__")
 	return filepath.Join(workspacePath, undoDir, safe)
