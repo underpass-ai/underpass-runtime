@@ -273,7 +273,6 @@ Flow: Grafana alert → alert-relay → NATS → remediation-agent → session +
 - **OTEL Collector** managed by the Helm chart (`otelCollector.enabled`)
 - **Grafana dashboard** auto-provisioned via `charts/observability-stack/` (8 panels)
 - **Loki** for structured log aggregation via Promtail
-- Separate observability stack: [underpass-ai/underpass-observability](https://github.com/underpass-ai/underpass-observability)
 
 ## What we're working on next
 
@@ -304,7 +303,6 @@ Architecture decisions: [docs/adr/](docs/adr/)
 | Repository | Role |
 |-----------|------|
 | **underpass-runtime** (this) | Tool execution + telemetry + adaptive learning |
-| [underpass-observability](https://github.com/underpass-ai/underpass-observability) | Grafana, Loki, OTEL Collector, Prometheus, alert relay |
 | [rehydration-kernel](https://github.com/underpass-ai/rehydration-kernel) | Surgical context from knowledge graphs |
 | [swe-ai-fleet](https://github.com/underpass-ai/swe-ai-fleet) | Multi-agent SWE platform |
 
