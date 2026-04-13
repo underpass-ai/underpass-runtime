@@ -5,32 +5,37 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8.svg)](https://go.dev)
 
-A governed execution plane for AI agents that code. Give your agents
-99 real-world tools (filesystem, git, build, test, deploy, security scan)
-inside isolated workspaces. Every tool invocation is policy-checked,
-telemetry-recorded, and artifact-preserved.
+A governed execution plane for AI agents that code. **114 real-world tools**
+(filesystem, git, shell, build, test, deploy, security scan, web access)
+inside isolated workspaces — every invocation policy-checked, telemetry-recorded,
+and artifact-preserved.
 
 The runtime **learns which tools work best** for each context and adapts
-its recommendations automatically. A background pipeline (CronJob) trains
-policies from telemetry, progressing from heuristics to Neural Thompson
-Sampling as data accumulates. The online path consumes these policies.
+its recommendations automatically, progressing from heuristics to Neural Thompson
+Sampling as data accumulates.
 
-## Why this exists
+## What makes this different
 
-Most agent frameworks give tools to LLMs without governance. The agent
-calls `rm -rf /`, sends secrets to external APIs, or burns tokens
-retrying tools that always fail. Underpass Runtime solves this:
+Other agent frameworks hand tools to LLMs without governance. The agent calls
+`rm -rf /`, sends secrets to external APIs, or burns tokens retrying tools that
+always fail.
 
-- **Isolation**: each agent session gets its own workspace (local, Docker, or K8s pod)
-- **Policy**: every tool call passes through an authorization engine before execution
-- **Telemetry**: every outcome (success, failure, latency, cost) is recorded
-- **Learning**: the system learns from outcomes and recommends better tools over time
-- **Evidence**: every recommendation is auditable — you can trace why a tool was suggested
+Underpass Runtime is the only open-source agent runtime that combines:
+
+| Feature | Underpass Runtime | Claude Code | SWE-agent | Cursor |
+|---------|:-:|:-:|:-:|:-:|
+| Policy-governed tools | **114** | 24 | ~10 | ~15 |
+| `tool.suggest` — agents ask "what tool for this task?" | **yes** | no | no | no |
+| `policy.check` — dry-run "would this be allowed?" | **yes** | no | no | no |
+| Adaptive scoring (Heuristic → Thompson → NeuralTS) | **yes** | no | no | no |
+| Cross-agent learning | **yes** | no | no | no |
+| Isolated K8s workspaces | **yes** | no | no | no |
+| Auditable evidence trail for every recommendation | **yes** | no | no | no |
 
 ## How it works
 
 ```
-Event fires (task assigned, PR opened, build broken)
+Event fires (issue assigned, PR opened, build broken)
     |
     v
 Agent activates, creates a session (workspace prewarmed in background)
@@ -48,9 +53,6 @@ Agent reports feedback: AcceptRecommendation / RejectRecommendation
     |
     v
 Telemetry + feedback recorded -> policies improve -> next event gets better
-    |
-    v
-Alert fires? -> Remediation agent auto-diagnoses and runs playbooks
 ```
 
 Transport: gRPC over mTLS. Five infrastructure backends: Valkey (state + policies),
@@ -73,9 +75,81 @@ helm install underpass-runtime charts/underpass-runtime \
   -f charts/underpass-runtime/values.shared-infra.yaml \
   -f charts/underpass-runtime/values.mtls.example.yaml
 
-# Validate everything works (15 tests against live cluster)
+# Validate everything works (16 tests against live cluster)
 helm test underpass-runtime --timeout 10m
 ```
+
+## Tool catalog — 114 capabilities
+
+Every tool an SWE agent needs, governed by policy:
+
+### Code navigation (the agent orients itself)
+
+| Tool | What it does |
+|------|-------------|
+| `repo.tree` | Directory structure in one call — instant codebase orientation |
+| `repo.symbols` | Extract functions/types/imports WITHOUT reading the full file — saves 90% context |
+| `fs.glob` | Find files by pattern (`**/*.go`, `src/**/test_*.py`) |
+| `fs.read_lines` | Read specific line range with line numbers — no need to load 5000-line files |
+| `fs.search` | Search file contents with regex |
+| `git.blame` | Who changed what line and when |
+| `git.diff_file` | Diff a single file against any ref |
+
+### Code editing (the agent makes changes)
+
+| Tool | What it does |
+|------|-------------|
+| `fs.edit` | Surgical search-and-replace (fails if ambiguous — forces precision) |
+| `fs.insert` | Insert text at a specific line number |
+| `fs.write_file` | Create or overwrite files |
+| `fs.patch` | Apply unified diffs |
+| `workspace.undo_edit` | Revert the last edit — safety net for small models |
+
+### Execution and verification
+
+| Tool | What it does |
+|------|-------------|
+| `shell.exec` | Governed shell execution (`make`, `pip`, `cargo`, `curl`, anything) |
+| `repo.test_file` | Run tests for ONE file — faster than the full suite |
+| `repo.build` / `repo.test` | Build and test with language detection |
+
+### Intelligence (unique to Underpass Runtime)
+
+| Tool | What it does |
+|------|-------------|
+| `tool.suggest` | "I need to edit a Go function" → ranked tool recommendations with scores |
+| `policy.check` | "Would `shell.exec rm -rf /` be allowed?" → denied, without executing |
+
+### Workflow (issue → code → PR)
+
+| Tool | What it does |
+|------|-------------|
+| `github.get_issue` | Read issue details, body, comments |
+| `github.list_issues` | List issues with state/label filters |
+| `github.create_pr` | Create pull request |
+| `github.review_comments` | Read PR review feedback |
+| `github.merge_pr` | Merge with squash/rebase/merge |
+| `web.fetch` | Read documentation, APIs, changelogs from URLs |
+| `web.search` | Search the web for error messages and solutions |
+
+### + 80 more tools
+
+| Family | Count | Examples |
+|--------|------:|---------|
+| `git.*` | 12 | status, diff, diff_file, commit, push, log, branch, blame, checkout |
+| `repo.*` | 16 | detect, build, test, test_file, coverage, symbols, tree, static_analysis |
+| `k8s.*` | 9 | get_pods, apply_manifest, set_image, rollout, restart, logs |
+| `redis.*` | 7 | get, set, del, scan, mget, exists, ttl |
+| `container.*` | 4 | run, exec, logs, ps |
+| `security.*` | 5 | scan_dependencies, scan_secrets, scan_container, license_check, sbom |
+| Language toolchains | 14 | go.build, rust.test, node.lint, python.validate, c.build |
+| Messaging | 9 | nats.publish, kafka.produce, rabbit.consume |
+
+Every tool carries metadata: risk level, side effects, cost hint, approval
+requirements, idempotency. The policy engine uses this to enforce
+governance rules before execution.
+
+Full catalog: [docs/CAPABILITY_CATALOG.md](docs/CAPABILITY_CATALOG.md)
 
 ## Adaptive recommendation engine
 
@@ -104,36 +178,18 @@ Selection is automatic. The active algorithm is visible in every response:
 See [Algorithm Architecture](docs/ARCHITECTURE_ALGORITHMS.md) for the
 full technical design.
 
-## Tool catalog
+## E2E tested on live mTLS cluster
 
-99 capabilities across 23 families:
-
-| Family | Tools | Examples |
-|--------|------:|---------|
-| `fs.*` | 10 | read, write, search, patch, stat, copy, move, delete |
-| `git.*` | 11 | status, diff, commit, push, log, branch, checkout |
-| `repo.*` | 14 | detect, build, test, coverage, symbols, static_analysis |
-| `k8s.*` | 8 | get_pods, apply_manifest, rollout, logs, services |
-| `redis.*` | 7 | get, set, del, scan, mget, exists, ttl |
-| `security.*` | 4 | scan_dependencies, scan_secrets, scan_container, license_check |
-| `container.*` | 4 | run, exec, logs, ps |
-| + 16 more | 41 | node, go, rust, python, c, image, kafka, nats, mongo, ... |
-
-Every tool carries metadata: risk level, side effects, cost hint, approval
-requirements, idempotency. The policy engine uses this to enforce
-governance rules before execution.
-
-Full catalog: [docs/CAPABILITY_CATALOG.md](docs/CAPABILITY_CATALOG.md)
-
-## E2E tested
-
-15 tests run as Kubernetes Jobs via `helm test` against a live mTLS cluster:
+16 tests run as Kubernetes Jobs against a live mTLS cluster:
 
 | Category | Tests | What they prove |
 |----------|-------|----------------|
 | Smoke | 4 | Health, sessions, discovery, basic invocations |
-| Core | 5 | Policy enforcement, recommendations, data flow, evidence, learning |
+| Core | 6 | Policy enforcement, recommendations, data flow, evidence, learning, **SWE agent tools** |
 | Full | 6 | Multi-agent pipelines, event-driven agents, NeuralTS, LLM loops, full infra |
+
+Test 22 validates the full SWE agent workflow:
+`shell.exec` → `repo.tree` → `fs.glob` → `fs.read_lines` → `fs.edit` → `fs.insert` → `git.diff_file` → `tool.suggest` → `policy.check`
 
 Every test validates real gRPC calls over mTLS with JetStream event verification.
 See [e2e/README.md](e2e/README.md) for evidence.
@@ -210,10 +266,17 @@ Flow: Grafana alert → alert-relay → NATS → remediation-agent → session +
 
 - **Prometheus metrics** at `:9090` (configurable via `METRICS_PORT`): invocations, latency histograms, denial rates, 11 KPI metrics
 - **OpenTelemetry traces** with `trace_id` + `span_id` injected into every structured log (TraceLogHandler)
+- **OTEL Collector** managed by the Helm chart (`otelCollector.enabled`)
 - **Grafana dashboard** auto-provisioned via `charts/observability-stack/` (8 panels)
 - **Loki** for structured log aggregation via Promtail
-- **OTEL Collector** for trace ingestion
 - Separate observability stack: [underpass-ai/underpass-observability](https://github.com/underpass-ai/underpass-observability)
+
+## What we're working on next
+
+- [ ] LSP integration — type errors without full builds
+- [ ] Workspace checkpoints — snapshot/rollback for multi-step refactors
+- [ ] Agent spawn — sub-agent delegation as a first-class tool
+- [ ] Semantic code search — find code by meaning, not just regex
 
 ## Documentation
 
