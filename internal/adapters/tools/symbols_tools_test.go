@@ -143,3 +143,31 @@ func mustSymbolsJSON(t *testing.T, v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
 }
+
+func TestDetectLanguage(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"main.go", "go"},
+		{"app.py", "python"},
+		{"index.js", "javascript"},
+		{"index.mjs", "javascript"},
+		{"app.ts", "typescript"},
+		{"comp.tsx", "typescript"},
+		{"lib.rs", "rust"},
+		{"Main.java", "java"},
+		{"util.c", "c"},
+		{"util.h", "c"},
+		{"util.cpp", "cpp"},
+		{"util.cc", "cpp"},
+		{"app.rb", "ruby"},
+		{"data.csv", "unknown"},
+	}
+	for _, tt := range tests {
+		got := detectLanguage(tt.path)
+		if got != tt.want {
+			t.Errorf("detectLanguage(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}

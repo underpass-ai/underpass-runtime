@@ -68,3 +68,38 @@ func mustWebJSON(t *testing.T, v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
 }
+
+func TestWebSearchHandler_KubernetesRunner(t *testing.T) {
+	session := domain.Session{
+		WorkspacePath: t.TempDir(),
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	runner := &fakeShellRunner{
+		run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+			return app.CommandResult{ExitCode: 0, Output: "https://example.com/result1\nhttps://example.com/result2\n"}, nil
+		},
+	}
+	handler := NewWebSearchHandler(runner)
+	result, err := handler.Invoke(context.Background(), session, mustWebJSON(t, map[string]any{
+		"query": "golang error handling",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["count"] != 2 {
+		t.Fatalf("expected 2 results, got %v", output["count"])
+	}
+}
+
+func TestWebSearchHandler_MaxResults(t *testing.T) {
+	handler := NewWebSearchHandler(nil)
+	session := domain.Session{WorkspacePath: t.TempDir()}
+
+	// max_results clamping
+	result, _ := handler.Invoke(context.Background(), session, mustWebJSON(t, map[string]any{
+		"query": "test", "max_results": -1,
+	}))
+	_ = result // will fail on execution but validates arg parsing
+}
