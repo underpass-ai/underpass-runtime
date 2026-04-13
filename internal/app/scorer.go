@@ -138,9 +138,16 @@ func SelectScorer(policies map[string]ToolPolicy) RecommendationScorer {
 	return SelectScorerWithModel(policies, nil)
 }
 
-// SelectScorerWithModel picks the best scorer considering a trained neural model.
-// Priority: NeuralTS > Thompson > Heuristic.
+// SelectScorerWithModel picks the best scorer considering a trained neural model
+// and an optional HyLinUCB manager for online contextual exploration.
+// Priority: NeuralTS (n≥100) > HyLinUCB (n≥20, online) > Thompson (n≥50) > Heuristic.
 func SelectScorerWithModel(policies map[string]ToolPolicy, model *MLPWeights) RecommendationScorer {
+	return SelectScorerFull(policies, model, nil, "")
+}
+
+// SelectScorerFull picks the best scorer with full algorithm selection.
+// Priority: NeuralTS (n≥100) > HyLinUCB (n≥20, contextual) > Thompson (n≥50) > Heuristic.
+func SelectScorerFull(policies map[string]ToolPolicy, model *MLPWeights, hylinucb *HyLinUCBManager, contextSig string) RecommendationScorer {
 	if len(policies) == 0 {
 		return nil
 	}
@@ -155,6 +162,11 @@ func SelectScorerWithModel(policies map[string]ToolPolicy, model *MLPWeights) Re
 	// NeuralTS when trained model available and sufficient data.
 	if model != nil && model.Valid() && maxSamples >= 100 {
 		return NeuralTSScorer{Model: model}
+	}
+
+	// HyLinUCB for online contextual exploration (20-99 samples).
+	if hylinucb != nil && contextSig != "" && maxSamples >= 20 && maxSamples < 100 {
+		return hylinucb.GetScorer(contextSig)
 	}
 
 	// Thompson sampling for moderate data.
