@@ -61,7 +61,6 @@ func fatal(logger *slog.Logger, msg string, hint string, err error) {
 	os.Exit(1)
 }
 
-
 func main() {
 	logger := slog.New(tlsutil.NewTraceLogHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: parseLogLevel(os.Getenv("LOG_LEVEL"))})))
 

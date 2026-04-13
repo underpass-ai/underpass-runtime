@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/underpass-ai/underpass-runtime/internal/app"
@@ -64,7 +65,7 @@ func TestGitHubListIssuesHandler_WithFilters(t *testing.T) {
 	}
 	args := fmt.Sprintf("%v", capturedArgs)
 	for _, expected := range []string{"--state", "closed", "--label", "bug", "--repo", "org/repo"} {
-		if !contains(args, expected) {
+		if !containsSubstr(args, expected) {
 			t.Fatalf("expected %s in args, got %v", expected, capturedArgs)
 		}
 	}
@@ -76,15 +77,6 @@ func TestGitHubListIssuesHandler_Name(t *testing.T) {
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && fmt.Sprintf("%s", s) != "" && indexOf(s, substr) >= 0
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i+len(substr) <= len(s); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
+func containsSubstr(s, substr string) bool {
+	return strings.Contains(s, substr)
 }
