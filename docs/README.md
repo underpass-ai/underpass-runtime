@@ -18,8 +18,8 @@
 |---|---|
 | [Kubernetes Deployment](operations/kubernetes-deploy.md) | Step-by-step deployment guide (minimal → production) |
 | [Cluster Prerequisites](operations/cluster-prerequisites.md) | Required/optional cluster components, resource estimates |
-| [TLS Deployment](operations/DEPLOYMENT-TLS.md) | TLS across all 5 transports (HTTP, Valkey, NATS, S3, OTLP) |
-| [Configuration Reference](CONFIGURATION.md) | Complete environment variable reference |
+| [TLS Deployment](operations/deployment-tls.md) | TLS across all 5 transports (HTTP, Valkey, NATS, S3, OTLP) |
+| [Configuration Reference](configuration.md) | Complete environment variable reference |
 
 ## Testing
 
@@ -33,8 +33,8 @@
 | Document | Description |
 |---|---|
 | [Observability Stack](https://github.com/underpass-ai/underpass-observability) | Grafana, Loki, OTEL Collector, Prometheus, alert-relay (separate repo) |
-| [Algorithm Architecture](architecture/ARCHITECTURE_ALGORITHMS.md) | Scoring tiers, NeuralTS, explainability trace, cross-agent learning |
-| [Evidence Plane](architecture/EVIDENCE_PLANE.md) | Recommendation traceability, decision store, feedback loop |
+| [Algorithm Architecture](architecture/algorithms.md) | Scoring tiers, NeuralTS, explainability trace, cross-agent learning |
+| [Evidence Plane](architecture/evidence-plane.md) | Recommendation traceability, decision store, feedback loop |
 
 ## Runbooks
 
@@ -57,7 +57,7 @@
 
 | Document | Description |
 |---|---|
-| [Capability Catalog](CAPABILITY_CATALOG.md) | Auto-generated catalog of 123 tools |
-| [Tool Catalog Guide](TOOL_CATALOG_GUIDE.md) | How to add new tools |
-| [Runner Images](operations/RUNNER_IMAGES.md) | 6 runner profiles (base, toolchains, secops, container, k6, fat) |
+| [Capability Catalog](capability-catalog.md) | Auto-generated catalog of 123 tools |
+| [Tool Catalog Guide](tool-catalog-guide.md) | How to add new tools |
+| [Runner Images](operations/runner-images.md) | 6 runner profiles (base, toolchains, secops, container, k6, fat) |
 | [vLLM Setup](archive/VLLM_SETUP.md) | vLLM integration for LLM-driven agents (archived) |

@@ -153,7 +153,7 @@ Every tool carries metadata: risk level, side effects, cost hint, approval
 requirements, idempotency. The policy engine uses this to enforce
 governance rules before execution.
 
-Full catalog: [docs/CAPABILITY_CATALOG.md](docs/CAPABILITY_CATALOG.md)
+Full catalog: [docs/capability-catalog.md](docs/capability-catalog.md)
 
 ## Adaptive recommendation engine
 
@@ -179,7 +179,7 @@ Selection is automatic. The active algorithm is visible in every response:
 }
 ```
 
-See [Algorithm Architecture](docs/architecture/ARCHITECTURE_ALGORITHMS.md) for the
+See [Algorithm Architecture](docs/architecture/algorithms.md) for the
 full technical design.
 
 ## E2E tested on live mTLS cluster
@@ -288,13 +288,13 @@ Start here:
 
 | Doc | What you learn |
 |-----|---------------|
-| [Algorithm Architecture](docs/architecture/ARCHITECTURE_ALGORITHMS.md) | How recommendations work — scoring, NeuralTS, selection |
-| [Configuration Reference](docs/CONFIGURATION.md) | 80+ environment variables |
-| [Helm Install Guide](docs/HELM_INSTALL.md) | Deploy to Kubernetes with mTLS |
-| [TLS Guide](docs/operations/DEPLOYMENT-TLS.md) | mTLS for all 5 transports |
-| [Evidence Plane](docs/architecture/EVIDENCE_PLANE.md) | Recommendation traceability |
-| [CI Automation](docs/operations/CI_AUTOMATION.md) | Image builds, registry, versioning |
-| [Tool Catalog Guide](docs/TOOL_CATALOG_GUIDE.md) | How to add new tools |
+| [Algorithm Architecture](docs/architecture/algorithms.md) | How recommendations work — scoring, NeuralTS, selection |
+| [Configuration Reference](docs/configuration.md) | 80+ environment variables |
+| [Helm Install Guide](docs/helm-install.md) | Deploy to Kubernetes with mTLS |
+| [TLS Guide](docs/operations/deployment-tls.md) | mTLS for all 5 transports |
+| [Evidence Plane](docs/architecture/evidence-plane.md) | Recommendation traceability |
+| [CI Automation](docs/operations/ci-automation.md) | Image builds, registry, versioning |
+| [Tool Catalog Guide](docs/tool-catalog-guide.md) | How to add new tools |
 | [E2E Evidence](e2e/README.md) | Test results with logs |
 
 Architecture decisions: [docs/adr/](docs/adr/)

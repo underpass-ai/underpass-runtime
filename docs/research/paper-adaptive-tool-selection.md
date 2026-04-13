@@ -233,7 +233,7 @@ Invocation completes
 
 ## Related Work
 
-See [SOTA_TOOL_SELECTION.md](SOTA_TOOL_SELECTION.md) for full literature survey.
+See [sota-tool-selection.md](sota-tool-selection.md) for full literature survey.
 
 Key references:
 - Neural-LinUCB (Xu et al., NeurIPS 2021) — deep context + shallow exploration

@@ -114,14 +114,14 @@ Busquedas clave:
   - `Context: None`
   - `Priors: Uniform Beta(1,1)`
   - `Limitations: No context, no tool metadata, no sequencing, no temporal adaptation`
-  en `underpass-runtime/docs/research/SOTA_TOOL_SELECTION.md:16` a `underpass-runtime/docs/research/SOTA_TOOL_SELECTION.md:24`.
+  en `underpass-runtime/docs/research/sota-tool-selection.md:16` a `underpass-runtime/docs/research/sota-tool-selection.md:24`.
 - El draft de investigacion marca como contribuciones y brazos experimentales precisamente lo que aun no esta en el path activo:
   - contextual bandits
   - seleccion jerarquica por familias
   - adaptacion no estacionaria
   - LLM priors
   - step-grained reward
-  en `underpass-runtime/docs/research/PAPER_ADAPTIVE_TOOL_SELECTION.md:37` a `underpass-runtime/docs/research/PAPER_ADAPTIVE_TOOL_SELECTION.md:58` y `underpass-runtime/docs/research/PAPER_ADAPTIVE_TOOL_SELECTION.md:80` a `underpass-runtime/docs/research/PAPER_ADAPTIVE_TOOL_SELECTION.md:89`.
+  en `underpass-runtime/docs/research/paper-adaptive-tool-selection.md:37` a `underpass-runtime/docs/research/paper-adaptive-tool-selection.md:58` y `underpass-runtime/docs/research/paper-adaptive-tool-selection.md:80` a `underpass-runtime/docs/research/paper-adaptive-tool-selection.md:89`.
 - El mismo roadmap de research deja como `NEXT`:
   - cablear `HyLinUCB` en `ComputePolicyUseCase`
   - cablear `LLM priors` en el CronJob

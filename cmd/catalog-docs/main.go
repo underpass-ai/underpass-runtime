@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	target := "docs/CAPABILITY_CATALOG.md"
+	target := "docs/capability-catalog.md"
 	if len(os.Args) > 1 {
 		target = os.Args[1]
 	}

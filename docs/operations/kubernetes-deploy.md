@@ -210,5 +210,5 @@ Restricts egress to: DNS (53), Valkey (6379), NATS (4222), S3/MinIO (443,
 
 ## TLS Deployment
 
-See [DEPLOYMENT-TLS.md](DEPLOYMENT-TLS.md) for full TLS configuration
+See [deployment-tls.md](deployment-tls.md) for full TLS configuration
 across all five transports (HTTP, Valkey, NATS, S3, OTLP).

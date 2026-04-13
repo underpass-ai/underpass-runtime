@@ -37,7 +37,7 @@ func TestDefaultCapabilitiesMarkdownSynced(t *testing.T) {
 		t.Fatal("runtime.Caller failed")
 	}
 	moduleRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", "..", ".."))
-	docPath := filepath.Join(moduleRoot, "docs", "CAPABILITY_CATALOG.md")
+	docPath := filepath.Join(moduleRoot, "docs", "capability-catalog.md")
 
 	raw, err := os.ReadFile(docPath)
 	if err != nil {

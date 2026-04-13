@@ -38,7 +38,7 @@ Startup panics if:
 - A YAML entry has empty required fields (name, description, scope, risk_level).
 
 Documentation is auto-generated from the same YAML via `cmd/catalog-docs/`,
-producing `docs/CAPABILITY_CATALOG.md`.
+producing `docs/capability-catalog.md`.
 
 ## Consequences
 

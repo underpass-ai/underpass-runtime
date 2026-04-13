@@ -7,15 +7,15 @@ algorithms in governed agent execution environments.
 
 | Paper | Status | Focus |
 |---|---|---|
-| [Adaptive Tool Selection](PAPER_ADAPTIVE_TOOL_SELECTION.md) | Draft — Phase 1 complete | Contextual bandits + hierarchical selection for governed tool recommendation |
+| [Adaptive Tool Selection](paper-adaptive-tool-selection.md) | Draft — Phase 1 complete | Contextual bandits + hierarchical selection for governed tool recommendation |
 
 ## Implemented Algorithms
 
 | Algorithm | PR | Status | Evidence |
 |---|---|---|---|
 | [Beta-SWTS](../adr/ADR-003-thompson-sampling-tool-recommendations.md) | #66 | Merged | Sliding window detects tool degradation in real-time |
-| [HyLinUCB](SOTA_TOOL_SELECTION.md#12-hylinucb) | #68 | In review | E2E benchmark: 14 invocations, 2 contexts, scoring differentiated |
-| [LLM Priors](SOTA_TOOL_SELECTION.md#13-llm-initialized-priors) | #69 | In review | Qwen3-8B generates priors (0.50-0.98) with risk differentiation |
+| [HyLinUCB](sota-tool-selection.md#12-hylinucb) | #68 | In review | E2E benchmark: 14 invocations, 2 contexts, scoring differentiated |
+| [LLM Priors](sota-tool-selection.md#13-llm-initialized-priors) | #69 | In review | Qwen3-8B generates priors (0.50-0.98) with risk differentiation |
 
 ## E2E Evidence
 
@@ -30,7 +30,7 @@ algorithms in governed agent execution environments.
 | Document | Description |
 |---|---|
 | [Benchmark Methodology v1](benchmark-methodology-v1.md) | Canonical rules for evaluation runs |
-| [State of the Art](SOTA_TOOL_SELECTION.md) | Literature survey: 20+ papers (2020-2025) |
+| [State of the Art](sota-tool-selection.md) | Literature survey: 20+ papers (2020-2025) |
 
 ## Research Roadmap
 

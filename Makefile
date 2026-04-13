@@ -23,7 +23,7 @@ help:
 	@echo "  make test               # Run all unit tests"
 	@echo "  make coverage           # Full-package coverage report (informational)"
 	@echo "  make coverage-core      # Coverage gate for core execution packages"
-	@echo "  make catalog-docs       # Regenerate docs/CAPABILITY_CATALOG.md from DefaultCapabilities()"
+	@echo "  make catalog-docs       # Regenerate docs/capability-catalog.md from DefaultCapabilities()"
 	@echo "  make docker-build       # Build container image"
 	@echo "  make docker-push        # Push container image"
 	@echo "  make integration-test   # Run integration tests in devcontainer"

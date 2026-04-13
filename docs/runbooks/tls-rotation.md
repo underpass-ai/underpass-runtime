@@ -27,7 +27,7 @@ kubectl -n underpass-runtime delete secret <tls-secret-name>
 ### 1. Generate New Certificates
 
 Follow the certificate generation steps in
-[DEPLOYMENT-TLS.md](../operations/DEPLOYMENT-TLS.md#2-generate-self-signed-certificates).
+[deployment-tls.md](../operations/deployment-tls.md#2-generate-self-signed-certificates).
 
 Use the **same CA** unless you are rotating the CA itself.
 
