@@ -39,7 +39,7 @@ fail() { echo -e "  ${RED}✗ $1${NC}"; FAIL=$((FAIL + 1)); }
 invoke() {
   local sid="$1" tool="$2" args="$3" approved="${4:-false}" cid="${5:-qs}"
   local payload
-  payload=$(jq -n --arg sid "$sid" --arg tool "$tool" --arg args "$args" \
+  payload=$(jq -n --arg sid "$sid" --arg tool "$tool" --argjson args "$args" \
     --argjson approved "$approved" --arg cid "$cid" \
     '{session_id:$sid, tool_name:$tool, args:$args, approved:$approved, correlation_id:$cid}')
   $GRPCURL -plaintext -d "$payload" "localhost:${PORT}" \
@@ -103,7 +103,7 @@ if (( COUNT > 100 )); then ok "$COUNT tools available"; else fail "Expected 100+
 
 step 4 "tool.suggest — recommend tools for a task"
 RESULT=$(invoke "$SID" "tool.suggest" '{"task":"edit a function in a Go file","top_k":3}' false qs-004)
-if echo "$RESULT" | grep -q "succeeded"; then
+if echo "$RESULT" | grep -qi "succeeded"; then
   ok "Got tool recommendations"
 else
   fail "tool.suggest: $(echo "$RESULT" | jq -r '.invocation.error.message // "unknown"' 2>/dev/null)"
@@ -113,7 +113,7 @@ fi
 
 step 5 "shell.exec — create workspace files"
 RESULT=$(invoke "$SID" "shell.exec" '{"command":"mkdir -p src && echo package main > src/main.go && echo created"}' true qs-005)
-if echo "$RESULT" | grep -q "succeeded"; then
+if echo "$RESULT" | grep -qi "succeeded"; then
   ok "Workspace bootstrapped"
 else
   fail "shell.exec failed"
@@ -123,7 +123,7 @@ fi
 
 step 6 "repo.tree — see workspace structure"
 RESULT=$(invoke "$SID" "repo.tree" '{"max_depth":2}' false qs-006)
-if echo "$RESULT" | grep -q "succeeded"; then
+if echo "$RESULT" | grep -qi "succeeded"; then
   ok "Directory tree retrieved"
 else
   fail "repo.tree failed"
@@ -133,7 +133,7 @@ fi
 
 step 7 "fs.edit — change 'main' to 'app' in source file"
 RESULT=$(invoke "$SID" "fs.edit" '{"path":"src/main.go","old_string":"package main","new_string":"package app"}' true qs-007)
-if echo "$RESULT" | grep -q "succeeded"; then
+if echo "$RESULT" | grep -qi "succeeded"; then
   ok "Edited package declaration"
 else
   fail "fs.edit failed"
@@ -143,7 +143,7 @@ fi
 
 step 8 "policy.check — verify path escape is blocked"
 RESULT=$(invoke "$SID" "policy.check" '{"tool_name":"fs.edit","args":{"path":"../../../etc/passwd"}}' false qs-008)
-if echo "$RESULT" | grep -q "succeeded"; then
+if echo "$RESULT" | grep -qi "succeeded"; then
   ok "Policy engine validates tool calls"
 else
   fail "policy.check failed"
