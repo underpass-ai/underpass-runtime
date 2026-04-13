@@ -10,6 +10,10 @@ A governed execution plane for AI agents that code. **114 real-world tools**
 inside isolated workspaces — every invocation policy-checked, telemetry-recorded,
 and artifact-preserved.
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="Underpass Runtime Demo" width="800">
+</p>
+
 The runtime **learns which tools work best** for each context and adapts
 its recommendations automatically, progressing from heuristics to Neural Thompson
 Sampling as data accumulates.
