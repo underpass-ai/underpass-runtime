@@ -274,7 +274,11 @@ Flow: Grafana alert → alert-relay → NATS → remediation-agent → session +
 - **Grafana dashboard** auto-provisioned via `charts/observability-stack/` (8 panels)
 - **Loki** for structured log aggregation via Promtail
 
-## What we're working on next
+## What we're working on
+
+**Autonomous incident resolution** — applying Runtime + [Rehydration Kernel](https://github.com/underpass-ai/rehydration-kernel) to build a system where specialist agents autonomously detect, investigate, and resolve production incidents. Event-driven orchestration, governed tool execution, and institutional memory from past resolutions.
+
+### Up next
 
 - [ ] LSP integration — type errors without full builds
 - [ ] Workspace checkpoints — snapshot/rollback for multi-step refactors
