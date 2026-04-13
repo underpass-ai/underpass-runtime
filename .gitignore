@@ -46,3 +46,4 @@ charts/*/Chart.lock
 
 # Large binaries
 services/tool-learning/export-lake
+k8s/
