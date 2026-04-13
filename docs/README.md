@@ -8,9 +8,9 @@
 | [ADR-001: Hexagonal Architecture](adr/ADR-001-hexagonal-architecture-in-go.md) | Package layout, port/adapter design, dependency injection |
 | [ADR-002: YAML Tool Catalog](adr/ADR-002-yaml-tool-catalog.md) | Why tool metadata lives in embedded YAML |
 | [ADR-003: Thompson Sampling](adr/ADR-003-thompson-sampling-tool-recommendations.md) | Online heuristic + offline learning pipeline |
-| [Runtime Tool Learning Audit](RUNTIME_TOOL_LEARNING_AUDIT.md) | Code-based audit of the current recommendation and learning path |
-| [Runtime Tool Learning Traceability API](RUNTIME_TOOL_LEARNING_TRACEABILITY_API.md) | Event-first evidence plane and audit API proposal |
-| [Runtime Tool Learning Agent Handoff](RUNTIME_TOOL_LEARNING_AGENT_HANDOFF_2026-04-02.md) | Implementation brief and execution order for the runtime agent |
+| [Runtime Tool Learning Audit](archive/RUNTIME_TOOL_LEARNING_AUDIT.md) | Code-based audit of the recommendation and learning path (archived) |
+| [Runtime Tool Learning Traceability API](archive/RUNTIME_TOOL_LEARNING_TRACEABILITY_API.md) | Event-first evidence plane and audit API proposal (archived) |
+| [Runtime Tool Learning Agent Handoff](archive/RUNTIME_TOOL_LEARNING_AGENT_HANDOFF_2026-04-02.md) | Implementation brief and execution order (archived) |
 
 ## Operations
 
@@ -60,4 +60,4 @@
 | [Capability Catalog](CAPABILITY_CATALOG.md) | Auto-generated catalog of 123 tools |
 | [Tool Catalog Guide](TOOL_CATALOG_GUIDE.md) | How to add new tools |
 | [Runner Images](RUNNER_IMAGES.md) | 6 runner profiles (base, toolchains, secops, container, k6, fat) |
-| [vLLM Setup](VLLM_SETUP.md) | vLLM integration for LLM-driven agents |
+| [vLLM Setup](archive/VLLM_SETUP.md) | vLLM integration for LLM-driven agents (archived) |
