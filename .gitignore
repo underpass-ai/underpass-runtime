@@ -33,3 +33,16 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+
+# Logs (runtime artifacts)
+logs/
+
+# Claude Code local state
+.claude/
+
+# Helm dependency charts (downloaded)
+charts/*/charts/
+charts/*/Chart.lock
+
+# Large binaries
+services/tool-learning/export-lake

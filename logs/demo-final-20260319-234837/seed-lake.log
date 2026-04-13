@@ -1,3 +1,0 @@
-{"time":"2026-03-19T22:37:53.987414375Z","level":"INFO","msg":"S3 configured","endpoint":"minio:9000","bucket":"telemetry-lake"}
-{"time":"2026-03-19T22:37:54.016695305Z","level":"INFO","msg":"generated synthetic invocations","count":16000,"hours":2}
-{"time":"2026-03-19T22:37:54.085771814Z","level":"INFO","msg":"seed complete","invocations":16000,"partitions":3,"bucket":"telemetry-lake"}
