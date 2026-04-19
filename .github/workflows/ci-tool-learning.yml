@@ -243,6 +243,8 @@ jobs:
     needs: [lint, test, build, decoupling-guard]
     env:
       REGISTRY: ghcr.io/underpass-ai/underpass-runtime
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
     steps:
       - uses: actions/checkout@v6
 
@@ -253,15 +255,15 @@ jobs:
         working-directory: .
 
       - name: Login to GHCR (dedicated token)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.GHCR_USERNAME != '' && secrets.GHCR_TOKEN != ''
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.GHCR_USERNAME != '' && env.GHCR_TOKEN != ''
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ secrets.GHCR_USERNAME }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          username: ${{ env.GHCR_USERNAME }}
+          password: ${{ env.GHCR_TOKEN }}
 
       - name: Login to GHCR (GITHUB_TOKEN fallback)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (secrets.GHCR_USERNAME == '' || secrets.GHCR_TOKEN == '')
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (env.GHCR_USERNAME == '' || env.GHCR_TOKEN == '')
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
