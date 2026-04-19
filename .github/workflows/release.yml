@@ -69,7 +69,7 @@ jobs:
           echo "path=/tmp/changelog.md" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: /tmp/changelog.md
           draft: false
