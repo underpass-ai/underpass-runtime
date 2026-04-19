@@ -5,6 +5,9 @@
 All container images are built and pushed to `ghcr.io/underpass-ai/underpass-runtime`
 automatically by CI.
 
+CI prefers the repository secrets `GHCR_USERNAME` and `GHCR_TOKEN` for registry
+authentication. If they are absent, workflows fall back to `GITHUB_TOKEN`.
+
 ### On merge to main
 
 The `CI — Workspace` workflow builds and pushes:
@@ -77,3 +80,13 @@ helm upgrade underpass-runtime charts/underpass-runtime \
 
 The `Always` pull policy ensures the latest image is pulled. For
 production, pin to a specific appVersion tag instead.
+
+## Registry auth
+
+If your organization-level GHCR package does not grant write access to the
+repository `GITHUB_TOKEN`, set these repository secrets:
+
+| Secret | Purpose |
+|--------|---------|
+| `GHCR_USERNAME` | Username that owns the package-push token |
+| `GHCR_TOKEN` | Token with `write:packages` for `ghcr.io` |
