@@ -8,7 +8,12 @@ of underpass-runtime.
 ## Metrics Architecture
 
 underpass-runtime exposes Prometheus-compatible metrics at `/metrics`.
-Metrics are computed in-process — no external metrics library dependency.
+The canonical metric instruments now live in the OpenTelemetry SDK:
+
+- OTLP metrics are pushed when `WORKSPACE_OTEL_ENABLED=true`.
+- `/metrics` remains available as a transitional Prometheus text endpoint.
+- The Prometheus payload is rendered from the OTel SDK state, not from
+  hand-written metric structs.
 
 ### Domain Value Object: InvocationQualityMetrics
 
@@ -27,6 +32,7 @@ Invocation completes
     │           └── error_code (if failed/denied)
     │
     └── QualityObserver.ObserveInvocationQuality(metrics, context)
+            ├── OTelQualityObserver → OTel counters + histograms
             ├── SlogQualityObserver → structured JSON logs (Loki)
             ├── CompositeQualityObserver → fan-out to multiple backends
             └── NoopQualityObserver → tests / disabled
@@ -39,16 +45,23 @@ Invocation completes
 ### Invocation Metrics (domain-layer)
 
 All metrics originate from the domain `Invocation` value object. When an
-invocation completes, the `Service` passes the full `domain.Invocation` to
-the metrics observer:
+invocation completes, the `Service` records OTel instruments and separately
+fans out the derived quality value object through the `QualityObserver` port:
 
 ```
 Invocation completes
     │
     ├── invocationMetrics.Observe(invocation)
+    │       ├── OTel meter instruments
     │       ├── invocations_total{tool, status}
     │       ├── denied_total{tool, reason}
     │       └── duration_ms{tool} (histogram)
+    │
+    ├── domain.ComputeInvocationQuality(invocation)
+    │
+    ├── CompositeQualityObserver.ObserveInvocationQuality(...)
+    │       ├── OTelQualityObserver
+    │       └── SlogQualityObserver
     │
     └── KPIMetrics.Observe*(...)
             ├── tool_calls_per_task{context}
@@ -64,6 +77,10 @@ Invocation completes
 
 ### Prometheus Exposition
 
+The `/metrics` endpoint is kept for compatibility with the existing
+`ServiceMonitor`, but it is now a view over OTel metric data. OTLP is the
+source of truth for metric production.
+
 | Metric | Type | Labels | Description |
 |---|---|---|---|
 | `invocations_total` | counter | `tool`, `status` | Total tool invocations by tool name and final status (succeeded, failed, denied) |
@@ -77,8 +94,10 @@ Invocation completes
 | Metric | Type | Description |
 |---|---|---|
 | `workspace_tool_calls_per_task` | counter | Tool invocations grouped by task context |
-| `workspace_success_on_first_tool` | ratio | First invocation per session succeeded |
+| `workspace_success_on_first_tool_rate` | gauge | Ratio of sessions where the first invocation succeeded |
+| `workspace_success_on_first_tool_total` | counter | Number of first-tool outcomes recorded |
 | `workspace_recommendation_acceptance_rate` | ratio | Recommended tool was actually used |
+| `workspace_recommendation_total` | counter | Number of recommendation decisions recorded |
 | `workspace_policy_denial_rate_bad_recommendation` | ratio | Denials after recommendation |
 | `workspace_context_bytes_saved` | counter | Bytes saved by compact discovery |
 | `workspace_sessions_created_total` | counter | Sessions successfully created |
@@ -86,11 +105,19 @@ Invocation completes
 | `workspace_discovery_requests_total` | counter | Discovery endpoint served |
 | `workspace_invocations_denied_total` | counter | Denied invocations by reason |
 
+### Quality Observer Metrics
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `workspace_invocation_quality_total` | counter | `tool`, `status`, `latency_bucket`, `has_error`, `error_code` | Quality observations emitted by `OTelQualityObserver` |
+| `workspace_invocation_quality_duration_ms` | histogram | `tool`, `status`, `latency_bucket`, `has_error`, `error_code` | Invocation quality duration histogram with OTel exemplars when spans are sampled |
+
 ---
 
-## OpenTelemetry Tracing
+## OpenTelemetry
 
-When `WORKSPACE_OTEL_ENABLED=true`, the service exports OTLP traces.
+The runtime always records metrics through the OTel SDK. When
+`WORKSPACE_OTEL_ENABLED=true`, it exports both OTLP traces and OTLP metrics.
 
 ### Trace Structure
 
@@ -112,7 +139,7 @@ workspace.service (root span)
 
 | Attribute | Source |
 |---|---|
-| `service.name` | `underpass-runtime` |
+| `service.name` | `workspace` |
 | `service.version` | `WORKSPACE_VERSION` env var |
 | `deployment.environment` | `WORKSPACE_ENV` env var |
 
@@ -120,10 +147,11 @@ workspace.service (root span)
 
 | Variable | Default | Description |
 |---|---|---|
-| `WORKSPACE_OTEL_ENABLED` | `false` | Enable OTLP trace exporter |
+| `WORKSPACE_OTEL_ENABLED` | `false` | Enable OTLP trace and OTLP metric export |
 | `WORKSPACE_OTEL_EXPORTER_OTLP_ENDPOINT` | SDK default | OTLP HTTP endpoint |
 | `WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE` | `false` | Disable TLS for OTLP |
 | `WORKSPACE_OTEL_TLS_CA_PATH` | none | CA cert for OTLP TLS |
+| `WORKSPACE_OTEL_METRIC_EXPORT_INTERVAL_SECONDS` | `15` | OTLP metric push interval for the periodic reader |
 
 ---
 
@@ -206,7 +234,8 @@ Enabled automatically — no configuration needed. Works with any OTLP collector
 
 Prometheus metrics are served on `:9090` (configurable via `METRICS_PORT`).
 The port is exposed in both the Kubernetes Deployment and Service resources,
-enabling ServiceMonitor scraping from external namespaces.
+enabling ServiceMonitor scraping from external namespaces during the migration
+to collector-driven metric ingestion.
 
 ---
 

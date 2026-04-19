@@ -5,8 +5,14 @@ import (
 	"testing"
 )
 
+func newTestKPIMetrics(t *testing.T) *KPIMetrics {
+	t.Helper()
+	installTestMetricReader(t)
+	return NewKPIMetrics()
+}
+
 func TestKPIMetrics_ToolCallsPerTask(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObserveToolCall("build")
 	kpi.ObserveToolCall("build")
 	kpi.ObserveToolCall("test")
@@ -25,7 +31,7 @@ func TestKPIMetrics_ToolCallsPerTask(t *testing.T) {
 }
 
 func TestKPIMetrics_SuccessOnFirstTool(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObserveFirstToolResult(true)
 	kpi.ObserveFirstToolResult(true)
 	kpi.ObserveFirstToolResult(false)
@@ -41,7 +47,7 @@ func TestKPIMetrics_SuccessOnFirstTool(t *testing.T) {
 }
 
 func TestKPIMetrics_SuccessOnFirstTool_Empty(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	text := kpi.PrometheusText()
 	if !strings.Contains(text, "workspace_success_on_first_tool_rate 0.0") {
 		t.Fatalf("expected rate 0 when empty:\n%s", text)
@@ -49,7 +55,7 @@ func TestKPIMetrics_SuccessOnFirstTool_Empty(t *testing.T) {
 }
 
 func TestKPIMetrics_RecommendationAcceptance(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObserveRecommendationUsed(true)
 	kpi.ObserveRecommendationUsed(true)
 	kpi.ObserveRecommendationUsed(false)
@@ -64,7 +70,7 @@ func TestKPIMetrics_RecommendationAcceptance(t *testing.T) {
 }
 
 func TestKPIMetrics_PolicyDenialAfterRecommendation(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObservePolicyDenialAfterRecommendation(true)
 	kpi.ObservePolicyDenialAfterRecommendation(false)
 
@@ -75,7 +81,7 @@ func TestKPIMetrics_PolicyDenialAfterRecommendation(t *testing.T) {
 }
 
 func TestKPIMetrics_PolicyDenialAfterRecommendation_Empty(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	text := kpi.PrometheusText()
 	if !strings.Contains(text, "workspace_policy_denial_rate_bad_recommendation 0.0") {
 		t.Fatalf("expected 0 rate when empty:\n%s", text)
@@ -83,7 +89,7 @@ func TestKPIMetrics_PolicyDenialAfterRecommendation_Empty(t *testing.T) {
 }
 
 func TestKPIMetrics_ContextBytesSaved(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObserveContextBytesSaved(1024)
 	kpi.ObserveContextBytesSaved(2048)
 
@@ -94,7 +100,7 @@ func TestKPIMetrics_ContextBytesSaved(t *testing.T) {
 }
 
 func TestKPIMetrics_SessionsCreated(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObserveSessionCreated()
 	kpi.ObserveSessionCreated()
 	kpi.ObserveSessionCreated()
@@ -106,7 +112,7 @@ func TestKPIMetrics_SessionsCreated(t *testing.T) {
 }
 
 func TestKPIMetrics_SessionsClosed(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObserveSessionClosed()
 	kpi.ObserveSessionClosed()
 
@@ -117,7 +123,7 @@ func TestKPIMetrics_SessionsClosed(t *testing.T) {
 }
 
 func TestKPIMetrics_DiscoveryRequests(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObserveDiscoveryRequest()
 	kpi.ObserveDiscoveryRequest()
 	kpi.ObserveDiscoveryRequest()
@@ -130,7 +136,7 @@ func TestKPIMetrics_DiscoveryRequests(t *testing.T) {
 }
 
 func TestKPIMetrics_InvocationsDenied(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObserveInvocationDenied("policy_denied")
 	kpi.ObserveInvocationDenied("policy_denied")
 	kpi.ObserveInvocationDenied("approval_required")
@@ -149,20 +155,16 @@ func TestKPIMetrics_InvocationsDenied(t *testing.T) {
 }
 
 func TestKPIMetrics_InvocationsDenied_Empty(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	text := kpi.PrometheusText()
 	// No denied_total lines should appear when there are no denials.
 	if strings.Contains(text, "workspace_invocations_denied_total{") {
 		t.Fatalf("expected no denied lines when empty:\n%s", text)
 	}
-	// But the HELP/TYPE header should still be present.
-	if !strings.Contains(text, "# HELP workspace_invocations_denied_total") {
-		t.Fatalf("expected HELP header for denied_total:\n%s", text)
-	}
 }
 
 func TestKPIMetrics_SessionCounters_ZeroDefault(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	text := kpi.PrometheusText()
 	if !strings.Contains(text, "workspace_sessions_created_total 0") {
 		t.Fatalf("expected sessions_created=0 by default:\n%s", text)
@@ -176,7 +178,7 @@ func TestKPIMetrics_SessionCounters_ZeroDefault(t *testing.T) {
 }
 
 func TestKPIMetrics_PrometheusText_AllSections(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	kpi.ObserveToolCall("build")
 	kpi.ObserveFirstToolResult(true)
 	kpi.ObserveRecommendationUsed(true)
@@ -208,7 +210,7 @@ func TestKPIMetrics_PrometheusText_AllSections(t *testing.T) {
 }
 
 func TestKPIMetrics_ConcurrentAccess(t *testing.T) {
-	kpi := NewKPIMetrics()
+	kpi := newTestKPIMetrics(t)
 	done := make(chan struct{})
 
 	for range 10 {

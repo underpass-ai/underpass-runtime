@@ -1084,6 +1084,8 @@ func TestDenyInvocation_RateLimit_RecordsTelemetry(t *testing.T) {
 // ─── KPI Metrics wiring ──────────────────────────────────────────────────
 
 func TestInvokeTool_ObservesToolCallKPI(t *testing.T) {
+	installTestMetricReader(t)
+
 	session := defaultSession()
 	capability := defaultCapability()
 	kpi := NewKPIMetrics()
@@ -1112,6 +1114,8 @@ func TestInvokeTool_ObservesToolCallKPI(t *testing.T) {
 }
 
 func TestInvokeTool_ObservesPolicyDenialAfterRecommendation(t *testing.T) {
+	installTestMetricReader(t)
+
 	session := defaultSession()
 	capability := defaultCapability()
 	kpi := NewKPIMetrics()

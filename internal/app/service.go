@@ -165,14 +165,7 @@ func (noopTelemetryQuerier) AllToolStats(context.Context) (map[string]ToolStats,
 }
 
 func (s *Service) PrometheusMetrics() string {
-	var b strings.Builder
-	if s.metrics != nil {
-		b.WriteString(s.metrics.PrometheusText())
-	}
-	if s.kpiMetrics != nil {
-		b.WriteString(s.kpiMetrics.PrometheusText())
-	}
-	return b.String()
+	return renderPrometheusText(nil)
 }
 
 func (s *Service) CreateSession(ctx context.Context, req CreateSessionRequest) (domain.Session, *ServiceError) {

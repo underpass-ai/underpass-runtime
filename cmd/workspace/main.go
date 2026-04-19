@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -37,9 +38,11 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/tlsutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"google.golang.org/grpc"
@@ -146,6 +149,11 @@ func main() {
 	}
 
 	service := app.NewService(workspaceManager, catalog, policyEngine, engine, artifactStore, auditLogger, invocationStore)
+	observerMeter := otel.GetMeterProvider().Meter("github.com/underpass-ai/underpass-runtime/internal/adapters/telemetry")
+	service.SetQualityObserver(telemetryadapter.NewCompositeQualityObserver(
+		telemetryadapter.NewOTelQualityObserver(observerMeter),
+		telemetryadapter.NewSlogQualityObserver(logger),
+	))
 	eventPub, natsConn, relayStop := buildEventBus(context.Background(), logger, natsTLS, valkeyTLS)
 	service.SetEventPublisher(eventPub)
 	telRecorder, telQuerier, telStop := buildTelemetry(context.Background(), logger, valkeyTLS)
@@ -558,33 +566,7 @@ func parseStringMapEnv(raw string) (map[string]string, error) {
 }
 
 func setupTelemetry(ctx context.Context, logger *slog.Logger) (func(context.Context) error, error) {
-	if !parseBoolOrDefault(os.Getenv("WORKSPACE_OTEL_ENABLED"), false) {
-		return func(context.Context) error { return nil }, nil
-	}
-
-	options := []otlptracehttp.Option{}
-	if endpoint := strings.TrimSpace(os.Getenv("WORKSPACE_OTEL_EXPORTER_OTLP_ENDPOINT")); endpoint != "" {
-		options = append(options, otlptracehttp.WithEndpoint(endpoint))
-	}
-	if parseBoolOrDefault(os.Getenv("WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE"), false) {
-		options = append(options, otlptracehttp.WithInsecure())
-	}
-	if caPath := strings.TrimSpace(os.Getenv("WORKSPACE_OTEL_TLS_CA_PATH")); caPath != "" {
-		otlpTLS, tlsErr := tlsutil.BuildClientTLSFromCA(caPath)
-		if tlsErr != nil {
-			return nil, fmt.Errorf("OTLP TLS: %w", tlsErr)
-		}
-		if otlpTLS != nil {
-			options = append(options, otlptracehttp.WithTLSClientConfig(otlpTLS))
-		}
-	}
-
-	client := otlptracehttp.NewClient(options...)
-	exporter, err := otlptrace.New(ctx, client)
-	if err != nil {
-		return nil, fmt.Errorf("create otlp trace exporter: %w", err)
-	}
-
+	otelEnabled := parseBoolOrDefault(os.Getenv("WORKSPACE_OTEL_ENABLED"), false)
 	resources, err := resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
@@ -598,18 +580,99 @@ func setupTelemetry(ctx context.Context, logger *slog.Logger) (func(context.Cont
 		return nil, fmt.Errorf("build telemetry resources: %w", err)
 	}
 
+	endpoint := strings.TrimSpace(os.Getenv("WORKSPACE_OTEL_EXPORTER_OTLP_ENDPOINT"))
+	insecure := parseBoolOrDefault(os.Getenv("WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE"), false)
+
+	var otlpTLS *tls.Config
+	if caPath := strings.TrimSpace(os.Getenv("WORKSPACE_OTEL_TLS_CA_PATH")); caPath != "" {
+		otlpTLS, err = tlsutil.BuildClientTLSFromCA(caPath)
+		if err != nil {
+			return nil, fmt.Errorf("OTLP TLS: %w", err)
+		}
+	}
+
+	manualReader := sdkmetric.NewManualReader()
+	meterOptions := []sdkmetric.Option{
+		sdkmetric.WithResource(resources),
+		sdkmetric.WithReader(manualReader),
+		sdkmetric.WithView(app.MetricViews()...),
+	}
+
+	metricExportInterval := time.Duration(parseIntOrDefault(os.Getenv("WORKSPACE_OTEL_METRIC_EXPORT_INTERVAL_SECONDS"), 15)) * time.Second
+	if otelEnabled {
+		metricOptions := []otlpmetrichttp.Option{}
+		if endpoint != "" {
+			metricOptions = append(metricOptions, otlpmetrichttp.WithEndpoint(endpoint))
+		}
+		if insecure {
+			metricOptions = append(metricOptions, otlpmetrichttp.WithInsecure())
+		}
+		if otlpTLS != nil {
+			metricOptions = append(metricOptions, otlpmetrichttp.WithTLSClientConfig(otlpTLS))
+		}
+		metricExporter, metricErr := otlpmetrichttp.New(ctx, metricOptions...)
+		if metricErr != nil {
+			return nil, fmt.Errorf("create otlp metric exporter: %w", metricErr)
+		}
+		meterOptions = append(
+			meterOptions,
+			sdkmetric.WithReader(
+				sdkmetric.NewPeriodicReader(metricExporter, sdkmetric.WithInterval(metricExportInterval)),
+			),
+		)
+	}
+
+	meterProvider := sdkmetric.NewMeterProvider(meterOptions...)
+	otel.SetMeterProvider(meterProvider)
+	app.ConfigurePrometheusReader(manualReader)
+
+	if !otelEnabled {
+		logger.Info("telemetry configured", "traces_enabled", false, "metrics_otlp_enabled", false)
+		return func(ctx context.Context) error {
+			return errors.Join(
+				meterProvider.ForceFlush(ctx),
+				meterProvider.Shutdown(ctx),
+			)
+		}, nil
+	}
+
+	traceOptions := []otlptracehttp.Option{}
+	if endpoint != "" {
+		traceOptions = append(traceOptions, otlptracehttp.WithEndpoint(endpoint))
+	}
+	if insecure {
+		traceOptions = append(traceOptions, otlptracehttp.WithInsecure())
+	}
+	if otlpTLS != nil {
+		traceOptions = append(traceOptions, otlptracehttp.WithTLSClientConfig(otlpTLS))
+	}
+
+	traceClient := otlptracehttp.NewClient(traceOptions...)
+	traceExporter, err := otlptrace.New(ctx, traceClient)
+	if err != nil {
+		return nil, fmt.Errorf("create otlp trace exporter: %w", err)
+	}
+
 	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
+		sdktrace.WithBatcher(traceExporter),
 		sdktrace.WithResource(resources),
 	)
 	otel.SetTracerProvider(tracerProvider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	logger.Info(
 		"telemetry enabled",
-		"otlp_endpoint", strings.TrimSpace(os.Getenv("WORKSPACE_OTEL_EXPORTER_OTLP_ENDPOINT")),
-		"insecure", parseBoolOrDefault(os.Getenv("WORKSPACE_OTEL_EXPORTER_OTLP_INSECURE"), false),
+		"otlp_endpoint", endpoint,
+		"insecure", insecure,
+		"metrics_export_interval_seconds", int(metricExportInterval.Seconds()),
 	)
-	return tracerProvider.Shutdown, nil
+	return func(ctx context.Context) error {
+		return errors.Join(
+			tracerProvider.ForceFlush(ctx),
+			meterProvider.ForceFlush(ctx),
+			tracerProvider.Shutdown(ctx),
+			meterProvider.Shutdown(ctx),
+		)
+	}, nil
 }
 
 func startGRPCServer(srv *grpc.Server, port, workspaceRoot string, serverTLS *tls.Config, logger *slog.Logger) {

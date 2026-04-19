@@ -419,6 +419,8 @@ func TestAcceptRecommendation_SessionGetError(t *testing.T) {
 }
 
 func TestAcceptRecommendation_WithKPIMetrics(t *testing.T) {
+	installTestMetricReader(t)
+
 	svc, _ := makeEvidenceService()
 	svc.SetKPIMetrics(NewKPIMetrics())
 
@@ -535,6 +537,8 @@ func (f *fakeTelemetryQuerier) AllToolStats(_ context.Context) (map[string]ToolS
 }
 
 func TestRejectRecommendation_WithKPIMetrics(t *testing.T) {
+	installTestMetricReader(t)
+
 	svc, _ := makeEvidenceService()
 	svc.SetKPIMetrics(NewKPIMetrics())
 

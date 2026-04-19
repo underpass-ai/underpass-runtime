@@ -3,8 +3,12 @@ package telemetry
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	metricapi "go.opentelemetry.io/otel/metric"
 )
 
 // --- Noop Observer ---
@@ -14,6 +18,66 @@ import (
 type NoopQualityObserver struct{}
 
 func (NoopQualityObserver) ObserveInvocationQuality(_ context.Context, _ domain.InvocationQualityMetrics, _ domain.QualityObservationContext) {
+}
+
+// --- OTel Observer ---
+
+// OTelQualityObserver emits invocation quality metrics through the OTel SDK.
+type OTelQualityObserver struct {
+	invocations metricapi.Int64Counter
+	durations   metricapi.Int64Histogram
+}
+
+// NewOTelQualityObserver creates an OTel-backed quality observer.
+func NewOTelQualityObserver(meter metricapi.Meter) *OTelQualityObserver {
+	invocations, err := meter.Int64Counter(
+		"workspace_invocation_quality_total",
+		metricapi.WithDescription("Total invocation quality observations."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	durations, err := meter.Int64Histogram(
+		"workspace_invocation_quality_duration_ms",
+		metricapi.WithDescription("Invocation quality duration histogram in milliseconds."),
+		metricapi.WithUnit("ms"),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	return &OTelQualityObserver{
+		invocations: invocations,
+		durations:   durations,
+	}
+}
+
+func (o *OTelQualityObserver) ObserveInvocationQuality(ctx context.Context, m domain.InvocationQualityMetrics, _ domain.QualityObservationContext) {
+	if o == nil {
+		return
+	}
+	duration := m.DurationMS()
+	if duration < 0 {
+		duration = 0
+	}
+	attrs := []attribute.KeyValue{
+		attribute.String("tool", normalizeObserverValue(m.ToolName(), "unknown")),
+		attribute.String("status", normalizeObserverValue(string(m.Status()), "unknown")),
+		attribute.String("latency_bucket", normalizeObserverValue(m.LatencyBucket(), "unknown")),
+		attribute.Bool("has_error", m.HasError()),
+	}
+	if code := strings.TrimSpace(m.ErrorCode()); code != "" {
+		attrs = append(attrs, attribute.String("error_code", code))
+	}
+	o.invocations.Add(ctx, 1, metricapi.WithAttributes(attrs...))
+	o.durations.Record(ctx, duration, metricapi.WithAttributes(attrs...))
+}
+
+func normalizeObserverValue(raw, fallback string) string {
+	trimmed := strings.TrimSpace(strings.ToLower(raw))
+	if trimmed == "" {
+		return fallback
+	}
+	return trimmed
 }
 
 // --- Slog Observer (structured logs) ---

@@ -761,7 +761,7 @@ telemetry:
   backend: valkey
   otel:
     enabled: true
-    endpoint: otel-collector:4317
+    endpoint: otel-collector:4318
     insecure: false
     caPath: /var/run/underpass-runtime/tls/ca.crt
 ```

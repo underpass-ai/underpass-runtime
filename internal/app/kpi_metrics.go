@@ -1,203 +1,258 @@
 package app
 
 import (
-	"fmt"
+	"context"
 	"strings"
-	"sync"
+	"sync/atomic"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	metricapi "go.opentelemetry.io/otel/metric"
 )
 
-// KPIMetrics tracks learning-loop KPI metrics for Prometheus exposition.
-// All methods are safe for concurrent use.
+// KPIMetrics tracks learning-loop KPI metrics using OpenTelemetry
+// instruments. All methods are safe for concurrent use.
 type KPIMetrics struct {
-	mu sync.RWMutex
-
-	// workspace_tool_calls_per_task: tool invocations grouped by task context
-	toolCallsPerTask map[string]uint64
-
-	// workspace_success_on_first_tool: first invocation per session succeeded
-	firstToolSuccess uint64
-	firstToolTotal   uint64
-
-	// workspace_recommendation_acceptance_rate: recommended tool was actually used
-	recommendedUsed  uint64
-	recommendedTotal uint64
-
-	// workspace_policy_denial_rate_bad_recommendation: denials after recommendation
-	policyDenialAfterRec  uint64
-	policyDenialAfterRecN uint64
-
-	// workspace_context_bytes_saved: bytes saved by compact discovery
-	contextBytesSaved int64
-
-	// workspace_sessions_created_total: sessions successfully created (HTTP 201)
-	sessionsCreated uint64
-
-	// workspace_sessions_closed_total: sessions successfully closed (HTTP 200)
-	sessionsClosed uint64
-
-	// workspace_discovery_requests_total: discovery endpoint served
-	discoveryRequests uint64
-
-	// workspace_invocations_denied_total{reason}: denied invocations by reason
-	invocationsDenied map[string]uint64
+	toolCallsPerTask                  metricapi.Int64Counter
+	firstToolTotal                    metricapi.Int64Counter
+	firstToolRate                     metricapi.Float64Gauge
+	recommendationTotal               metricapi.Int64Counter
+	recommendationAcceptanceRate      metricapi.Float64Gauge
+	policyDenialRateBadRecommendation metricapi.Float64Gauge
+	contextBytesSaved                 metricapi.Int64Counter
+	sessionsCreated                   metricapi.Int64Counter
+	sessionsClosed                    metricapi.Int64Counter
+	discoveryRequests                 metricapi.Int64Counter
+	invocationsDenied                 metricapi.Int64Counter
+	firstToolSuccessCount             atomic.Uint64
+	firstToolTotalCount               atomic.Uint64
+	recommendedUsedCount              atomic.Uint64
+	recommendedTotalCount             atomic.Uint64
+	policyDenialAfterRecommendation   atomic.Uint64
+	policyDenialAfterRecommendationN  atomic.Uint64
 }
 
 // NewKPIMetrics creates a new KPI metrics tracker.
 func NewKPIMetrics() *KPIMetrics {
-	return &KPIMetrics{
-		toolCallsPerTask:  map[string]uint64{},
-		invocationsDenied: map[string]uint64{},
+	return NewKPIMetricsWithMeter(appMeter())
+}
+
+// NewKPIMetricsWithMeter creates a KPI metrics tracker using the provided meter.
+func NewKPIMetricsWithMeter(meter metricapi.Meter) *KPIMetrics {
+	toolCallsPerTask, err := meter.Int64Counter(
+		"workspace_tool_calls_per_task",
+		metricapi.WithDescription("Total tool invocations by task context."),
+	)
+	if err != nil {
+		otel.Handle(err)
 	}
+	firstToolTotal, err := meter.Int64Counter(
+		"workspace_success_on_first_tool_total",
+		metricapi.WithDescription("Total first-tool outcomes recorded for a session."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	firstToolRate, err := meter.Float64Gauge(
+		"workspace_success_on_first_tool_rate",
+		metricapi.WithDescription("Whether the first tool in a session succeeded."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	recommendationTotal, err := meter.Int64Counter(
+		"workspace_recommendation_total",
+		metricapi.WithDescription("Total recommendation decisions recorded."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	recommendationAcceptanceRate, err := meter.Float64Gauge(
+		"workspace_recommendation_acceptance_rate",
+		metricapi.WithDescription("Rate of recommended tools actually used."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	policyDenialRateBadRecommendation, err := meter.Float64Gauge(
+		"workspace_policy_denial_rate_bad_recommendation",
+		metricapi.WithDescription("Rate of policy denials on recommended tools."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	contextBytesSaved, err := meter.Int64Counter(
+		"workspace_context_bytes_saved",
+		metricapi.WithDescription("Total bytes saved by compact discovery."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	sessionsCreated, err := meter.Int64Counter(
+		"workspace_sessions_created_total",
+		metricapi.WithDescription("Total sessions successfully created."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	sessionsClosed, err := meter.Int64Counter(
+		"workspace_sessions_closed_total",
+		metricapi.WithDescription("Total sessions successfully closed."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	discoveryRequests, err := meter.Int64Counter(
+		"workspace_discovery_requests_total",
+		metricapi.WithDescription("Total tool discovery requests served."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+	invocationsDenied, err := meter.Int64Counter(
+		"workspace_invocations_denied_total",
+		metricapi.WithDescription("Total denied invocations by denial reason."),
+	)
+	if err != nil {
+		otel.Handle(err)
+	}
+
+	k := &KPIMetrics{
+		toolCallsPerTask:                  toolCallsPerTask,
+		firstToolTotal:                    firstToolTotal,
+		firstToolRate:                     firstToolRate,
+		recommendationTotal:               recommendationTotal,
+		recommendationAcceptanceRate:      recommendationAcceptanceRate,
+		policyDenialRateBadRecommendation: policyDenialRateBadRecommendation,
+		contextBytesSaved:                 contextBytesSaved,
+		sessionsCreated:                   sessionsCreated,
+		sessionsClosed:                    sessionsClosed,
+		discoveryRequests:                 discoveryRequests,
+		invocationsDenied:                 invocationsDenied,
+	}
+
+	k.firstToolTotal.Add(context.Background(), 0)
+	k.recommendationTotal.Add(context.Background(), 0)
+	k.contextBytesSaved.Add(context.Background(), 0)
+	k.sessionsCreated.Add(context.Background(), 0)
+	k.sessionsClosed.Add(context.Background(), 0)
+	k.discoveryRequests.Add(context.Background(), 0)
+	k.firstToolRate.Record(context.Background(), 0)
+	k.recommendationAcceptanceRate.Record(context.Background(), 0)
+	k.policyDenialRateBadRecommendation.Record(context.Background(), 0)
+
+	return k
 }
 
 // ObserveToolCall records a tool invocation for the given task context.
 func (k *KPIMetrics) ObserveToolCall(taskContext string) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if taskContext == "" {
-		taskContext = "unknown"
+	task := strings.TrimSpace(taskContext)
+	if task == "" {
+		task = "unknown"
 	}
-	k.toolCallsPerTask[taskContext]++
+	k.toolCallsPerTask.Add(
+		context.Background(),
+		1,
+		metricapi.WithAttributes(attribute.String("task", task)),
+	)
 }
 
 // ObserveFirstToolResult records whether the first tool invocation in a session
 // succeeded or not.
 func (k *KPIMetrics) ObserveFirstToolResult(succeeded bool) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	k.firstToolTotal++
+	total := k.firstToolTotalCount.Add(1)
+	k.firstToolTotal.Add(context.Background(), 1)
 	if succeeded {
-		k.firstToolSuccess++
+		k.firstToolSuccessCount.Add(1)
 	}
+	k.firstToolRate.Record(context.Background(), ratio(k.firstToolSuccessCount.Load(), total))
 }
 
 // ObserveRecommendationUsed records when a recommended tool was actually invoked.
 func (k *KPIMetrics) ObserveRecommendationUsed(used bool) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	k.recommendedTotal++
+	total := k.recommendedTotalCount.Add(1)
+	k.recommendationTotal.Add(context.Background(), 1)
 	if used {
-		k.recommendedUsed++
+		k.recommendedUsedCount.Add(1)
 	}
+	k.recommendationAcceptanceRate.Record(context.Background(), ratio(k.recommendedUsedCount.Load(), total))
 }
 
 // ObservePolicyDenialAfterRecommendation records a policy denial on a recommended tool.
 func (k *KPIMetrics) ObservePolicyDenialAfterRecommendation(denied bool) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	k.policyDenialAfterRecN++
+	total := k.policyDenialAfterRecommendationN.Add(1)
 	if denied {
-		k.policyDenialAfterRec++
+		k.policyDenialAfterRecommendation.Add(1)
 	}
+	k.policyDenialRateBadRecommendation.Record(
+		context.Background(),
+		ratio(k.policyDenialAfterRecommendation.Load(), total),
+	)
 }
 
 // ObserveContextBytesSaved records bytes saved by using compact discovery.
 func (k *KPIMetrics) ObserveContextBytesSaved(bytes int64) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	k.contextBytesSaved += bytes
+	if bytes <= 0 {
+		return
+	}
+	k.contextBytesSaved.Add(context.Background(), bytes)
 }
 
 // ObserveSessionCreated increments the sessions-created counter.
 func (k *KPIMetrics) ObserveSessionCreated() {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	k.sessionsCreated++
+	k.sessionsCreated.Add(context.Background(), 1)
 }
 
 // ObserveSessionClosed increments the sessions-closed counter.
 func (k *KPIMetrics) ObserveSessionClosed() {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	k.sessionsClosed++
+	k.sessionsClosed.Add(context.Background(), 1)
 }
 
 // ObserveDiscoveryRequest increments the discovery-requests counter.
 func (k *KPIMetrics) ObserveDiscoveryRequest() {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	k.discoveryRequests++
+	k.discoveryRequests.Add(context.Background(), 1)
 }
 
 // ObserveInvocationDenied increments the denied-invocations counter for the given reason.
 func (k *KPIMetrics) ObserveInvocationDenied(reason string) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if reason == "" {
-		reason = "unspecified"
+	normalized := strings.TrimSpace(reason)
+	if normalized == "" {
+		normalized = "unspecified"
 	}
-	k.invocationsDenied[reason]++
+	k.invocationsDenied.Add(
+		context.Background(),
+		1,
+		metricapi.WithAttributes(attribute.String("reason", normalized)),
+	)
 }
 
 // PrometheusText returns Prometheus exposition format text for all KPI metrics.
 func (k *KPIMetrics) PrometheusText() string {
-	k.mu.RLock()
-	defer k.mu.RUnlock()
+	return renderPrometheusText(func(name string) bool {
+		switch name {
+		case "workspace_tool_calls_per_task",
+			"workspace_success_on_first_tool_rate",
+			"workspace_success_on_first_tool_total",
+			"workspace_recommendation_acceptance_rate",
+			"workspace_recommendation_total",
+			"workspace_policy_denial_rate_bad_recommendation",
+			"workspace_context_bytes_saved",
+			"workspace_sessions_created_total",
+			"workspace_sessions_closed_total",
+			"workspace_discovery_requests_total",
+			"workspace_invocations_denied_total":
+			return true
+		default:
+			return false
+		}
+	})
+}
 
-	var b strings.Builder
-
-	b.WriteString("# HELP workspace_tool_calls_per_task Total tool invocations by task context.\n")
-	b.WriteString("# TYPE workspace_tool_calls_per_task counter\n")
-	for _, task := range sortedInnerKeys(k.toolCallsPerTask) {
-		fmt.Fprintf(&b, //nolint:gocritic // Prometheus exposition format requires explicit quotes
-			"workspace_tool_calls_per_task{task=\"%s\"} %d\n",
-			escapePrometheusLabelValue(task),
-			k.toolCallsPerTask[task],
-		)
+func ratio(numerator, denominator uint64) float64 {
+	if denominator == 0 {
+		return 0
 	}
-
-	b.WriteString("# HELP workspace_success_on_first_tool Whether the first tool in a session succeeded.\n")
-	b.WriteString("# TYPE workspace_success_on_first_tool gauge\n")
-	rate := float64(0)
-	if k.firstToolTotal > 0 {
-		rate = float64(k.firstToolSuccess) / float64(k.firstToolTotal)
-	}
-	fmt.Fprintf(&b, "workspace_success_on_first_tool_rate %f\n", rate)
-	fmt.Fprintf(&b, "workspace_success_on_first_tool_total %d\n", k.firstToolTotal)
-
-	b.WriteString("# HELP workspace_recommendation_acceptance_rate Rate of recommended tools actually used.\n")
-	b.WriteString("# TYPE workspace_recommendation_acceptance_rate gauge\n")
-	recRate := float64(0)
-	if k.recommendedTotal > 0 {
-		recRate = float64(k.recommendedUsed) / float64(k.recommendedTotal)
-	}
-	fmt.Fprintf(&b, "workspace_recommendation_acceptance_rate %f\n", recRate)
-	fmt.Fprintf(&b, "workspace_recommendation_total %d\n", k.recommendedTotal)
-
-	b.WriteString("# HELP workspace_policy_denial_rate_bad_recommendation Rate of policy denials on recommended tools.\n")
-	b.WriteString("# TYPE workspace_policy_denial_rate_bad_recommendation gauge\n")
-	denialRate := float64(0)
-	if k.policyDenialAfterRecN > 0 {
-		denialRate = float64(k.policyDenialAfterRec) / float64(k.policyDenialAfterRecN)
-	}
-	fmt.Fprintf(&b, "workspace_policy_denial_rate_bad_recommendation %f\n", denialRate)
-
-	b.WriteString("# HELP workspace_context_bytes_saved Total bytes saved by compact discovery.\n")
-	b.WriteString("# TYPE workspace_context_bytes_saved counter\n")
-	fmt.Fprintf(&b, "workspace_context_bytes_saved %d\n", k.contextBytesSaved)
-
-	b.WriteString("# HELP workspace_sessions_created_total Total sessions successfully created.\n")
-	b.WriteString("# TYPE workspace_sessions_created_total counter\n")
-	fmt.Fprintf(&b, "workspace_sessions_created_total %d\n", k.sessionsCreated)
-
-	b.WriteString("# HELP workspace_sessions_closed_total Total sessions successfully closed.\n")
-	b.WriteString("# TYPE workspace_sessions_closed_total counter\n")
-	fmt.Fprintf(&b, "workspace_sessions_closed_total %d\n", k.sessionsClosed)
-
-	b.WriteString("# HELP workspace_discovery_requests_total Total tool discovery requests served.\n")
-	b.WriteString("# TYPE workspace_discovery_requests_total counter\n")
-	fmt.Fprintf(&b, "workspace_discovery_requests_total %d\n", k.discoveryRequests)
-
-	b.WriteString("# HELP workspace_invocations_denied_total Total denied invocations by denial reason.\n")
-	b.WriteString("# TYPE workspace_invocations_denied_total counter\n")
-	for _, reason := range sortedInnerKeys(k.invocationsDenied) {
-		fmt.Fprintf(&b, "workspace_invocations_denied_total{reason=\"%s\"} %d\n",
-			escapePrometheusLabelValue(reason),
-			k.invocationsDenied[reason],
-		)
-	}
-
-	return b.String()
+	return float64(numerator) / float64(denominator)
 }
 
 // KPIPrometheusMetrics returns the KPI metrics as Prometheus text. Called from

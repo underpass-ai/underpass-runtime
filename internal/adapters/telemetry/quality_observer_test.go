@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
+	"go.opentelemetry.io/otel/metric/noop"
 )
 
 func testMetrics() domain.InvocationQualityMetrics {
@@ -58,6 +59,13 @@ func TestSlogQualityObserver(t *testing.T) {
 			t.Errorf("expected %q in log output, got: %s", expected, output)
 		}
 	}
+}
+
+func TestOTelQualityObserverWithNoopMeterDoesNotPanic(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	obs := NewOTelQualityObserver(meter)
+
+	obs.ObserveInvocationQuality(context.Background(), testMetrics(), testContext())
 }
 
 func TestCompositeQualityObserver(t *testing.T) {

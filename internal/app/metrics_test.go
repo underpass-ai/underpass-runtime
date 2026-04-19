@@ -8,6 +8,8 @@ import (
 )
 
 func TestInvocationMetricsPrometheusText(t *testing.T) {
+	installTestMetricReader(t)
+
 	metrics := newInvocationMetrics()
 	metrics.Observe(domain.Invocation{
 		ToolName:   "fs.read_file",
