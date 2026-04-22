@@ -259,9 +259,10 @@ func listOwnedReplicaSets(
 	}
 
 	items := make([]appsv1.ReplicaSet, 0, len(list.Items))
-	for _, item := range list.Items {
-		if deployment == nil || replicaSetOwnedByDeployment(item, deployment) {
-			items = append(items, item)
+	for i := range list.Items {
+		item := &list.Items[i]
+		if deployment == nil || replicaSetOwnedByDeployment(*item, deployment) {
+			items = append(items, *item)
 		}
 	}
 	sortReplicaSets(items)
@@ -291,7 +292,7 @@ func sortReplicaSets(items []appsv1.ReplicaSet) {
 			return leftRevision > rightRevision
 		}
 		if !items[i].CreationTimestamp.Equal(&items[j].CreationTimestamp) {
-			return items[i].CreationTimestamp.Time.After(items[j].CreationTimestamp.Time)
+			return items[i].CreationTimestamp.After(items[j].CreationTimestamp.Time)
 		}
 		return items[i].Name < items[j].Name
 	})
