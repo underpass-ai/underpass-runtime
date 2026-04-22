@@ -40,6 +40,7 @@ func TestDefaultCapabilities_PolicyConsistency(t *testing.T) {
 		for _, name := range []string{"k8s.get_pods", "k8s.get_services", "k8s.get_deployments"} {
 			requireK8sReadPolicy(t, capMap, name)
 		}
+		requireK8sReplicaSetReadPolicy(t, capMap, "k8s.get_replicasets")
 	})
 
 	t.Run("go_tools", func(t *testing.T) {
@@ -131,6 +132,26 @@ func requireK8sReadPolicy(t *testing.T, capMap map[string]domain.Capability, nam
 	}
 	if len(cap.Policy.NamespaceFields) != 1 {
 		t.Fatalf("%s: expected 1 NamespaceField, got %d", name, len(cap.Policy.NamespaceFields))
+	}
+}
+
+func requireK8sReplicaSetReadPolicy(t *testing.T, capMap map[string]domain.Capability, name string) {
+	t.Helper()
+	cap := requireCapability(t, capMap, name)
+	if cap.Scope != domain.ScopeCluster {
+		t.Fatalf("%s: expected ScopeCluster, got %v", name, cap.Scope)
+	}
+	if cap.RiskLevel != domain.RiskLow {
+		t.Fatalf("%s: expected RiskLow, got %v", name, cap.RiskLevel)
+	}
+	if cap.Constraints.TimeoutSeconds != 10 {
+		t.Fatalf("%s: expected TimeoutSeconds=10, got %d", name, cap.Constraints.TimeoutSeconds)
+	}
+	if len(cap.Policy.NamespaceFields) != 1 {
+		t.Fatalf("%s: expected 1 NamespaceField, got %d", name, len(cap.Policy.NamespaceFields))
+	}
+	if len(cap.Policy.ArgFields) != 1 || cap.Policy.ArgFields[0].Field != "deployment_name" {
+		t.Fatalf("%s: expected deployment_name arg policy, got %#v", name, cap.Policy.ArgFields)
 	}
 }
 

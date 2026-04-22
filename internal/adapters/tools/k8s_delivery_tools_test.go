@@ -6,10 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/underpass-ai/underpass-runtime/internal/app"
@@ -211,6 +213,304 @@ func TestK8sRolloutStatusHandler_Timeout(t *testing.T) {
 	}
 }
 
+func TestK8sRolloutPauseHandler_Succeeds(t *testing.T) {
+	replicas := int32(1)
+	client := k8sfake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: testK8sNamespaceSandbox},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "busybox:1.36"}}},
+				},
+			},
+		},
+	)
+	handler := NewK8sRolloutPauseHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(
+		context.Background(),
+		session,
+		json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	)
+	if err != nil {
+		t.Fatalf("unexpected k8s.rollout_pause error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["paused"] != true {
+		t.Fatalf("expected paused=true, got %#v", output["paused"])
+	}
+
+	deployment, getErr := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "api", metav1.GetOptions{})
+	if getErr != nil {
+		t.Fatalf("expected deployment after pause, got %v", getErr)
+	}
+	if !deployment.Spec.Paused {
+		t.Fatal("expected deployment to be paused")
+	}
+}
+
+func TestK8sRolloutUndoHandler_Succeeds(t *testing.T) {
+	replicas := int32(2)
+	controller := true
+	deploymentUID := types.UID("deploy-uid")
+	now := time.Now().UTC()
+	client := k8sfake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: testK8sNamespaceSandbox, UID: deploymentUID},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "new"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:2"}}},
+				},
+			},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-new",
+				Namespace:         testK8sNamespaceSandbox,
+				UID:               types.UID("rs-new"),
+				CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Minute)),
+				Labels:            map[string]string{"app": "api", "pod-template-hash": "new"},
+				Annotations:       map[string]string{"deployment.kubernetes.io/revision": "5"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "new"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:2"}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 2, AvailableReplicas: 2},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-old",
+				Namespace:         testK8sNamespaceSandbox,
+				UID:               types.UID("rs-old"),
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+				Labels:            map[string]string{"app": "api", "pod-template-hash": "old"},
+				Annotations:       map[string]string{"deployment.kubernetes.io/revision": "4"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "old"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:1"}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 2, AvailableReplicas: 2},
+		},
+	)
+	handler := NewK8sRolloutUndoHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(
+		context.Background(),
+		session,
+		json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	)
+	if err != nil {
+		t.Fatalf("unexpected k8s.rollout_undo error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["rolled_back"] != true || output["target_revision"] != 4 {
+		t.Fatalf("unexpected rollout_undo output: %#v", output)
+	}
+
+	deployment, getErr := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "api", metav1.GetOptions{})
+	if getErr != nil {
+		t.Fatalf("expected deployment after rollback, got %v", getErr)
+	}
+	if deployment.Spec.Template.Spec.Containers[0].Image != "ghcr.io/acme/api:1" {
+		t.Fatalf("expected rollback to previous template, got %#v", deployment.Spec.Template.Spec.Containers[0].Image)
+	}
+}
+
+func TestK8sRolloutUndoHandler_AllowsScaledDownPreviousReplicaSet(t *testing.T) {
+	replicas := int32(1)
+	zeroReplicas := int32(0)
+	controller := true
+	deploymentUID := types.UID("deploy-uid")
+	now := time.Now().UTC()
+	client := k8sfake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: testK8sNamespaceSandbox, UID: deploymentUID},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "new"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:2"}}},
+				},
+			},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-new",
+				Namespace:         testK8sNamespaceSandbox,
+				UID:               types.UID("rs-new"),
+				CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Minute)),
+				Labels:            map[string]string{"app": "api", "pod-template-hash": "new"},
+				Annotations:       map[string]string{"deployment.kubernetes.io/revision": "5"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "new"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:2"}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 1, AvailableReplicas: 1},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-old",
+				Namespace:         testK8sNamespaceSandbox,
+				UID:               types.UID("rs-old"),
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+				Labels:            map[string]string{"app": "api", "pod-template-hash": "old"},
+				Annotations: map[string]string{
+					"deployment.kubernetes.io/revision":         "4",
+					"deployment.kubernetes.io/desired-replicas": "1",
+				},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &zeroReplicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "old"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:1"}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{},
+		},
+	)
+	handler := NewK8sRolloutUndoHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(
+		context.Background(),
+		session,
+		json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	)
+	if err != nil {
+		t.Fatalf("unexpected k8s.rollout_undo error for scaled-down previous rs: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["rolled_back"] != true || output["target_revision"] != 4 {
+		t.Fatalf("unexpected rollout_undo output for scaled-down previous rs: %#v", output)
+	}
+}
+
+func TestK8sRolloutUndoHandler_DeniesYoungRollout(t *testing.T) {
+	replicas := int32(1)
+	controller := true
+	deploymentUID := types.UID("deploy-uid")
+	now := time.Now().UTC()
+	client := k8sfake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: testK8sNamespaceSandbox, UID: deploymentUID},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "new"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:2"}}},
+				},
+			},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-new",
+				Namespace:         testK8sNamespaceSandbox,
+				CreationTimestamp: metav1.NewTime(now.Add(-30 * time.Second)),
+				Labels:            map[string]string{"app": "api", "pod-template-hash": "new"},
+				Annotations:       map[string]string{"deployment.kubernetes.io/revision": "5"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "new"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:2"}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 1},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-old",
+				Namespace:         testK8sNamespaceSandbox,
+				CreationTimestamp: metav1.NewTime(now.Add(-5 * time.Minute)),
+				Labels:            map[string]string{"app": "api", "pod-template-hash": "old"},
+				Annotations:       map[string]string{"deployment.kubernetes.io/revision": "4"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "old"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:1"}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 1},
+		},
+	)
+	handler := NewK8sRolloutUndoHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`))
+	if err == nil {
+		t.Fatal("expected rollout_too_young denial")
+	}
+	if err.Code != app.ErrorCodeRolloutTooYoung {
+		t.Fatalf("expected rollout_too_young, got %#v", err)
+	}
+}
+
 func TestK8sRestartDeploymentHandler_Succeeds(t *testing.T) {
 	replicas := int32(0)
 	client := k8sfake.NewSimpleClientset(
@@ -269,6 +569,12 @@ func TestK8sDeliveryHandlerNames(t *testing.T) {
 	}
 	if NewK8sRolloutStatusHandler(client, testK8sNamespaceDefault).Name() != "k8s.rollout_status" {
 		t.Fatal("unexpected K8sRolloutStatusHandler name")
+	}
+	if NewK8sRolloutPauseHandler(client, testK8sNamespaceDefault).Name() != "k8s.rollout_pause" {
+		t.Fatal("unexpected K8sRolloutPauseHandler name")
+	}
+	if NewK8sRolloutUndoHandler(client, testK8sNamespaceDefault).Name() != "k8s.rollout_undo" {
+		t.Fatal("unexpected K8sRolloutUndoHandler name")
 	}
 	if NewK8sRestartDeploymentHandler(client, testK8sNamespaceDefault).Name() != "k8s.restart_deployment" {
 		t.Fatal("unexpected K8sRestartDeploymentHandler name")

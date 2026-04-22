@@ -26,10 +26,13 @@ func K8sBundle() Bundle {
 				tooladapter.NewK8sGetPodsHandler(client, ns),
 				tooladapter.NewK8sGetServicesHandler(client, ns),
 				tooladapter.NewK8sGetDeploymentsHandler(client, ns),
+				tooladapter.NewK8sGetReplicaSetsHandler(client, ns),
 				tooladapter.NewK8sGetImagesHandler(client, ns),
 				tooladapter.NewK8sGetLogsHandler(client, ns),
 				tooladapter.NewK8sApplyManifestHandler(client, ns),
 				tooladapter.NewK8sRolloutStatusHandler(client, ns),
+				tooladapter.NewK8sRolloutPauseHandler(client, ns),
+				tooladapter.NewK8sRolloutUndoHandler(client, ns),
 				tooladapter.NewK8sRestartDeploymentHandler(client, ns),
 				tooladapter.NewK8sSetImageHandler(client, ns),
 			}

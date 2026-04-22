@@ -173,6 +173,33 @@ This creates:
 
 Select via session metadata: `"runner_profile": "toolchains"`.
 
+## Enabling Delivery Tools
+
+Rollout and manifest mutation tools require the Kubernetes backend plus delivery
+RBAC bound to the runtime pod.
+
+```bash
+helm upgrade --install underpass-runtime \
+  charts/underpass-runtime \
+  -n underpass-runtime \
+  --set config.workspaceBackend=kubernetes \
+  --set kubernetesBackend.namespace=underpass-runtime \
+  --set kubernetesBackend.runnerImage=ghcr.io/underpass-ai/underpass-runtime/runner:v1.0.0-base \
+  --set kubernetesBackend.rbac.create=true \
+  --set kubernetesBackend.deliveryTools.enabled=true
+```
+
+That wiring sets `WORKSPACE_ENABLE_K8S_DELIVERY_TOOLS=true` and binds the
+delivery `Role` to the runtime `ServiceAccount` in the release namespace.
+
+For the rollout-specialist tools added in runtime, create sessions with:
+
+- `tool_profile=runtime-rollout-narrow`
+- `environment=<env>`
+- `runtime_environment=<same-env>` if you want the session to carry the runtime environment explicitly
+
+The job-based E2E test `23-runtime-rollout-tools` expects exactly this setup.
+
 ---
 
 ## Enabling Monitoring

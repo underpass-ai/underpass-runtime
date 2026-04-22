@@ -1,9 +1,12 @@
 {{- if .Values.kubernetesBackend.deliveryTools.enabled }}
+{{- $deliveryNamespace := .Values.kubernetesBackend.deliveryTools.namespace | default .Values.kubernetesBackend.namespace | default .Release.Namespace -}}
+{{- $deliveryServiceAccount := default (printf "%s-delivery" (include "underpass-runtime.fullname" .)) .Values.kubernetesBackend.deliveryTools.serviceAccount -}}
+{{- $runtimeServiceAccount := include "underpass-runtime.serviceAccountName" . -}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: {{ default (printf "%s-delivery" (include "underpass-runtime.fullname" .)) .Values.kubernetesBackend.deliveryTools.serviceAccount }}
-  namespace: {{ .Values.kubernetesBackend.deliveryTools.namespace | default .Values.kubernetesBackend.namespace | default .Release.Namespace }}
+  name: {{ $deliveryServiceAccount }}
+  namespace: {{ $deliveryNamespace }}
   labels:
     {{- include "underpass-runtime.labels" . | nindent 4 }}
 automountServiceAccountToken: true
@@ -12,7 +15,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "underpass-runtime.fullname" . }}-delivery
-  namespace: {{ .Values.kubernetesBackend.deliveryTools.namespace | default .Values.kubernetesBackend.namespace | default .Release.Namespace }}
+  namespace: {{ $deliveryNamespace }}
   labels:
     {{- include "underpass-runtime.labels" . | nindent 4 }}
 rules:
@@ -33,7 +36,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "underpass-runtime.fullname" . }}-delivery
-  namespace: {{ .Values.kubernetesBackend.deliveryTools.namespace | default .Values.kubernetesBackend.namespace | default .Release.Namespace }}
+  namespace: {{ $deliveryNamespace }}
   labels:
     {{- include "underpass-runtime.labels" . | nindent 4 }}
 roleRef:
@@ -42,6 +45,11 @@ roleRef:
   name: {{ include "underpass-runtime.fullname" . }}-delivery
 subjects:
   - kind: ServiceAccount
-    name: {{ default (printf "%s-delivery" (include "underpass-runtime.fullname" .)) .Values.kubernetesBackend.deliveryTools.serviceAccount }}
-    namespace: {{ .Values.kubernetesBackend.deliveryTools.namespace | default .Values.kubernetesBackend.namespace | default .Release.Namespace }}
+    name: {{ $runtimeServiceAccount }}
+    namespace: {{ .Release.Namespace }}
+  {{- if or (ne $deliveryServiceAccount $runtimeServiceAccount) (ne $deliveryNamespace .Release.Namespace) }}
+  - kind: ServiceAccount
+    name: {{ $deliveryServiceAccount }}
+    namespace: {{ $deliveryNamespace }}
+  {{- end }}
 {{- end }}

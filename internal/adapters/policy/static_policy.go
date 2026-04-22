@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,6 +17,7 @@ const (
 	errFieldMustBeArray        = "field %s must be an array"
 	errFieldMustContainStrings = "field %s must contain strings"
 	errFieldMustBeString       = "field %s must be a string"
+	runtimeRolloutToolProfile  = "runtime-rollout-narrow"
 )
 
 type StaticPolicy struct{}
@@ -47,6 +49,10 @@ func (p *StaticPolicy) Authorize(_ context.Context, input app.PolicyInput) (app.
 			ErrorCode: app.ErrorCodeApprovalRequired,
 			Reason:    "tool requires explicit approval",
 		}, nil
+	}
+
+	if rolloutDecision, ok := authorizeRuntimeRolloutCapability(input); ok {
+		return rolloutDecision, nil
 	}
 
 	if pathAllowed, reason := argsWithinAllowedPaths(input.Args, input.Session.AllowedPaths, input.Capability.Policy.PathFields); !pathAllowed {
@@ -122,6 +128,72 @@ func (p *StaticPolicy) Authorize(_ context.Context, input app.PolicyInput) (app.
 	}
 
 	return app.PolicyDecision{Allow: true}, nil
+}
+
+func authorizeRuntimeRolloutCapability(input app.PolicyInput) (app.PolicyDecision, bool) {
+	name := strings.TrimSpace(input.Capability.Name)
+	if !requiresRuntimeRolloutProfile(name) {
+		return app.PolicyDecision{}, false
+	}
+
+	if strings.TrimSpace(input.Session.Metadata["tool_profile"]) != runtimeRolloutToolProfile {
+		return app.PolicyDecision{
+			Allow:     false,
+			ErrorCode: app.ErrorCodePolicyDenied,
+			Reason:    "tool requires session metadata tool_profile=runtime-rollout-narrow",
+		}, true
+	}
+
+	if !isRuntimeRolloutWriteCapability(name) {
+		return app.PolicyDecision{}, false
+	}
+
+	runtimeEnv := runtimeRolloutEnvironment(input.Session.Metadata)
+	if runtimeEnv == "" {
+		return app.PolicyDecision{}, false
+	}
+
+	sessionEnv := strings.ToLower(strings.TrimSpace(input.Session.Metadata["environment"]))
+	if sessionEnv == runtimeEnv {
+		return app.PolicyDecision{}, false
+	}
+
+	return app.PolicyDecision{
+		Allow:     false,
+		ErrorCode: app.ErrorCodeEnvironmentMismatch,
+		Reason:    fmt.Sprintf("session environment %q does not match runtime environment %q", sessionEnv, runtimeEnv),
+	}, true
+}
+
+func requiresRuntimeRolloutProfile(name string) bool {
+	switch name {
+	case "k8s.get_replicasets", "k8s.rollout_pause", "k8s.rollout_undo":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRuntimeRolloutWriteCapability(name string) bool {
+	switch name {
+	case "k8s.rollout_pause", "k8s.rollout_undo":
+		return true
+	default:
+		return false
+	}
+}
+
+func runtimeRolloutEnvironment(metadata map[string]string) string {
+	if len(metadata) > 0 {
+		if value := strings.ToLower(strings.TrimSpace(metadata["runtime_environment"])); value != "" && value != "unknown" {
+			return value
+		}
+	}
+	value := strings.ToLower(strings.TrimSpace(os.Getenv("WORKSPACE_ENV")))
+	if value == "" || value == "unknown" {
+		return ""
+	}
+	return value
 }
 
 func scopeAllowed(roles []string, scope domain.Scope) bool {

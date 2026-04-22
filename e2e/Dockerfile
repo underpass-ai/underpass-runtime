@@ -34,6 +34,7 @@ COPY e2e/tests/18-policy-driven-recommendations/test_policy_driven_recommendatio
 COPY e2e/tests/19-neural-ts-recommendations/test_neural_ts_recommendations.py /app/tests/19/test.py
 COPY e2e/tests/21-agent-feedback-loop/test_feedback.py                        /app/tests/21/test.py
 COPY e2e/tests/22-swe-agent-tools/test_swe_agent_tools.py                    /app/tests/22/test.py
+COPY e2e/tests/23-runtime-rollout-tools/test_runtime_rollout_tools.py        /app/tests/23/test.py
 
 RUN groupadd -r testuser && useradd -r -m -g testuser -u 1000 testuser && \
     chown -R testuser:testuser /app

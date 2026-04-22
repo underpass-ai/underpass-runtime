@@ -84,6 +84,60 @@ func TestStaticPolicy_DeniesPathOutsideAllowList(t *testing.T) {
 	}
 }
 
+func TestStaticPolicy_RuntimeRolloutRequiresToolProfile(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata:  map[string]string{},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.get_replicasets",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if decision.Allow {
+		t.Fatal("expected rollout tool profile denial")
+	}
+	if decision.ErrorCode != app.ErrorCodePolicyDenied {
+		t.Fatalf("unexpected error code: %s", decision.ErrorCode)
+	}
+}
+
+func TestStaticPolicy_RuntimeRolloutWriteRequiresEnvironmentMatch(t *testing.T) {
+	t.Setenv("WORKSPACE_ENV", "prod")
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata: map[string]string{
+				"tool_profile": "runtime-rollout-narrow",
+				"environment":  "staging",
+			},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.rollout_pause",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if decision.Allow {
+		t.Fatal("expected environment mismatch denial")
+	}
+	if decision.ErrorCode != app.ErrorCodeEnvironmentMismatch {
+		t.Fatalf("unexpected error code: %s", decision.ErrorCode)
+	}
+}
+
 func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 	payload := map[string]any{
 		testFieldPath: "src/main.go",

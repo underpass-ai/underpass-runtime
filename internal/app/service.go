@@ -483,6 +483,10 @@ func (s *Service) completeToolInvocation(
 		inv.LogsRef = logsRef
 	}
 	if tc.runErr != nil {
+		if IsPolicyDeniedCode(tc.runErr.Code) {
+			inv = s.denyInvocation(ctx, inv, tc.startedAt, tc.session, tc.runErr)
+			return inv, policyDeniedError(tc.runErr.Code, tc.runErr.Message)
+		}
 		inv = s.finishWithError(inv, tc.startedAt, tc.runErr)
 		_ = s.storeInvocation(ctx, inv)
 		s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
@@ -968,7 +972,7 @@ func unsupportedRuntimeReason(session domain.Session, capability domain.Capabili
 
 func isK8sDeliveryCapability(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "k8s.apply_manifest", "k8s.rollout_status", "k8s.restart_deployment":
+	case "k8s.apply_manifest", "k8s.rollout_status", "k8s.restart_deployment", "k8s.rollout_pause", "k8s.rollout_undo":
 		return true
 	default:
 		return false
