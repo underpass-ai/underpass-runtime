@@ -784,7 +784,6 @@ func TestInvokeToolDeniesClusterScopeWhenRuntimeIsNotKubernetes(t *testing.T) {
 	}
 }
 
-
 func TestInvokeTool_MapsToolPolicyPreflightToDeniedInvocation(t *testing.T) {
 	session := defaultSession()
 	capability := defaultCapability()
@@ -813,6 +812,7 @@ func TestInvokeTool_MapsToolPolicyPreflightToDeniedInvocation(t *testing.T) {
 		t.Fatalf("unexpected invocation error payload: %#v", invocation.Error)
 	}
 }
+
 func TestGetInvocationAndArtifactsBranches(t *testing.T) {
 	capability := defaultCapability()
 	session := defaultSession()
