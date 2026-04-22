@@ -511,6 +511,497 @@ func TestK8sRolloutUndoHandler_DeniesYoungRollout(t *testing.T) {
 	}
 }
 
+func TestK8sGetReplicaSetsHandler_ValidationAndLookupFailures(t *testing.T) {
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	t.Run("invalid_args", func(t *testing.T) {
+		handler := NewK8sGetReplicaSetsHandler(k8sfake.NewSimpleClientset(), testK8sNamespaceDefault)
+		_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{`))
+		if err == nil {
+			t.Fatal("expected invalid args error")
+		}
+		if err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("expected invalid_argument, got %#v", err)
+		}
+	})
+
+	t.Run("missing_client", func(t *testing.T) {
+		handler := NewK8sGetReplicaSetsHandler(nil, testK8sNamespaceDefault)
+		_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox"}`))
+		if err == nil {
+			t.Fatal("expected execution_failed when client is nil")
+		}
+		if err.Code != app.ErrorCodeExecutionFailed {
+			t.Fatalf("expected execution_failed, got %#v", err)
+		}
+	})
+
+	t.Run("deployment_not_found", func(t *testing.T) {
+		handler := NewK8sGetReplicaSetsHandler(k8sfake.NewSimpleClientset(), testK8sNamespaceDefault)
+		_, err := handler.Invoke(
+			context.Background(),
+			session,
+			json.RawMessage(`{"namespace":"sandbox","deployment_name":"missing"}`),
+		)
+		if err == nil {
+			t.Fatal("expected not_found error")
+		}
+		if err.Code != app.ErrorCodeNotFound {
+			t.Fatalf("expected not_found, got %#v", err)
+		}
+	})
+}
+
+func TestK8sGetReplicaSetsHandler_ListsNamespaceReplicaSetsWithoutDeploymentFilter(t *testing.T) {
+	replicas := int32(1)
+	now := time.Now().UTC()
+	client := k8sfake.NewSimpleClientset(
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-new",
+				Namespace:         testK8sNamespaceSandbox,
+				CreationTimestamp: metav1.NewTime(now),
+				Annotations:       map[string]string{k8sDeploymentRevisionAnnotation: "5"},
+			},
+			Spec:   appsv1.ReplicaSetSpec{Replicas: &replicas},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 1, AvailableReplicas: 1},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-old",
+				Namespace:         testK8sNamespaceSandbox,
+				CreationTimestamp: metav1.NewTime(now.Add(-time.Minute)),
+				Annotations:       map[string]string{k8sDeploymentRevisionAnnotation: "4"},
+			},
+			Spec:   appsv1.ReplicaSetSpec{Replicas: &replicas},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 1, AvailableReplicas: 1},
+		},
+	)
+	handler := NewK8sGetReplicaSetsHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox"}`))
+	if err != nil {
+		t.Fatalf("unexpected k8s.get_replicasets list error: %#v", err)
+	}
+
+	output := result.Output.(map[string]any)
+	replicaSets := output["replicasets"].([]map[string]any)
+	if len(replicaSets) != 2 {
+		t.Fatalf("expected 2 replicasets, got %#v", replicaSets)
+	}
+	if output["summary"] != "listed 2 replicasets in namespace sandbox" {
+		t.Fatalf("unexpected summary: %#v", output["summary"])
+	}
+}
+
+func TestTargetRollbackReplicaSet_ErrorPaths(t *testing.T) {
+	replicas := int32(1)
+	current := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "api-rs-current"}}
+	unhealthy := appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "api-rs-old",
+			Annotations: map[string]string{k8sDeploymentRevisionAnnotation: "4"},
+		},
+		Spec:   appsv1.ReplicaSetSpec{Replicas: &replicas},
+		Status: appsv1.ReplicaSetStatus{},
+	}
+
+	t.Run("empty", func(t *testing.T) {
+		_, err := targetRollbackReplicaSet(nil, nil, 0)
+		if err == nil {
+			t.Fatal("expected no previous healthy replicaset error")
+		}
+		if err.Code != app.ErrorCodeNoPreviousHealthyReplicaSet {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+
+	t.Run("revision_not_found", func(t *testing.T) {
+		_, err := targetRollbackReplicaSet([]appsv1.ReplicaSet{unhealthy}, nil, 9)
+		if err == nil {
+			t.Fatal("expected revision not found error")
+		}
+		if err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+
+	t.Run("requested_revision_unhealthy", func(t *testing.T) {
+		_, err := targetRollbackReplicaSet([]appsv1.ReplicaSet{unhealthy}, nil, 4)
+		if err == nil {
+			t.Fatal("expected unhealthy rollback target error")
+		}
+		if err.Code != app.ErrorCodeNoPreviousHealthyReplicaSet {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+
+	t.Run("no_previous_healthy", func(t *testing.T) {
+		_, err := targetRollbackReplicaSet([]appsv1.ReplicaSet{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "api-rs-current",
+					Annotations: map[string]string{k8sDeploymentRevisionAnnotation: "5"},
+				},
+				Status: appsv1.ReplicaSetStatus{ReadyReplicas: 1, AvailableReplicas: 1},
+			},
+			unhealthy,
+		}, current, 0)
+		if err == nil {
+			t.Fatal("expected no previous healthy replicaset error")
+		}
+		if err.Code != app.ErrorCodeNoPreviousHealthyReplicaSet {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+}
+
+func TestReplicaSetRollbackHelpers(t *testing.T) {
+	if replicaSetHealthyRollbackTarget(nil) {
+		t.Fatal("nil replicaset should not be a healthy rollback target")
+	}
+	if replicaSetDesiredReplicas(nil) != 0 {
+		t.Fatal("nil replicaset should report zero desired replicas")
+	}
+	if replicaSetDesiredReplicas(&appsv1.ReplicaSet{}) != 0 {
+		t.Fatal("missing annotation should report zero desired replicas")
+	}
+	if replicaSetDesiredReplicas(&appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{k8sDesiredReplicasAnnotation: "oops"}},
+	}) != 0 {
+		t.Fatal("invalid desired replicas annotation should report zero")
+	}
+	if !replicaSetHealthyRollbackTarget(&appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{k8sDesiredReplicasAnnotation: "2"}},
+	}) {
+		t.Fatal("desired replicas annotation should make scaled-down replicaset a valid rollback target")
+	}
+}
+
+func TestReplicaSetSelectionHelpers(t *testing.T) {
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "api", UID: types.UID("deploy-uid")},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "hash-a"}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:2"}}},
+			},
+		},
+	}
+
+	byHash := appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "api-rs-hash",
+			Labels:          map[string]string{"pod-template-hash": "hash-a"},
+			Annotations:     map[string]string{k8sDeploymentRevisionAnnotation: "5"},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "api", UID: types.UID("deploy-uid")}},
+		},
+		Spec: appsv1.ReplicaSetSpec{
+			Template: deployment.Spec.Template,
+		},
+	}
+	byTemplate := appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "api-rs-template",
+			Annotations:     map[string]string{k8sDeploymentRevisionAnnotation: "4"},
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "api"}},
+		},
+		Spec: appsv1.ReplicaSetSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api"}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:1"}}},
+			},
+		},
+	}
+	wrongOwner := appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "api-rs-other",
+			OwnerReferences: []metav1.OwnerReference{{Kind: "Deployment", Name: "other", UID: types.UID("other")}},
+		},
+	}
+
+	if !replicaSetOwnedByDeployment(byHash, deployment) {
+		t.Fatal("expected matching owner reference to be accepted")
+	}
+	if !replicaSetOwnedByDeployment(byTemplate, deployment) {
+		t.Fatal("expected owner reference without UID to be accepted for matching deployment name")
+	}
+	if replicaSetOwnedByDeployment(wrongOwner, deployment) {
+		t.Fatal("expected mismatched owner reference to be rejected")
+	}
+	if !replicaSetOwnedByDeployment(wrongOwner, nil) {
+		t.Fatal("expected nil deployment to accept replicaset")
+	}
+
+	if got := replicaSetRevision(nil); got != 0 {
+		t.Fatalf("expected nil revision to be zero, got %d", got)
+	}
+	if got := replicaSetRevision(&appsv1.ReplicaSet{}); got != 0 {
+		t.Fatalf("expected missing revision to be zero, got %d", got)
+	}
+	if got := replicaSetRevision(&appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{k8sDeploymentRevisionAnnotation: "oops"}},
+	}); got != 0 {
+		t.Fatalf("expected invalid revision to be zero, got %d", got)
+	}
+
+	if got := replicaSetTemplateHash(nil); got != "" {
+		t.Fatalf("expected nil template hash to be empty, got %q", got)
+	}
+	if got := replicaSetTemplateHash(&byHash); got != "hash-a" {
+		t.Fatalf("expected label template hash, got %q", got)
+	}
+	if got := replicaSetTemplateHash(&appsv1.ReplicaSet{
+		Spec: appsv1.ReplicaSetSpec{
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"pod-template-hash": "hash-b"}}},
+		},
+	}); got != "hash-b" {
+		t.Fatalf("expected template label hash fallback, got %q", got)
+	}
+
+	if got := currentReplicaSet(deployment, []appsv1.ReplicaSet{byTemplate, byHash}); got == nil || got.Name != "api-rs-hash" {
+		t.Fatalf("expected currentReplicaSet to prefer pod-template-hash, got %#v", got)
+	}
+
+	templateDeployment := deployment.DeepCopy()
+	templateDeployment.Spec.Template = byTemplate.Spec.Template
+	if got := currentReplicaSet(templateDeployment, []appsv1.ReplicaSet{wrongOwner, byTemplate}); got == nil || got.Name != "api-rs-template" {
+		t.Fatalf("expected currentReplicaSet to fall back to template match, got %#v", got)
+	}
+
+	sortNow := time.Now().UTC()
+	sorted := []appsv1.ReplicaSet{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "b",
+				CreationTimestamp: metav1.NewTime(sortNow),
+				Annotations:       map[string]string{k8sDeploymentRevisionAnnotation: "5"},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "a",
+				CreationTimestamp: metav1.NewTime(sortNow),
+				Annotations:       map[string]string{k8sDeploymentRevisionAnnotation: "5"},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "old",
+				CreationTimestamp: metav1.NewTime(sortNow.Add(-time.Minute)),
+				Annotations:       map[string]string{k8sDeploymentRevisionAnnotation: "4"},
+			},
+		},
+	}
+	sortReplicaSets(sorted)
+	if sorted[0].Name != "a" || sorted[1].Name != "b" || sorted[2].Name != "old" {
+		t.Fatalf("unexpected sort order: %#v", sorted)
+	}
+}
+
+func TestK8sRolloutResultSummaries(t *testing.T) {
+	pauseOutput := k8sRolloutPauseResult("sandbox", "api", 7, false).Output.(map[string]any)
+	if pauseOutput["summary"] != "deployment sandbox/api is already paused" {
+		t.Fatalf("unexpected pause summary: %#v", pauseOutput)
+	}
+
+	undoOutput := k8sRolloutUndoResult("sandbox", "api", 5, 5, false, 7).Output.(map[string]any)
+	if undoOutput["summary"] != "deployment sandbox/api is already at revision 5" {
+		t.Fatalf("unexpected undo summary: %#v", undoOutput)
+	}
+}
+
+func TestK8sRolloutPauseHandler_AlreadyPaused(t *testing.T) {
+	replicas := int32(1)
+	client := k8sfake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: testK8sNamespaceSandbox},
+			Spec: appsv1.DeploymentSpec{
+				Paused:   true,
+				Replicas: &replicas,
+			},
+			Status: appsv1.DeploymentStatus{ObservedGeneration: 4},
+		},
+	)
+	handler := NewK8sRolloutPauseHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(
+		context.Background(),
+		session,
+		json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	)
+	if err != nil {
+		t.Fatalf("unexpected k8s.rollout_pause error: %#v", err)
+	}
+
+	output := result.Output.(map[string]any)
+	if output["summary"] != "deployment sandbox/api is already paused" {
+		t.Fatalf("unexpected output for already paused deployment: %#v", output)
+	}
+}
+
+func TestK8sRolloutPauseHandler_ValidationAndLookupFailures(t *testing.T) {
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	t.Run("missing_deployment_name", func(t *testing.T) {
+		handler := NewK8sRolloutPauseHandler(k8sfake.NewSimpleClientset(), testK8sNamespaceDefault)
+		_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox"}`))
+		if err == nil {
+			t.Fatal("expected invalid_argument when deployment_name is missing")
+		}
+		if err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+
+	t.Run("deployment_not_found", func(t *testing.T) {
+		handler := NewK8sRolloutPauseHandler(k8sfake.NewSimpleClientset(), testK8sNamespaceDefault)
+		_, err := handler.Invoke(
+			context.Background(),
+			session,
+			json.RawMessage(`{"namespace":"sandbox","deployment_name":"missing"}`),
+		)
+		if err == nil {
+			t.Fatal("expected not_found when deployment is missing")
+		}
+		if err.Code != app.ErrorCodeNotFound {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+}
+
+func TestK8sRolloutUndoHandler_AlreadyAtRequestedRevision(t *testing.T) {
+	replicas := int32(1)
+	controller := true
+	deploymentUID := types.UID("deploy-uid")
+	now := time.Now().UTC()
+	client := k8sfake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: testK8sNamespaceSandbox, UID: deploymentUID},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "current"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:2"}}},
+				},
+			},
+			Status: appsv1.DeploymentStatus{ObservedGeneration: 7},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-current",
+				Namespace:         testK8sNamespaceSandbox,
+				CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Minute)),
+				Labels:            map[string]string{"app": "api", "pod-template-hash": "current"},
+				Annotations:       map[string]string{k8sDeploymentRevisionAnnotation: "5"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "current"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:2"}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 1, AvailableReplicas: 1},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "api-rs-old",
+				Namespace:         testK8sNamespaceSandbox,
+				CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+				Labels:            map[string]string{"app": "api", "pod-template-hash": "old"},
+				Annotations:       map[string]string{k8sDeploymentRevisionAnnotation: "4"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+					Controller: &controller,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "old"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:1"}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 1, AvailableReplicas: 1},
+		},
+	)
+	handler := NewK8sRolloutUndoHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(
+		context.Background(),
+		session,
+		json.RawMessage(`{"namespace":"sandbox","deployment_name":"api","to_revision":5}`),
+	)
+	if err != nil {
+		t.Fatalf("unexpected k8s.rollout_undo error: %#v", err)
+	}
+
+	output := result.Output.(map[string]any)
+	if output["rolled_back"] != false || output["target_revision"] != 5 {
+		t.Fatalf("unexpected output for already-at-revision rollback: %#v", output)
+	}
+}
+
+func TestK8sRolloutUndoHandler_ValidationAndLookupFailures(t *testing.T) {
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	t.Run("missing_deployment_name", func(t *testing.T) {
+		handler := NewK8sRolloutUndoHandler(k8sfake.NewSimpleClientset(), testK8sNamespaceDefault)
+		_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox"}`))
+		if err == nil {
+			t.Fatal("expected invalid_argument when deployment_name is missing")
+		}
+		if err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+
+	t.Run("negative_revision", func(t *testing.T) {
+		handler := NewK8sRolloutUndoHandler(k8sfake.NewSimpleClientset(), testK8sNamespaceDefault)
+		_, err := handler.Invoke(
+			context.Background(),
+			session,
+			json.RawMessage(`{"namespace":"sandbox","deployment_name":"api","to_revision":-1}`),
+		)
+		if err == nil {
+			t.Fatal("expected invalid_argument for negative revision")
+		}
+		if err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+
+	t.Run("deployment_not_found", func(t *testing.T) {
+		handler := NewK8sRolloutUndoHandler(k8sfake.NewSimpleClientset(), testK8sNamespaceDefault)
+		_, err := handler.Invoke(
+			context.Background(),
+			session,
+			json.RawMessage(`{"namespace":"sandbox","deployment_name":"missing"}`),
+		)
+		if err == nil {
+			t.Fatal("expected not_found when deployment is missing")
+		}
+		if err.Code != app.ErrorCodeNotFound {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+}
+
 func TestK8sRestartDeploymentHandler_Succeeds(t *testing.T) {
 	replicas := int32(0)
 	client := k8sfake.NewSimpleClientset(
@@ -564,6 +1055,9 @@ func quoteJSON(value string) string {
 
 func TestK8sDeliveryHandlerNames(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
+	if NewK8sGetReplicaSetsHandler(client, testK8sNamespaceDefault).Name() != "k8s.get_replicasets" {
+		t.Fatal("unexpected K8sGetReplicaSetsHandler name")
+	}
 	if NewK8sApplyManifestHandler(client, testK8sNamespaceDefault).Name() != "k8s.apply_manifest" {
 		t.Fatal("unexpected K8sApplyManifestHandler name")
 	}

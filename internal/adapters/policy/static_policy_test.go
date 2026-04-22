@@ -138,6 +138,82 @@ func TestStaticPolicy_RuntimeRolloutWriteRequiresEnvironmentMatch(t *testing.T) 
 	}
 }
 
+func TestStaticPolicy_RuntimeRolloutReadAllowsMatchingProfile(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata:  map[string]string{"tool_profile": runtimeRolloutToolProfile},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.get_replicasets",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if !decision.Allow {
+		t.Fatalf("expected rollout read capability to be allowed, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_RuntimeRolloutWriteAllowsMatchingRuntimeEnvironment(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata: map[string]string{
+				"tool_profile":        runtimeRolloutToolProfile,
+				"environment":         "prod",
+				"runtime_environment": "prod",
+			},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.rollout_undo",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if !decision.Allow {
+		t.Fatalf("expected rollout write capability to be allowed, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_RuntimeRolloutHelpers(t *testing.T) {
+	if !requiresRuntimeRolloutProfile("k8s.get_replicasets") {
+		t.Fatal("expected k8s.get_replicasets to require rollout profile")
+	}
+	if requiresRuntimeRolloutProfile("shell.exec") {
+		t.Fatal("did not expect unrelated capability to require rollout profile")
+	}
+	if !isRuntimeRolloutWriteCapability("k8s.rollout_pause") {
+		t.Fatal("expected rollout pause to be treated as write capability")
+	}
+	if isRuntimeRolloutWriteCapability("k8s.get_replicasets") {
+		t.Fatal("did not expect get_replicasets to be treated as write capability")
+	}
+
+	t.Setenv("WORKSPACE_ENV", "prod")
+	if got := runtimeRolloutEnvironment(map[string]string{"runtime_environment": " staging "}); got != "staging" {
+		t.Fatalf("expected metadata runtime environment, got %q", got)
+	}
+	if got := runtimeRolloutEnvironment(map[string]string{"runtime_environment": "unknown"}); got != "prod" {
+		t.Fatalf("expected fallback WORKSPACE_ENV, got %q", got)
+	}
+
+	t.Setenv("WORKSPACE_ENV", "unknown")
+	if got := runtimeRolloutEnvironment(nil); got != "" {
+		t.Fatalf("expected empty runtime environment, got %q", got)
+	}
+}
+
 func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 	payload := map[string]any{
 		testFieldPath: "src/main.go",
