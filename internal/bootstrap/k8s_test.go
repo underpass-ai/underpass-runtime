@@ -21,8 +21,8 @@ func TestK8sBundle_WithClient(t *testing.T) {
 		K8sNamespace:  "test-ns",
 	}
 	handlers := b.Build(cfg)
-	if len(handlers) != 13 {
-		t.Fatalf("expected 13 k8s handlers, got %d", len(handlers))
+	if len(handlers) != 16 {
+		t.Fatalf("expected 16 k8s handlers, got %d", len(handlers))
 	}
 }
 
@@ -62,8 +62,8 @@ func TestRegistryWithK8s_ProducesAllHandlers(t *testing.T) {
 	}
 	handlers := registry.Handlers(cfg)
 
-	// 114 default + 13 k8s = 127
-	if len(handlers) != 127 {
-		t.Fatalf("expected 127 handlers with k8s, got %d", len(handlers))
+	// 114 default + 16 k8s = 130
+	if len(handlers) != 130 {
+		t.Fatalf("expected 130 handlers with k8s, got %d", len(handlers))
 	}
 }

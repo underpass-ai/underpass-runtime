@@ -784,6 +784,35 @@ func TestInvokeToolDeniesClusterScopeWhenRuntimeIsNotKubernetes(t *testing.T) {
 	}
 }
 
+func TestInvokeTool_MapsToolPolicyPreflightToDeniedInvocation(t *testing.T) {
+	session := defaultSession()
+	capability := defaultCapability()
+	tool := &fakeToolEngine{err: &domain.Error{
+		Code:      ErrorCodeRolloutTooYoung,
+		Message:   "current rollout is younger than 60 seconds",
+		Retryable: false,
+	}}
+
+	svc := newServiceForTest(
+		&fakeWorkspaceManager{session: session, found: true},
+		&fakeCatalog{entries: map[string]domain.Capability{capability.Name: capability}},
+		&fakePolicyEngine{decision: PolicyDecision{Allow: true}},
+		tool,
+		&fakeArtifactStore{},
+	)
+
+	invocation, err := svc.InvokeTool(context.Background(), session.ID, capability.Name, InvokeToolRequest{})
+	if err == nil || err.Code != ErrorCodeRolloutTooYoung {
+		t.Fatalf("expected rollout_too_young denial, got %#v", err)
+	}
+	if invocation.Status != domain.InvocationStatusDenied {
+		t.Fatalf("expected denied invocation, got %s", invocation.Status)
+	}
+	if invocation.Error == nil || invocation.Error.Code != ErrorCodeRolloutTooYoung {
+		t.Fatalf("unexpected invocation error payload: %#v", invocation.Error)
+	}
+}
+
 func TestGetInvocationAndArtifactsBranches(t *testing.T) {
 	capability := defaultCapability()
 	session := defaultSession()

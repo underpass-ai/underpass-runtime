@@ -345,11 +345,12 @@ kubernetesBackend:
 
   # -- Delivery tools (K8s apply, rollout, etc.)
   deliveryTools:
-    # -- Create delivery ServiceAccount + Role for K8s delivery tools
+    # -- Enable K8s delivery tools and bind delivery RBAC to the runtime ServiceAccount
     enabled: false
     # -- Target namespace for delivery RBAC (defaults to release namespace)
     namespace: ""
-    # -- ServiceAccount name for delivery tools (auto-generated if empty)
+    # -- Optional additional ServiceAccount name created in the target namespace and
+    # -- added to the delivery RoleBinding. Empty auto-generates <release>-delivery.
     serviceAccount: ""
 
   # -- RBAC for runner pod management

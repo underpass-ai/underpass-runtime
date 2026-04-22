@@ -150,3 +150,11 @@ workspace_tests:
     kind: "workspace"
     timeout_override: 600
     tags: ["workspace", "swe", "tools", "fs", "shell", "git", "repo", "policy", "suggest", "undo"]
+
+  - id: "23"
+    name: "23-runtime-rollout-tools"
+    job_name: "e2e-runtime-rollout-tools"
+    tier: "full"
+    kind: "workspace"
+    timeout_override: 1200
+    tags: ["workspace", "k8s", "rollout", "replicasets", "delivery", "job", "e2e"]

@@ -139,6 +139,9 @@ data:
   {{- if .Values.kubernetesBackend.serviceAccount }}
   WORKSPACE_K8S_SERVICE_ACCOUNT: {{ .Values.kubernetesBackend.serviceAccount | quote }}
   {{- end }}
+  {{- if .Values.kubernetesBackend.deliveryTools.enabled }}
+  WORKSPACE_ENABLE_K8S_DELIVERY_TOOLS: "true"
+  {{- end }}
   {{- if .Values.kubernetesBackend.runnerImage }}
   WORKSPACE_K8S_RUNNER_IMAGE: {{ .Values.kubernetesBackend.runnerImage | quote }}
   {{- end }}

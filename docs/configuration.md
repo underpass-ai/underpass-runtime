@@ -221,6 +221,7 @@ All variables below apply only when `WORKSPACE_BACKEND=kubernetes` and the binar
 | Variable | Default | Description |
 |---|---|---|
 | `KUBECONFIG` | _(none)_ | Path to a kubeconfig file. Falls back to `~/.kube/config`, then in-cluster config. |
+| `WORKSPACE_ENABLE_K8S_DELIVERY_TOOLS` | `false` | Exposes mutating K8s delivery tools (`k8s.apply_manifest`, rollout actions, etc.) for Kubernetes runtime sessions. Requires the runtime ServiceAccount to be bound to delivery RBAC in the target namespace. |
 
 ---
 

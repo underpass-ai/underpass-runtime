@@ -3,7 +3,7 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `123`
+- Total capabilities: `126`
 - Families: `30`
 
 ## api.*
@@ -124,9 +124,12 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `k8s.get_images` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.get_logs` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.get_pods` | `cluster` | `low` | `no` | `none` | `guaranteed` |
+| `k8s.get_replicasets` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.get_services` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.restart_deployment` | `cluster` | `medium` | `yes` | `reversible` | `best-effort` |
+| `k8s.rollout_pause` | `cluster` | `medium` | `yes` | `reversible` | `guaranteed` |
 | `k8s.rollout_status` | `cluster` | `medium` | `yes` | `none` | `guaranteed` |
+| `k8s.rollout_undo` | `cluster` | `high` | `yes` | `reversible` | `best-effort` |
 | `k8s.set_image` | `cluster` | `high` | `yes` | `irreversible` | `` |
 
 ## kafka.*

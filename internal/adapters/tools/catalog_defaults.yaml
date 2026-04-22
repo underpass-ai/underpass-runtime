@@ -2257,6 +2257,42 @@ capabilities:
     examples:
       - '{"namespace":"underpass-runtime","include_containers":true}'
 
+  - name: k8s.get_replicasets
+    description: List ReplicaSets in a namespace, optionally narrowed to a single Deployment owner.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"replicasets":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"revision":{"type":"integer"},"replicas":{"type":"integer"},"ready_replicas":{"type":"integer"},"available_replicas":{"type":"integer"},"pod_template_hash":{"type":"string"},"current":{"type":"boolean"}}}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 10
+      max_retries: 2
+      output_limit_kb: 128
+    preconditions:
+      - principal must have cluster-scope access
+      - session metadata tool_profile must equal runtime-rollout-narrow
+    postconditions:
+      - no cluster mutation
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace"}'
+
   - name: k8s.get_images
     description: Aggregate container images used by pods in a namespace.
     input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"max_images":{"type":"integer","minimum":1,"maximum":1000},"include_workloads":{"type":"boolean"}},"required":[]}'
@@ -2366,6 +2402,86 @@ capabilities:
         - namespace
     examples:
       - '{"namespace":"underpass-runtime","deployment_name":"workspace","timeout_seconds":120}'
+
+  - name: k8s.rollout_pause
+    description: Pause a Deployment so the active rollout stops progressing without reverting changes.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"}},"required":["deployment_name"]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"paused":{"type":"boolean"},"observed_generation":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 8
+    preconditions:
+      - principal must have cluster-scope access
+      - session metadata tool_profile must equal runtime-rollout-narrow
+      - session metadata environment must match the configured runtime environment
+      - namespace must be allowlisted by policy
+      - deployment must exist
+    postconditions:
+      - deployment rollout progression may stop until resumed or replaced
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace"}'
+
+  - name: k8s.rollout_undo
+    description: Roll a Deployment back to a previous healthy ReplicaSet revision.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"to_revision":{"type":"integer","minimum":1}},"required":["deployment_name"]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"previous_revision":{"type":"integer"},"target_revision":{"type":"integer"},"rolled_back":{"type":"boolean"},"observed_generation":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: reversible
+    risk_level: high
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 16
+    preconditions:
+      - principal must have cluster-scope access
+      - session metadata tool_profile must equal runtime-rollout-narrow
+      - session metadata environment must match the configured runtime environment
+      - namespace must be allowlisted by policy
+      - a previous healthy ReplicaSet must exist
+      - the current rollout must be at least 60 seconds old
+    postconditions:
+      - deployment pod template may be reverted to a previous revision
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace"}'
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace","to_revision":4}'
 
   - name: k8s.set_image
     description: Update a container image on a Kubernetes deployment.
@@ -2968,4 +3084,3 @@ capabilities:
     scope: external
     side_effects: none
     risk_level: low
-

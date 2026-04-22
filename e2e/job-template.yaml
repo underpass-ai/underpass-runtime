@@ -22,6 +22,8 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-pull
       volumes:
         - name: e2e-tls
           secret:
@@ -48,6 +50,18 @@ spec:
               value: "/var/run/e2e-tls/tls.crt"
             - name: WORKSPACE_TLS_KEY_PATH
               value: "/var/run/e2e-tls/tls.key"
+            - name: WORKSPACE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: workspace-auth
+                  key: shared_token
+                  optional: true
+            - name: WORKSPACE_AUTH_TENANT_ID
+              value: "e2e-tenant"
+            - name: WORKSPACE_AUTH_ACTOR_ID
+              value: "e2e-actor"
+            - name: WORKSPACE_AUTH_ROLES
+              value: "developer,devops,platform_admin"
             # NATS URL from runtime ConfigMap.
             - name: NATS_URL
               valueFrom:

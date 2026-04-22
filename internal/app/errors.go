@@ -3,16 +3,19 @@ package app
 import "net/http"
 
 const (
-	ErrorCodeInvalidArgument  = "invalid_argument"
-	ErrorCodeNotFound         = "not_found"
-	ErrorCodePolicyDenied     = "policy_denied"
-	ErrorCodeApprovalRequired = "approval_required"
-	ErrorCodeExecutionFailed  = "execution_failed"
-	ErrorCodeGitRepoError     = "git_repo_error"
-	ErrorCodeGitUsageError    = "git_usage_error"
-	ErrorCodeTestsFailed      = "tests_failed"
-	ErrorCodeTimeout          = "timeout"
-	ErrorCodeInternal         = "internal"
+	ErrorCodeInvalidArgument             = "invalid_argument"
+	ErrorCodeNotFound                    = "not_found"
+	ErrorCodePolicyDenied                = "policy_denied"
+	ErrorCodeApprovalRequired            = "approval_required"
+	ErrorCodeEnvironmentMismatch         = "environment_mismatch"
+	ErrorCodeNoPreviousHealthyReplicaSet = "no_previous_healthy_replicaset"
+	ErrorCodeRolloutTooYoung             = "rollout_too_young"
+	ErrorCodeExecutionFailed             = "execution_failed"
+	ErrorCodeGitRepoError                = "git_repo_error"
+	ErrorCodeGitUsageError               = "git_usage_error"
+	ErrorCodeTestsFailed                 = "tests_failed"
+	ErrorCodeTimeout                     = "timeout"
+	ErrorCodeInternal                    = "internal"
 )
 
 type ServiceError struct {
@@ -39,6 +42,19 @@ func policyDeniedError(code, message string) *ServiceError {
 		status = http.StatusPreconditionRequired
 	}
 	return &ServiceError{Code: code, Message: message, HTTPStatus: status}
+}
+
+func IsPolicyDeniedCode(code string) bool {
+	switch code {
+	case ErrorCodePolicyDenied,
+		ErrorCodeApprovalRequired,
+		ErrorCodeEnvironmentMismatch,
+		ErrorCodeNoPreviousHealthyReplicaSet,
+		ErrorCodeRolloutTooYoung:
+		return true
+	default:
+		return false
+	}
 }
 
 func internalError(message string) *ServiceError {
