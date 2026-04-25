@@ -290,6 +290,11 @@ vllm:
     host: ""
     # -- TLS secret name for the ingress certificate
     tlsSecret: ""
+    service:
+      # -- Backend Service name exposed by the ingress
+      name: vllm-server
+      # -- Backend Service port exposed by the ingress
+      port: 8000
     mtls:
       # -- Require client certificates at the ingress layer
       enabled: false

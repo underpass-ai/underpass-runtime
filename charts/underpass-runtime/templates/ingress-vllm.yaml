@@ -31,7 +31,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: vllm-server
+                name: {{ .Values.vllm.ingress.service.name }}
                 port:
-                  number: 8000
+                  number: {{ .Values.vllm.ingress.service.port }}
 {{- end }}
