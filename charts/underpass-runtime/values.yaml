@@ -167,6 +167,8 @@ config:
   version: "0.1.0"
   # -- Environment label (for telemetry)
   environment: production
+  # -- Optional JSON map for notify.escalation_channel routing, keyed by environment.
+  notifyEscalationRoutesJSON: ""
 
 # -- Workspace storage
 workspace:

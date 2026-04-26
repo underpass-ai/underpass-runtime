@@ -192,5 +192,9 @@ func k8sToolHandlers(runner app.CommandRunner, k8s *k8sRuntime, namespace string
 		tooladapter.NewK8sRolloutPauseHandler(k8s.client, namespace),
 		tooladapter.NewK8sRolloutUndoHandler(k8s.client, namespace),
 		tooladapter.NewK8sRestartDeploymentHandler(k8s.client, namespace),
+		tooladapter.NewK8sScaleDeploymentHandler(k8s.client, namespace),
+		tooladapter.NewK8sRestartPodsHandler(k8s.client, namespace),
+		tooladapter.NewK8sCircuitBreakHandler(k8s.client, namespace),
+		tooladapter.NewK8sSetImageHandler(k8s.client, namespace),
 	}
 }

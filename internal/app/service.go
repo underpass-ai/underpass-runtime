@@ -972,7 +972,7 @@ func unsupportedRuntimeReason(session domain.Session, capability domain.Capabili
 
 func isK8sDeliveryCapability(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "k8s.apply_manifest", "k8s.rollout_status", "k8s.restart_deployment", "k8s.rollout_pause", "k8s.rollout_undo":
+	case "k8s.apply_manifest", "k8s.rollout_status", "k8s.restart_deployment", "k8s.rollout_pause", "k8s.rollout_undo", "k8s.scale_deployment", "k8s.restart_pods", "k8s.circuit_break":
 		return true
 	default:
 		return false
