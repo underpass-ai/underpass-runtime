@@ -203,7 +203,7 @@ func (h *NotifyEscalationChannelHandler) Invoke(ctx context.Context, session dom
 				resp.Body.Close() //nolint:errcheck
 				continue
 			}
-			defer resp.Body.Close() //nolint:errcheck
+			resp.Body.Close() //nolint:errcheck
 			return app.ToolRunResult{}, deliveryErr
 		}
 		break
