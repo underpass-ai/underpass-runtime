@@ -338,8 +338,8 @@ func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
 			},
 			downstreamService.DeepCopy(),
 		)
-		handler := NewK8sCircuitBreakHandler(client, testK8sNamespaceDefault)
-		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		selectorHandler := NewK8sCircuitBreakHandler(client, testK8sNamespaceDefault)
+		_, err := selectorHandler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 			"namespace":      testK8sNamespaceSandbox,
 			"target_service": "payments-api",
 			"downstream":     "provider-gateway",
@@ -358,8 +358,8 @@ func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
 				Spec:       corev1.ServiceSpec{ClusterIP: "None"},
 			},
 		)
-		handler := NewK8sCircuitBreakHandler(client, testK8sNamespaceDefault)
-		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		clusterIPHandler := NewK8sCircuitBreakHandler(client, testK8sNamespaceDefault)
+		_, err := clusterIPHandler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 			"namespace":      testK8sNamespaceSandbox,
 			"target_service": "payments-api",
 			"downstream":     "provider-gateway",
