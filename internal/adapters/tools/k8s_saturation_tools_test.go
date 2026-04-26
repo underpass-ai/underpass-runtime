@@ -9,6 +9,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
@@ -56,6 +57,76 @@ func TestK8sScaleDeploymentHandler_AbsoluteAndDelta(t *testing.T) {
 	if got := derefInt32(updated.Spec.Replicas); got != 3 {
 		t.Fatalf("expected replicas=3 after delta, got %d", got)
 	}
+}
+
+func TestK8sScaleDeploymentHandler_ErrorPathsAndNoop(t *testing.T) {
+	replicas := int32(3)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+	}
+	client := k8sfake.NewSimpleClientset(deployment)
+	handler := NewK8sScaleDeploymentHandler(client, " sandbox-default ")
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	t.Run("missing_deployment_name", func(t *testing.T) {
+		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+			"namespace": testK8sNamespaceSandbox,
+			"replicas":  3,
+		}))
+		if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("expected invalid deployment_name error, got %#v", err)
+		}
+	})
+
+	t.Run("requires_exactly_one_replicas_field", func(t *testing.T) {
+		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+			"namespace":       testK8sNamespaceSandbox,
+			"deployment_name": "payments-api",
+			"replicas":        3,
+			"replicas_delta":  1,
+		}))
+		if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("expected replicas field validation error, got %#v", err)
+		}
+	})
+
+	t.Run("negative_target_denied", func(t *testing.T) {
+		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+			"namespace":       testK8sNamespaceSandbox,
+			"deployment_name": "payments-api",
+			"replicas_delta":  -10,
+		}))
+		if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("expected negative target error, got %#v", err)
+		}
+	})
+
+	t.Run("noop_when_target_unchanged", func(t *testing.T) {
+		result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+			"namespace":       testK8sNamespaceSandbox,
+			"deployment_name": "payments-api",
+			"replicas":        3,
+		}))
+		if err != nil {
+			t.Fatalf("unexpected noop scale error: %#v", err)
+		}
+		output := result.Output.(map[string]any)
+		if output["applied"] != false {
+			t.Fatalf("expected noop scale result, got %#v", output)
+		}
+	})
+
+	t.Run("deployment_not_found", func(t *testing.T) {
+		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+			"namespace":       testK8sNamespaceSandbox,
+			"deployment_name": "missing",
+			"replicas":        1,
+		}))
+		if err == nil || err.Code != app.ErrorCodeNotFound {
+			t.Fatalf("expected deployment not found, got %#v", err)
+		}
+	})
 }
 
 func TestK8sRestartPodsHandler_LabelSelectorMode(t *testing.T) {
@@ -109,6 +180,52 @@ func TestK8sRestartPodsHandler_LabelSelectorMode(t *testing.T) {
 	}
 	if len(pods.Items) != 1 {
 		t.Fatalf("expected one pod remaining, got %d", len(pods.Items))
+	}
+}
+
+func TestK8sRestartPodsHandler_RolloutRestartAndInvalidMode(t *testing.T) {
+	replicas := int32(2)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "payments-api"}},
+			},
+		},
+	}
+	client := k8sfake.NewSimpleClientset(deployment)
+	handler := NewK8sRestartPodsHandler(client, testK8sNamespaceDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"namespace":       testK8sNamespaceSandbox,
+		"deployment_name": "payments-api",
+	}))
+	if err != nil {
+		t.Fatalf("unexpected rollout restart error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["mode"] != "rollout_restart" || output["pods_affected"] != 2 {
+		t.Fatalf("unexpected rollout restart output: %#v", output)
+	}
+
+	updated, getErr := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "payments-api", metav1.GetOptions{})
+	if getErr != nil {
+		t.Fatalf("get deployment: %v", getErr)
+	}
+	if updated.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] == "" {
+		t.Fatalf("expected restart annotation, got %#v", updated.Spec.Template.Annotations)
+	}
+
+	_, err = handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"namespace":       testK8sNamespaceSandbox,
+		"deployment_name": "payments-api",
+		"mode":            "unknown_mode",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected invalid mode error, got %#v", err)
 	}
 }
 
@@ -166,6 +283,100 @@ func TestK8sCircuitBreakHandler_CreatesNetworkPolicy(t *testing.T) {
 	handler.mu.Unlock()
 }
 
+func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
+	targetService := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+		Spec: corev1.ServiceSpec{
+			Selector:  map[string]string{"app": "payments-api"},
+			ClusterIP: "10.0.0.10",
+		},
+	}
+	downstreamService := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "provider-gateway", Namespace: testK8sNamespaceSandbox},
+		Spec: corev1.ServiceSpec{
+			Selector:  map[string]string{"app": "provider-gateway"},
+			ClusterIP: "10.0.0.20",
+		},
+	}
+	existingPolicy := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            circuitBreakPolicyID(testK8sNamespaceSandbox, "payments-api", "provider-gateway"),
+			Namespace:       testK8sNamespaceSandbox,
+			ResourceVersion: "1",
+		},
+	}
+	client := k8sfake.NewSimpleClientset(targetService, downstreamService, existingPolicy)
+	handler := NewK8sCircuitBreakHandler(client, testK8sNamespaceDefault)
+	handler.now = func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }
+	session := domain.Session{Principal: domain.Principal{Roles: []string{"platform_admin"}}}
+
+	result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"namespace":      testK8sNamespaceSandbox,
+		"target_service": "payments-api",
+		"downstream":     "provider-gateway",
+		"ttl_seconds":    120,
+	}))
+	if err != nil {
+		t.Fatalf("unexpected update circuit_break error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	policyID := output["policy_id"].(string)
+
+	policy, getErr := client.NetworkingV1().NetworkPolicies(testK8sNamespaceSandbox).Get(context.Background(), policyID, metav1.GetOptions{})
+	if getErr != nil {
+		t.Fatalf("expected updated network policy, got error: %v", getErr)
+	}
+	if policy.Annotations["underpass.ai/downstream"] != "provider-gateway" {
+		t.Fatalf("unexpected updated policy annotations: %#v", policy.Annotations)
+	}
+
+	t.Run("target_without_selector", func(t *testing.T) {
+		client := k8sfake.NewSimpleClientset(
+			&corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+				Spec:       corev1.ServiceSpec{ClusterIP: "10.0.0.10"},
+			},
+			downstreamService.DeepCopy(),
+		)
+		handler := NewK8sCircuitBreakHandler(client, testK8sNamespaceDefault)
+		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+			"namespace":      testK8sNamespaceSandbox,
+			"target_service": "payments-api",
+			"downstream":     "provider-gateway",
+			"ttl_seconds":    120,
+		}))
+		if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("expected selector validation error, got %#v", err)
+		}
+	})
+
+	t.Run("downstream_without_cluster_ip", func(t *testing.T) {
+		client := k8sfake.NewSimpleClientset(
+			targetService.DeepCopy(),
+			&corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "provider-gateway", Namespace: testK8sNamespaceSandbox},
+				Spec:       corev1.ServiceSpec{ClusterIP: "None"},
+			},
+		)
+		handler := NewK8sCircuitBreakHandler(client, testK8sNamespaceDefault)
+		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+			"namespace":      testK8sNamespaceSandbox,
+			"target_service": "payments-api",
+			"downstream":     "provider-gateway",
+			"ttl_seconds":    120,
+		}))
+		if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+			t.Fatalf("expected cluster IP validation error, got %#v", err)
+		}
+	})
+
+	handler.mu.Lock()
+	if timer := handler.timers[policyID]; timer != nil {
+		timer.Stop()
+	}
+	handler.mu.Unlock()
+}
+
 func TestK8sSaturationHandlerNames(t *testing.T) {
 	client := k8sfake.NewSimpleClientset()
 	if NewK8sScaleDeploymentHandler(client, testK8sNamespaceDefault).Name() != "k8s.scale_deployment" {
@@ -191,4 +402,48 @@ func TestK8sCircuitBreakHandler_TTLDenied(t *testing.T) {
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("expected ttl denial, got %#v", err)
 	}
+}
+
+func TestK8sSaturationHelpers(t *testing.T) {
+	replicas := int32(1)
+	deployment := &appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+		},
+	}
+
+	t.Run("build_restart_selector", func(t *testing.T) {
+		if got := buildRestartPodsSelector(deployment, "pod-template-hash=abc123"); got != "app=payments-api,pod-template-hash=abc123" {
+			t.Fatalf("unexpected combined selector: %q", got)
+		}
+		if got := buildRestartPodsSelector(deployment, ""); got != "app=payments-api" {
+			t.Fatalf("unexpected selector without extra: %q", got)
+		}
+		if got := buildRestartPodsSelector(&appsv1.Deployment{}, "pod-template-hash=abc123"); got != "<none>,pod-template-hash=abc123" {
+			t.Fatalf("unexpected selector without base: %q", got)
+		}
+	})
+
+	t.Run("network_policy_peer_ipv6", func(t *testing.T) {
+		peer := networkPolicyPeerAllowAllExcept("fd00::10")
+		if peer.IPBlock == nil || peer.IPBlock.CIDR != "::/0" || len(peer.IPBlock.Except) != 1 || peer.IPBlock.Except[0] != "fd00::10/128" {
+			t.Fatalf("unexpected IPv6 IPBlock: %#v", peer.IPBlock)
+		}
+	})
+
+	t.Run("schedule_policy_cleanup_replaces_timer", func(t *testing.T) {
+		handler := NewK8sCircuitBreakHandler(k8sfake.NewSimpleClientset(), testK8sNamespaceDefault)
+		if handler.now().IsZero() {
+			t.Fatal("expected default clock to be initialized")
+		}
+		handler.schedulePolicyCleanup(testK8sNamespaceSandbox, "policy-a", time.Hour)
+		first := handler.timers["policy-a"]
+		handler.schedulePolicyCleanup(testK8sNamespaceSandbox, "policy-a", time.Hour)
+		second := handler.timers["policy-a"]
+		if first == nil || second == nil || first == second {
+			t.Fatalf("expected timer replacement, got first=%v second=%v", first, second)
+		}
+		second.Stop()
+	})
 }

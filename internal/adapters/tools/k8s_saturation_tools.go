@@ -4,7 +4,7 @@ package tools
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -323,7 +323,7 @@ func buildRestartPodsSelector(deployment *appsv1.Deployment, labelSelector strin
 }
 
 func circuitBreakPolicyID(namespace, targetService, downstream string) string {
-	hash := sha1.Sum([]byte(namespace + ":" + targetService + ":" + downstream))
+	hash := sha256.Sum256([]byte(namespace + ":" + targetService + ":" + downstream))
 	return fmt.Sprintf("circuit-break-%x", hash[:6])
 }
 
