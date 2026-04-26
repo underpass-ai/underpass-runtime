@@ -19,6 +19,7 @@ func MessagingBundle() Bundle {
 				tooladapter.NewRabbitConsumeHandler(nil),
 				tooladapter.NewRabbitPublishHandler(nil),
 				tooladapter.NewRabbitQueueInfoHandler(nil),
+				tooladapter.NewNotifyEscalationChannelHandlerFromEnv(),
 			}
 		},
 	}

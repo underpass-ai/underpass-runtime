@@ -214,6 +214,107 @@ func TestStaticPolicy_RuntimeRolloutHelpers(t *testing.T) {
 	}
 }
 
+func TestStaticPolicy_SaturationRequiresToolProfile(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata:  map[string]string{"environment": "prod", "runtime_environment": "prod"},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.scale_deployment",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api","replicas":3}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if decision.Allow || decision.Reason != "tool_profile_mismatch" {
+		t.Fatalf("expected tool_profile_mismatch, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_SaturationAllowsMatchingProfile(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata: map[string]string{
+				"tool_profile":        saturationToolProfile,
+				"environment":         "prod",
+				"runtime_environment": "prod",
+			},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.scale_deployment",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api","replicas":3}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if !decision.Allow {
+		t.Fatalf("expected saturation capability to be allowed, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_CircuitBreakEnforcesTTLBounds(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"platform_admin"}},
+			Metadata: map[string]string{
+				"tool_profile":        saturationToolProfile,
+				"environment":         "prod",
+				"runtime_environment": "prod",
+			},
+		},
+		Capability: domain.Capability{
+			Name:      "k8s.circuit_break",
+			Scope:     domain.ScopeCluster,
+			RiskLevel: domain.RiskHigh,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","target_service":"api","downstream":"provider","ttl_seconds":30}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if decision.Allow || decision.Reason != "ttl_out_of_bounds" {
+		t.Fatalf("expected ttl_out_of_bounds, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_NotifyAllowsIncidentCommunicator(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"incident_communicator"}},
+			Metadata: map[string]string{
+				"tool_profile":        humanEscalationToolProfile,
+				"environment":         "prod",
+				"runtime_environment": "prod",
+			},
+		},
+		Capability: domain.Capability{
+			Name:  "notify.escalation_channel",
+			Scope: domain.ScopeExternal,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"incident_id":"inc-42","handoff_node_id":"handoff:inc-42:human","summary":"Need human review","upstream_specialist":"payment-integrity-operator","upstream_decision":"escalate","reason":"provider callback missing"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if !decision.Allow {
+		t.Fatalf("expected notify capability to be allowed, got %#v", decision)
+	}
+}
+
 func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 	payload := map[string]any{
 		testFieldPath: "src/main.go",

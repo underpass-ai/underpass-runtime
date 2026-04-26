@@ -10,6 +10,9 @@ data:
   WORKSPACE_BACKEND: {{ .Values.config.workspaceBackend | quote }}
   WORKSPACE_VERSION: {{ .Values.config.version | quote }}
   WORKSPACE_ENV: {{ .Values.config.environment | quote }}
+  {{- if .Values.config.notifyEscalationRoutesJSON }}
+  WORKSPACE_NOTIFY_ESCALATION_ROUTES_JSON: {{ .Values.config.notifyEscalationRoutesJSON | quote }}
+  {{- end }}
   WORKSPACE_ROOT: {{ .Values.workspace.root | quote }}
   ARTIFACT_ROOT: {{ .Values.artifacts.root | quote }}
   ARTIFACT_BACKEND: {{ .Values.artifacts.backend | quote }}

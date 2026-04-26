@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/underpass-ai/underpass-runtime/internal/app"
@@ -18,6 +19,8 @@ const (
 	errFieldMustContainStrings = "field %s must contain strings"
 	errFieldMustBeString       = "field %s must be a string"
 	runtimeRolloutToolProfile  = "runtime-rollout-narrow"
+	saturationToolProfile      = "saturation-operator-bounded"
+	humanEscalationToolProfile = "human-escalation-minimal"
 )
 
 type StaticPolicy struct{}
@@ -53,6 +56,9 @@ func (p *StaticPolicy) Authorize(_ context.Context, input app.PolicyInput) (app.
 
 	if rolloutDecision, ok := authorizeRuntimeRolloutCapability(input); ok {
 		return rolloutDecision, nil
+	}
+	if specialistDecision, ok := authorizeSpecialistCapability(input); ok {
+		return specialistDecision, nil
 	}
 
 	if pathAllowed, reason := argsWithinAllowedPaths(input.Args, input.Session.AllowedPaths, input.Capability.Policy.PathFields); !pathAllowed {
@@ -196,14 +202,118 @@ func runtimeRolloutEnvironment(metadata map[string]string) string {
 	return value
 }
 
+func authorizeSpecialistCapability(input app.PolicyInput) (app.PolicyDecision, bool) {
+	switch strings.TrimSpace(input.Capability.Name) {
+	case "k8s.scale_deployment", "k8s.restart_pods", "k8s.circuit_break":
+		return authorizeSaturationCapability(input), true
+	case "notify.escalation_channel":
+		return authorizeNotifyCapability(input), true
+	default:
+		return app.PolicyDecision{}, false
+	}
+}
+
+func authorizeSaturationCapability(input app.PolicyInput) app.PolicyDecision {
+	if strings.TrimSpace(input.Session.Metadata["tool_profile"]) != saturationToolProfile {
+		return app.PolicyDecision{
+			Allow:     false,
+			ErrorCode: app.ErrorCodePolicyDenied,
+			Reason:    "tool_profile_mismatch",
+		}
+	}
+	if decision, ok := authorizeEnvironmentMatch(input.Session.Metadata); ok {
+		return decision
+	}
+
+	var payload map[string]any
+	if len(input.Args) != 0 && string(input.Args) != "null" {
+		if err := json.Unmarshal(input.Args, &payload); err != nil {
+			return app.PolicyDecision{Allow: false, ErrorCode: app.ErrorCodePolicyDenied, Reason: invalidArgsPayload}
+		}
+	}
+
+	switch strings.TrimSpace(input.Capability.Name) {
+	case "k8s.scale_deployment":
+		if replicas, ok := jsonNumberAsInt(payload["replicas"]); ok && (replicas < 0 || replicas > 200) {
+			return app.PolicyDecision{Allow: false, ErrorCode: app.ErrorCodePolicyDenied, Reason: "replicas_out_of_bounds"}
+		}
+		if delta, ok := jsonNumberAsInt(payload["replicas_delta"]); ok && (delta < -50 || delta > 50) {
+			return app.PolicyDecision{Allow: false, ErrorCode: app.ErrorCodePolicyDenied, Reason: "replicas_delta_out_of_bounds"}
+		}
+	case "k8s.circuit_break":
+		if ttl, ok := jsonNumberAsInt(payload["ttl_seconds"]); ok && (ttl < 60 || ttl > 1800) {
+			return app.PolicyDecision{Allow: false, ErrorCode: app.ErrorCodePolicyDenied, Reason: "ttl_out_of_bounds"}
+		}
+	}
+	return app.PolicyDecision{Allow: true}
+}
+
+func authorizeNotifyCapability(input app.PolicyInput) app.PolicyDecision {
+	if strings.TrimSpace(input.Session.Metadata["tool_profile"]) != humanEscalationToolProfile {
+		return app.PolicyDecision{
+			Allow:     false,
+			ErrorCode: app.ErrorCodePolicyDenied,
+			Reason:    "tool_profile_mismatch",
+		}
+	}
+	if decision, ok := authorizeEnvironmentMatch(input.Session.Metadata); ok {
+		return decision
+	}
+	return app.PolicyDecision{Allow: true}
+}
+
+func authorizeEnvironmentMatch(metadata map[string]string) (app.PolicyDecision, bool) {
+	runtimeEnv := runtimeRolloutEnvironment(metadata)
+	if runtimeEnv == "" {
+		return app.PolicyDecision{}, false
+	}
+
+	sessionEnv := strings.ToLower(strings.TrimSpace(metadata["environment"]))
+	if sessionEnv == runtimeEnv {
+		return app.PolicyDecision{}, false
+	}
+	return app.PolicyDecision{
+		Allow:     false,
+		ErrorCode: app.ErrorCodeEnvironmentMismatch,
+		Reason:    "environment_mismatch",
+	}, true
+}
+
 func scopeAllowed(roles []string, scope domain.Scope) bool {
 	if scope == domain.ScopeWorkspace || scope == domain.ScopeRepo {
 		return true
 	}
 	if scope == domain.ScopeCluster || scope == domain.ScopeExternal {
-		return hasAnyRole(roles, "devops", "platform_admin")
+		return hasAnyRole(roles, "devops", "platform_admin", "incident_communicator")
 	}
 	return false
+}
+
+func jsonNumberAsInt(value any) (int, bool) {
+	switch typed := value.(type) {
+	case float64:
+		return int(typed), true
+	case int:
+		return typed, true
+	case int32:
+		return int(typed), true
+	case int64:
+		return int(typed), true
+	case json.Number:
+		n, err := typed.Int64()
+		if err != nil {
+			return 0, false
+		}
+		return int(n), true
+	case string:
+		n, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err != nil {
+			return 0, false
+		}
+		return n, true
+	default:
+		return 0, false
+	}
 }
 
 func hasAnyRole(roles []string, candidates ...string) bool {

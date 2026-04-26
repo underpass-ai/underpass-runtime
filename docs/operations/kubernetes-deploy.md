@@ -200,6 +200,28 @@ For the rollout-specialist tools added in runtime, create sessions with:
 
 The job-based E2E test `23-runtime-rollout-tools` expects exactly this setup.
 
+If you also want the notify specialist test (`24-runtime-saturation-notify-tools`),
+configure an `e2e` route for `notify.escalation_channel` before running the job:
+
+```bash
+helm upgrade --install underpass-runtime \
+  charts/underpass-runtime \
+  -n underpass-runtime \
+  --set config.workspaceBackend=kubernetes \
+  --set kubernetesBackend.namespace=underpass-runtime \
+  --set kubernetesBackend.runnerImage=ghcr.io/underpass-ai/underpass-runtime/runner:v1.0.0-base \
+  --set kubernetesBackend.rbac.create=true \
+  --set kubernetesBackend.deliveryTools.enabled=true \
+  --set-string config.notifyEscalationRoutesJSON='{"e2e":{"channel":"#runtime-e2e","provider":"webhook","webhook_url":"http://underpass-runtime-notify-sink.underpass-runtime.svc.cluster.local:8080/notify"}}'
+```
+
+The test creates that sink Service on demand and then exercises:
+
+- `k8s.scale_deployment`
+- `k8s.restart_pods`
+- `k8s.circuit_break`
+- `notify.escalation_channel`
+
 ---
 
 ## Enabling Monitoring

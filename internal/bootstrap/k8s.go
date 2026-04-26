@@ -34,6 +34,9 @@ func K8sBundle() Bundle {
 				tooladapter.NewK8sRolloutPauseHandler(client, ns),
 				tooladapter.NewK8sRolloutUndoHandler(client, ns),
 				tooladapter.NewK8sRestartDeploymentHandler(client, ns),
+				tooladapter.NewK8sScaleDeploymentHandler(client, ns),
+				tooladapter.NewK8sRestartPodsHandler(client, ns),
+				tooladapter.NewK8sCircuitBreakHandler(client, ns),
 				tooladapter.NewK8sSetImageHandler(client, ns),
 			}
 		},

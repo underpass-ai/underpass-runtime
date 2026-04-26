@@ -158,3 +158,11 @@ workspace_tests:
     kind: "workspace"
     timeout_override: 1200
     tags: ["workspace", "k8s", "rollout", "replicasets", "delivery", "job", "e2e"]
+
+  - id: "24"
+    name: "24-runtime-saturation-notify-tools"
+    job_name: "e2e-runtime-saturation-notify-tools"
+    tier: "full"
+    kind: "workspace"
+    timeout_override: 1200
+    tags: ["workspace", "k8s", "saturation", "notify", "delivery", "policy", "e2e"]

@@ -16,5 +16,9 @@ func k8sToolHandlers() []tooladapter.Handler {
 		tooladapter.NewK8sApplyManifestHandler(nil, "default"),
 		tooladapter.NewK8sRolloutStatusHandler(nil, "default"),
 		tooladapter.NewK8sRestartDeploymentHandler(nil, "default"),
+		tooladapter.NewK8sScaleDeploymentHandler(nil, "default"),
+		tooladapter.NewK8sRestartPodsHandler(nil, "default"),
+		tooladapter.NewK8sCircuitBreakHandler(nil, "default"),
+		tooladapter.NewK8sSetImageHandler(nil, "default"),
 	}
 }

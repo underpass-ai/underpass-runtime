@@ -3,8 +3,8 @@
 This file is generated from `internal/adapters/tools/DefaultCapabilities()`.
 Do not edit manually. Regenerate with `make catalog-docs`.
 
-- Total capabilities: `126`
-- Families: `30`
+- Total capabilities: `130`
+- Families: `31`
 
 ## api.*
 
@@ -120,6 +120,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | Tool | Scope | Risk | Approval | Side Effects | Idempotency |
 | --- | --- | --- | --- | --- | --- |
 | `k8s.apply_manifest` | `cluster` | `medium` | `yes` | `reversible` | `best-effort` |
+| `k8s.circuit_break` | `cluster` | `high` | `yes` | `reversible` | `best-effort` |
 | `k8s.get_deployments` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.get_images` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.get_logs` | `cluster` | `low` | `no` | `none` | `guaranteed` |
@@ -127,9 +128,11 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `k8s.get_replicasets` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.get_services` | `cluster` | `low` | `no` | `none` | `guaranteed` |
 | `k8s.restart_deployment` | `cluster` | `medium` | `yes` | `reversible` | `best-effort` |
+| `k8s.restart_pods` | `cluster` | `medium` | `yes` | `reversible` | `best-effort` |
 | `k8s.rollout_pause` | `cluster` | `medium` | `yes` | `reversible` | `guaranteed` |
 | `k8s.rollout_status` | `cluster` | `medium` | `yes` | `none` | `guaranteed` |
 | `k8s.rollout_undo` | `cluster` | `high` | `yes` | `reversible` | `best-effort` |
+| `k8s.scale_deployment` | `cluster` | `medium` | `yes` | `reversible` | `guaranteed` |
 | `k8s.set_image` | `cluster` | `high` | `yes` | `irreversible` | `` |
 
 ## kafka.*
@@ -164,6 +167,12 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `node.lint` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `node.test` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
 | `node.typecheck` | `repo` | `medium` | `no` | `reversible` | `best-effort` |
+
+## notify.*
+
+| Tool | Scope | Risk | Approval | Side Effects | Idempotency |
+| --- | --- | --- | --- | --- | --- |
+| `notify.escalation_channel` | `external` | `low` | `yes` | `irreversible` | `best-effort` |
 
 ## policy.*
 
