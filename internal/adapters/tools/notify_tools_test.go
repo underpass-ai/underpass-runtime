@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -157,6 +158,14 @@ func TestNotifyEscalationChannelHandler_RateLimited(t *testing.T) {
 	if requests != 1 {
 		t.Fatalf("expected exactly one webhook delivery, got %d", requests)
 	}
+
+	now = now.Add(notifyRateLimitWindow + time.Second)
+	if _, err := handler.Invoke(context.Background(), session, args); err != nil {
+		t.Fatalf("expected notify delivery after rate limit window, got %#v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("expected second webhook delivery after rate limit window, got %d", requests)
+	}
 }
 
 func TestNotifyEscalationChannelHandler_ValidationAndRoutingErrors(t *testing.T) {
@@ -267,6 +276,39 @@ func TestNotifyEscalationChannelHandler_DeliveryFailures(t *testing.T) {
 		}
 	})
 
+	t.Run("server_error_then_success_retries_once", func(t *testing.T) {
+		attempts := 0
+		handler := NewNotifyEscalationChannelHandler(map[string]NotifyEscalationRoute{
+			"prod": {Channel: "#incidents-prod", Provider: "slack", WebhookURL: "https://notify.example.test/escalate"},
+		}, newNotifyTestClient(func(_ *http.Request) (*http.Response, error) {
+			attempts++
+			if attempts == 1 {
+				return &http.Response{
+					StatusCode: http.StatusBadGateway,
+					Body:       io.NopCloser(strings.NewReader("bad gateway")),
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header: http.Header{
+					"X-Request-Id": []string{"req-456"},
+				},
+				Body: io.NopCloser(strings.NewReader("ok")),
+			}, nil
+		}))
+		result, err := handler.Invoke(context.Background(), session, args)
+		if err != nil {
+			t.Fatalf("expected retry to recover delivery, got %#v", err)
+		}
+		if attempts != 2 {
+			t.Fatalf("expected exactly one retry, got %d attempts", attempts)
+		}
+		output := result.Output.(map[string]any)
+		if output["delivered"] != true || output["provider_msg_id"] != "req-456" {
+			t.Fatalf("unexpected retry success output: %#v", output)
+		}
+	})
+
 	t.Run("client_error_not_retryable", func(t *testing.T) {
 		handler := NewNotifyEscalationChannelHandler(map[string]NotifyEscalationRoute{
 			"prod": {Channel: "#incidents-prod", Provider: "slack", WebhookURL: ":://bad-url"},
@@ -319,6 +361,25 @@ func TestNotifyEscalationHelpers(t *testing.T) {
 	t.Run("first_non_empty", func(t *testing.T) {
 		if got := firstNonEmptyString("", " ", "x"); got != "x" {
 			t.Fatalf("unexpected firstNonEmptyString result: %q", got)
+		}
+	})
+
+	t.Run("allow_delivery_prunes_expired_entries", func(t *testing.T) {
+		handler := NewNotifyEscalationChannelHandler(nil, nil)
+		now := time.Unix(1_700_000_000, 0).UTC()
+		handler.now = func() time.Time { return now }
+
+		for i := 0; i < 1000; i++ {
+			if !handler.allowDelivery(fmt.Sprintf("inc-%d", i)) {
+				t.Fatalf("expected first delivery for inc-%d to be allowed", i)
+			}
+		}
+		now = now.Add(notifyRateLimitWindow + time.Second)
+		if !handler.allowDelivery("fresh-incident") {
+			t.Fatal("expected fresh incident to be allowed after prune window")
+		}
+		if got := len(handler.lastDelivery); got > 1 {
+			t.Fatalf("expected stale entries to be pruned, got len=%d", got)
 		}
 	})
 }

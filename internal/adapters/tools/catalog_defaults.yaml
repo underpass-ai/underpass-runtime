@@ -2564,14 +2564,14 @@ capabilities:
       - '{"namespace":"underpass-runtime","deployment_name":"workspace","wait_for_rollout":true,"timeout_seconds":180}'
 
   - name: k8s.scale_deployment
-    description: Scale a deployment to an absolute replica target or by a bounded delta.
+    description: Scale a deployment to an absolute replica target or by a bounded delta; the absolute path is effectively idempotent, but the delta path is best-effort under replay.
     input_schema: '{"type":"object","required":["namespace","deployment_name"],"properties":{"namespace":{"type":"string","maxLength":253},"deployment_name":{"type":"string","maxLength":253},"replicas":{"type":"integer","minimum":0,"maximum":200},"replicas_delta":{"type":"integer","minimum":-50,"maximum":50}},"oneOf":[{"required":["replicas"]},{"required":["replicas_delta"]}],"additionalProperties":false}'
     output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"previous_replicas":{"type":"integer"},"target_replicas":{"type":"integer"},"applied":{"type":"boolean"},"observed_generation":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}},"required":["namespace","deployment_name","previous_replicas","target_replicas"]}'
     scope: cluster
     side_effects: reversible
     risk_level: medium
     requires_approval: true
-    idempotency: guaranteed
+    idempotency: best-effort
     constraints:
       timeout_seconds: 30
       output_limit_kb: 16

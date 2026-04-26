@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	notifyEscalationRoutesEnv = "WORKSPACE_NOTIFY_ESCALATION_ROUTES_JSON"
-	notifyDefaultProvider     = "webhook"
-	notifyRateLimitWindow     = time.Minute
+	notifyEscalationRoutesEnv  = "WORKSPACE_NOTIFY_ESCALATION_ROUTES_JSON"
+	notifyDefaultProvider      = "webhook"
+	notifyRateLimitWindow      = time.Minute
+	notifyEscalationMaxRetries = 1
 )
 
 type NotifyEscalationRoute struct {
@@ -28,10 +29,11 @@ type NotifyEscalationRoute struct {
 }
 
 type NotifyEscalationChannelHandler struct {
-	client    *http.Client
-	routes    map[string]NotifyEscalationRoute
-	configErr error
-	now       func() time.Time
+	client     *http.Client
+	routes     map[string]NotifyEscalationRoute
+	configErr  error
+	now        func() time.Time
+	maxRetries int
 
 	mu           sync.Mutex
 	lastDelivery map[string]time.Time
@@ -49,6 +51,7 @@ func NewNotifyEscalationChannelHandler(routes map[string]NotifyEscalationRoute, 
 		client:       client,
 		routes:       copied,
 		now:          func() time.Time { return time.Now().UTC() },
+		maxRetries:   notifyEscalationMaxRetries,
 		lastDelivery: map[string]time.Time{},
 	}
 }
@@ -163,34 +166,52 @@ func (h *NotifyEscalationChannelHandler) Invoke(ctx context.Context, session dom
 		}
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, route.WebhookURL, bytes.NewReader(body))
-	if err != nil {
-		return app.ToolRunResult{}, &domain.Error{
-			Code:      app.ErrorCodeExecutionFailed,
-			Message:   fmt.Sprintf("build notify request: %v", err),
-			Retryable: false,
+	var resp *http.Response
+	var deliveryErr *domain.Error
+	for attempt := 0; attempt <= h.maxRetries; attempt++ {
+		httpReq, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, route.WebhookURL, bytes.NewReader(body))
+		if requestErr != nil {
+			return app.ToolRunResult{}, &domain.Error{
+				Code:      app.ErrorCodeExecutionFailed,
+				Message:   fmt.Sprintf("build notify request: %v", requestErr),
+				Retryable: false,
+			}
 		}
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := h.client.Do(httpReq)
-	if err != nil {
-		return app.ToolRunResult{}, &domain.Error{
-			Code:      app.ErrorCodeExecutionFailed,
-			Message:   fmt.Sprintf("notify delivery failed: %v", err),
-			Retryable: true,
+		resp, err = h.client.Do(httpReq)
+		if err != nil {
+			deliveryErr = &domain.Error{
+				Code:      app.ErrorCodeExecutionFailed,
+				Message:   fmt.Sprintf("notify delivery failed: %v", err),
+				Retryable: true,
+			}
+			if attempt < h.maxRetries {
+				continue
+			}
+			return app.ToolRunResult{}, deliveryErr
 		}
+
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+			retryable := resp.StatusCode >= http.StatusInternalServerError
+			deliveryErr = &domain.Error{
+				Code:      app.ErrorCodeExecutionFailed,
+				Message:   fmt.Sprintf("notify delivery returned HTTP %d", resp.StatusCode),
+				Retryable: retryable,
+			}
+			if retryable && attempt < h.maxRetries {
+				resp.Body.Close() //nolint:errcheck
+				continue
+			}
+			resp.Body.Close() //nolint:errcheck
+			return app.ToolRunResult{}, deliveryErr
+		}
+		break
+	}
+	if resp == nil {
+		return app.ToolRunResult{}, deliveryErr
 	}
 	defer resp.Body.Close() //nolint:errcheck
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		retryable := resp.StatusCode >= http.StatusInternalServerError
-		return app.ToolRunResult{}, &domain.Error{
-			Code:      app.ErrorCodeExecutionFailed,
-			Message:   fmt.Sprintf("notify delivery returned HTTP %d", resp.StatusCode),
-			Retryable: retryable,
-		}
-	}
 
 	providerMsgID := firstNonEmptyString(
 		resp.Header.Get("X-Request-Id"),
@@ -219,6 +240,11 @@ func (h *NotifyEscalationChannelHandler) allowDelivery(incidentID string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	for id, last := range h.lastDelivery {
+		if now.Sub(last) > notifyRateLimitWindow {
+			delete(h.lastDelivery, id)
+		}
+	}
 	if last, ok := h.lastDelivery[incidentID]; ok && now.Sub(last) < notifyRateLimitWindow {
 		return false
 	}
