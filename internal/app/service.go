@@ -20,8 +20,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
-	metricapi "go.opentelemetry.io/otel/metric"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -51,8 +49,6 @@ type Service struct {
 	decisionStore   RecommendationDecisionStore
 	warmCaches      *sessionWarmCaches
 	tracer          trace.Tracer
-	meterProvider   metricapi.MeterProvider
-	metricsReader   *sdkmetric.ManualReader
 
 	// sessionInvCount tracks invocation count per session for first-tool metric.
 	sessionInvCount sync.Map // sessionID → *int64
@@ -77,7 +73,6 @@ func NewService(
 	if len(invStore) > 0 && invStore[0] != nil {
 		resolvedInvocationStore = invStore[0]
 	}
-	meterProvider, metricsReader := newMeterProviderWithManualReader()
 	return &Service{
 		workspace:       workspace,
 		catalog:         catalog,
@@ -90,13 +85,11 @@ func NewService(
 		telemetry:       noopTelemetryRecorder{},
 		telemetryQ:      noopTelemetryQuerier{},
 		quotas:          newInvocationQuotaLimiterFromEnv(),
-		metrics:         newInvocationMetricsWithMeterReader(appMeter(meterProvider), metricsReader),
+		metrics:         newInvocationMetrics(),
 		qualityObserver: noopQualityObserver{},
 		decisionStore:   NewInMemoryRecommendationDecisionStore(),
 		warmCaches:      newSessionWarmCaches(),
 		tracer:          otel.Tracer("workspace.service"),
-		meterProvider:   meterProvider,
-		metricsReader:   metricsReader,
 	}
 }
 
@@ -172,56 +165,7 @@ func (noopTelemetryQuerier) AllToolStats(context.Context) (map[string]ToolStats,
 }
 
 func (s *Service) PrometheusMetrics() string {
-	var b strings.Builder
-	if s.metrics != nil {
-		b.WriteString(s.metrics.PrometheusText())
-	}
-	if s.kpiMetrics != nil {
-		b.WriteString(s.kpiMetrics.PrometheusText())
-	}
-	b.WriteString(renderPrometheusText(s.metricsReader, func(name string) bool {
-		switch name {
-		case "workspace_invocation_quality_total", "workspace_invocation_quality_duration_ms":
-			return true
-		default:
-			return false
-		}
-	}))
-	return b.String()
-}
-
-// ConfigureMetricsProvider replaces the default per-service meter provider and
-// reader. Call this during composition before the service handles traffic.
-func (s *Service) ConfigureMetricsProvider(provider metricapi.MeterProvider, reader *sdkmetric.ManualReader) {
-	if provider == nil || reader == nil {
-		return
-	}
-	if s.meterProvider == provider && s.metricsReader == reader {
-		return
-	}
-	if old, ok := s.meterProvider.(*sdkmetric.MeterProvider); ok && old != nil && s.meterProvider != provider {
-		_ = old.Shutdown(context.Background())
-	}
-	s.meterProvider = provider
-	s.metricsReader = reader
-	s.metrics = newInvocationMetricsWithMeterReader(appMeter(provider), reader)
-}
-
-// Meter returns an OTel meter backed by the service's configured provider.
-func (s *Service) Meter(name string) metricapi.Meter {
-	if strings.TrimSpace(name) == "" {
-		name = appMeterName
-	}
-	if s.meterProvider == nil {
-		return otel.GetMeterProvider().Meter(name)
-	}
-	return s.meterProvider.Meter(name)
-}
-
-// NewKPIMetrics creates KPI metrics bound to the service's configured meter
-// provider so they appear in this service's Prometheus output.
-func (s *Service) NewKPIMetrics() *KPIMetrics {
-	return NewKPIMetricsWithMeterReader(s.Meter(appMeterName), s.metricsReader)
+	return renderPrometheusText(nil)
 }
 
 func (s *Service) CreateSession(ctx context.Context, req CreateSessionRequest) (domain.Session, *ServiceError) {
