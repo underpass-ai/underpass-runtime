@@ -132,7 +132,7 @@ Do not edit manually. Regenerate with `make catalog-docs`.
 | `k8s.rollout_pause` | `cluster` | `medium` | `yes` | `reversible` | `guaranteed` |
 | `k8s.rollout_status` | `cluster` | `medium` | `yes` | `none` | `guaranteed` |
 | `k8s.rollout_undo` | `cluster` | `high` | `yes` | `reversible` | `best-effort` |
-| `k8s.scale_deployment` | `cluster` | `medium` | `yes` | `reversible` | `guaranteed` |
+| `k8s.scale_deployment` | `cluster` | `medium` | `yes` | `reversible` | `best-effort` |
 | `k8s.set_image` | `cluster` | `high` | `yes` | `irreversible` | `` |
 
 ## kafka.*

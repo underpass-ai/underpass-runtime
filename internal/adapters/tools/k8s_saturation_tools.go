@@ -37,10 +37,18 @@ type K8sCircuitBreakHandler struct {
 	client           kubernetes.Interface
 	defaultNamespace string
 	now              func() time.Time
+	afterFunc        func(time.Duration, func()) *time.Timer
 
 	mu     sync.Mutex
 	timers map[string]*time.Timer
 }
+
+const (
+	circuitBreakPolicyPrefix            = "circuit-break-"
+	circuitBreakExpiresAtAnnotation     = "underpass.ai/expires_at"
+	circuitBreakTargetServiceAnnotation = "underpass.ai/target_service"
+	circuitBreakDownstreamAnnotation    = "underpass.ai/downstream"
+)
 
 func NewK8sScaleDeploymentHandler(client kubernetes.Interface, defaultNamespace string) *K8sScaleDeploymentHandler {
 	return &K8sScaleDeploymentHandler{client: client, defaultNamespace: strings.TrimSpace(defaultNamespace)}
@@ -51,11 +59,65 @@ func NewK8sRestartPodsHandler(client kubernetes.Interface, defaultNamespace stri
 }
 
 func NewK8sCircuitBreakHandler(client kubernetes.Interface, defaultNamespace string) *K8sCircuitBreakHandler {
-	return &K8sCircuitBreakHandler{
+	return newK8sCircuitBreakHandler(client, defaultNamespace, nil, nil)
+}
+
+func newK8sCircuitBreakHandler(
+	client kubernetes.Interface,
+	defaultNamespace string,
+	now func() time.Time,
+	afterFunc func(time.Duration, func()) *time.Timer,
+) *K8sCircuitBreakHandler {
+	if now == nil {
+		now = func() time.Time { return time.Now().UTC() }
+	}
+	if afterFunc == nil {
+		afterFunc = time.AfterFunc
+	}
+
+	handler := &K8sCircuitBreakHandler{
 		client:           client,
 		defaultNamespace: strings.TrimSpace(defaultNamespace),
-		now:              func() time.Time { return time.Now().UTC() },
+		now:              now,
+		afterFunc:        afterFunc,
 		timers:           map[string]*time.Timer{},
+	}
+	handler.reconcileExistingPolicies(context.Background())
+	return handler
+}
+
+func (h *K8sCircuitBreakHandler) reconcileExistingPolicies(ctx context.Context) {
+	if h == nil || h.client == nil {
+		return
+	}
+
+	namespace := strings.TrimSpace(h.defaultNamespace)
+	policies, err := h.client.NetworkingV1().NetworkPolicies(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+
+	now := h.now().UTC()
+	for i := range policies.Items {
+		policy := policies.Items[i]
+		if !strings.HasPrefix(policy.Name, circuitBreakPolicyPrefix) {
+			continue
+		}
+		expiresAtRaw := strings.TrimSpace(policy.Annotations[circuitBreakExpiresAtAnnotation])
+		if expiresAtRaw == "" {
+			continue
+		}
+		expiresAt, parseErr := time.Parse(time.RFC3339, expiresAtRaw)
+		if parseErr != nil {
+			continue
+		}
+
+		ttl := expiresAt.Sub(now)
+		if ttl <= 0 {
+			_ = h.client.NetworkingV1().NetworkPolicies(policy.Namespace).Delete(ctx, policy.Name, metav1.DeleteOptions{})
+			continue
+		}
+		h.schedulePolicyCleanup(policy.Namespace, policy.Name, ttl)
 	}
 }
 
@@ -166,7 +228,7 @@ func (h *K8sRestartPodsHandler) Invoke(ctx context.Context, session domain.Sessi
 
 	mode := strings.TrimSpace(request.Mode)
 	if mode == "" {
-		mode = "rollout_restart"
+		return app.ToolRunResult{}, k8sInvalidArgument("mode is required")
 	}
 	output := map[string]any{
 		k8sDelivKeyNamespace:  namespace,
@@ -324,7 +386,7 @@ func buildRestartPodsSelector(deployment *appsv1.Deployment, labelSelector strin
 
 func circuitBreakPolicyID(namespace, targetService, downstream string) string {
 	hash := sha256.Sum256([]byte(namespace + ":" + targetService + ":" + downstream))
-	return fmt.Sprintf("circuit-break-%x", hash[:6])
+	return fmt.Sprintf("%s%x", circuitBreakPolicyPrefix, hash[:6])
 }
 
 func buildCircuitBreakNetworkPolicy(
@@ -338,9 +400,9 @@ func buildCircuitBreakNetworkPolicy(
 			Name:      policyID,
 			Namespace: namespace,
 			Annotations: map[string]string{
-				"underpass.ai/target_service": targetService.Name,
-				"underpass.ai/downstream":     downstreamService.Name,
-				"underpass.ai/expires_at":     expiresAt.UTC().Format(time.RFC3339),
+				circuitBreakTargetServiceAnnotation: targetService.Name,
+				circuitBreakDownstreamAnnotation:    downstreamService.Name,
+				circuitBreakExpiresAtAnnotation:     expiresAt.UTC().Format(time.RFC3339),
 			},
 		},
 		Spec: networkingv1.NetworkPolicySpec{
@@ -380,7 +442,7 @@ func (h *K8sCircuitBreakHandler) schedulePolicyCleanup(namespace, policyID strin
 	if existing := h.timers[policyID]; existing != nil {
 		existing.Stop()
 	}
-	timer := time.AfterFunc(ttl, func() {
+	timer := h.afterFunc(ttl, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		_ = h.client.NetworkingV1().NetworkPolicies(namespace).Delete(ctx, policyID, metav1.DeleteOptions{})

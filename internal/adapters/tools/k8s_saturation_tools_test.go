@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
@@ -202,6 +203,7 @@ func TestK8sRestartPodsHandler_RolloutRestartAndInvalidMode(t *testing.T) {
 	result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":       testK8sNamespaceSandbox,
 		"deployment_name": "payments-api",
+		"mode":            "rollout_restart",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected rollout restart error: %#v", err)
@@ -217,6 +219,14 @@ func TestK8sRestartPodsHandler_RolloutRestartAndInvalidMode(t *testing.T) {
 	}
 	if updated.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] == "" {
 		t.Fatalf("expected restart annotation, got %#v", updated.Spec.Template.Annotations)
+	}
+
+	_, err = handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
+		"namespace":       testK8sNamespaceSandbox,
+		"deployment_name": "payments-api",
+	}))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected missing mode error, got %#v", err)
 	}
 
 	_, err = handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
@@ -375,6 +385,94 @@ func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
 		timer.Stop()
 	}
 	handler.mu.Unlock()
+}
+
+func TestK8sCircuitBreakHandler_ReconcilesExistingPolicies(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0).UTC()
+
+	t.Run("deletes_expired_policy_on_startup", func(t *testing.T) {
+		expiredPolicy := &networkingv1.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      circuitBreakPolicyID(testK8sNamespaceSandbox, "payments-api", "provider-gateway"),
+				Namespace: testK8sNamespaceSandbox,
+				Annotations: map[string]string{
+					circuitBreakExpiresAtAnnotation: now.Add(-time.Minute).Format(time.RFC3339),
+				},
+			},
+		}
+		client := k8sfake.NewSimpleClientset(expiredPolicy)
+		handler := newK8sCircuitBreakHandler(
+			client,
+			testK8sNamespaceSandbox,
+			func() time.Time { return now },
+			func(time.Duration, func()) *time.Timer {
+				t.Fatal("did not expect cleanup timer for expired policy")
+				return time.NewTimer(time.Hour)
+			},
+		)
+
+		if _, err := client.NetworkingV1().NetworkPolicies(testK8sNamespaceSandbox).Get(context.Background(), expiredPolicy.Name, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+			t.Fatalf("expected expired policy to be deleted, got err=%v", err)
+		}
+
+		handler.mu.Lock()
+		defer handler.mu.Unlock()
+		if len(handler.timers) != 0 {
+			t.Fatalf("expected no timers after deleting expired policy, got %#v", handler.timers)
+		}
+	})
+
+	t.Run("schedules_future_policy_cleanup_on_startup", func(t *testing.T) {
+		expiresAt := now.Add(2 * time.Minute)
+		policyName := circuitBreakPolicyID(testK8sNamespaceSandbox, "payments-api", "provider-gateway")
+		futurePolicy := &networkingv1.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      policyName,
+				Namespace: testK8sNamespaceSandbox,
+				Annotations: map[string]string{
+					circuitBreakExpiresAtAnnotation: expiresAt.Format(time.RFC3339),
+				},
+			},
+		}
+		client := k8sfake.NewSimpleClientset(futurePolicy)
+		var scheduledTTL time.Duration
+		var scheduledCleanup func()
+		timer := time.NewTimer(time.Hour)
+		defer timer.Stop()
+
+		handler := newK8sCircuitBreakHandler(
+			client,
+			testK8sNamespaceSandbox,
+			func() time.Time { return now },
+			func(ttl time.Duration, cleanup func()) *time.Timer {
+				scheduledTTL = ttl
+				scheduledCleanup = cleanup
+				return timer
+			},
+		)
+
+		if scheduledCleanup == nil {
+			t.Fatal("expected startup reconcile to schedule cleanup")
+		}
+		if scheduledTTL != 2*time.Minute {
+			t.Fatalf("expected scheduled ttl=2m, got %s", scheduledTTL)
+		}
+		if _, err := client.NetworkingV1().NetworkPolicies(testK8sNamespaceSandbox).Get(context.Background(), policyName, metav1.GetOptions{}); err != nil {
+			t.Fatalf("expected policy to still exist before cleanup callback, got %v", err)
+		}
+
+		scheduledCleanup()
+
+		if _, err := client.NetworkingV1().NetworkPolicies(testK8sNamespaceSandbox).Get(context.Background(), policyName, metav1.GetOptions{}); !apierrors.IsNotFound(err) {
+			t.Fatalf("expected scheduled cleanup to delete policy, got err=%v", err)
+		}
+
+		handler.mu.Lock()
+		defer handler.mu.Unlock()
+		if len(handler.timers) != 0 {
+			t.Fatalf("expected timers map to be empty after cleanup callback, got %#v", handler.timers)
+		}
+	})
 }
 
 func TestK8sSaturationHandlerNames(t *testing.T) {
