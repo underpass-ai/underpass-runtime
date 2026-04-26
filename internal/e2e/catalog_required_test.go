@@ -24,14 +24,14 @@ func TestRequiredRuntimeSpecialistE2ETestsAreRegistered(t *testing.T) {
 	root := repoRoot(t)
 
 	catalogPath := filepath.Join(root, "e2e", "tests", "e2e_tests.yaml")
-	rawCatalog, err := os.ReadFile(catalogPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", catalogPath, err)
+	rawCatalog, readErr := os.ReadFile(catalogPath)
+	if readErr != nil {
+		t.Fatalf("read %s: %v", catalogPath, readErr)
 	}
 
 	var catalog e2eCatalog
-	if err := yaml.Unmarshal(rawCatalog, &catalog); err != nil {
-		t.Fatalf("parse %s: %v", catalogPath, err)
+	if unmarshalErr := yaml.Unmarshal(rawCatalog, &catalog); unmarshalErr != nil {
+		t.Fatalf("parse %s: %v", catalogPath, unmarshalErr)
 	}
 
 	entries := map[string]e2eCatalogEntry{}
@@ -71,16 +71,16 @@ func TestRequiredRuntimeSpecialistE2ETestsAreRegistered(t *testing.T) {
 		testDir := filepath.Join(root, "e2e", "tests", expected.name)
 		for _, rel := range []string{"Dockerfile", "Makefile", "job.yaml", expected.script} {
 			path := filepath.Join(testDir, rel)
-			if _, err := os.Stat(path); err != nil {
-				t.Fatalf("required E2E asset missing for test %s: %s (%v)", id, path, err)
+			if _, statErr := os.Stat(path); statErr != nil {
+				t.Fatalf("required E2E asset missing for test %s: %s (%v)", id, path, statErr)
 			}
 		}
 	}
 
 	dockerfilePath := filepath.Join(root, "e2e", "Dockerfile")
-	rawDockerfile, err := os.ReadFile(dockerfilePath)
-	if err != nil {
-		t.Fatalf("read %s: %v", dockerfilePath, err)
+	rawDockerfile, dockerReadErr := os.ReadFile(dockerfilePath)
+	if dockerReadErr != nil {
+		t.Fatalf("read %s: %v", dockerfilePath, dockerReadErr)
 	}
 	dockerfile := string(rawDockerfile)
 
