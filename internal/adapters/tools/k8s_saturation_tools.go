@@ -124,15 +124,15 @@ func (h *K8sScaleDeploymentHandler) Invoke(ctx context.Context, session domain.S
 
 	summary := fmt.Sprintf("scaled deployment %s/%s from %d to %d replicas", namespace, request.DeploymentName, previousReplicas, targetReplicas)
 	output := map[string]any{
-		k8sDelivKeyNamespace:    namespace,
-		k8sDelivKeyDeployment:   request.DeploymentName,
-		"previous_replicas":     previousReplicas,
-		"target_replicas":       targetReplicas,
-		"applied":               applied,
-		"observed_generation":   deployment.Status.ObservedGeneration,
-		k8sDelivKeySummary:      summary,
-		k8sDelivKeyOutput:       summary,
-		k8sDelivKeyExitCode:     0,
+		k8sDelivKeyNamespace:  namespace,
+		k8sDelivKeyDeployment: request.DeploymentName,
+		"previous_replicas":   previousReplicas,
+		"target_replicas":     targetReplicas,
+		"applied":             applied,
+		"observed_generation": deployment.Status.ObservedGeneration,
+		k8sDelivKeySummary:    summary,
+		k8sDelivKeyOutput:     summary,
+		k8sDelivKeyExitCode:   0,
 	}
 	return k8sResult(output, "k8s-scale-deployment-report.json"), nil
 }

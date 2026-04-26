@@ -116,14 +116,14 @@ func TestK8sCircuitBreakHandler_CreatesNetworkPolicy(t *testing.T) {
 	targetService := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"app": "payments-api"},
+			Selector:  map[string]string{"app": "payments-api"},
 			ClusterIP: "10.0.0.10",
 		},
 	}
 	downstreamService := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{Name: "provider-gateway", Namespace: testK8sNamespaceSandbox},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"app": "provider-gateway"},
+			Selector:  map[string]string{"app": "provider-gateway"},
 			ClusterIP: "10.0.0.20",
 		},
 	}
