@@ -34,7 +34,7 @@ FROM docker.io/library/golang:1.25-bookworm AS golang
 
 FROM docker.io/aquasec/trivy:0.56.2 AS trivybin
 
-FROM docker.io/anchore/syft:v1.17.0 AS syftbin
+FROM docker.io/anchore/syft:v1.44.0 AS syftbin
 
 FROM docker.io/library/debian:bookworm-slim AS toolchains
 ENV DEBIAN_FRONTEND=noninteractive
