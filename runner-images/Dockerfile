@@ -32,7 +32,7 @@ CMD ["sh", "-lc", "sleep infinity"]
 
 FROM docker.io/library/golang:1.25-bookworm AS golang
 
-FROM docker.io/aquasec/trivy:0.56.2 AS trivybin
+FROM docker.io/aquasec/trivy:0.70.0 AS trivybin
 
 FROM docker.io/anchore/syft:v1.17.0 AS syftbin
 
