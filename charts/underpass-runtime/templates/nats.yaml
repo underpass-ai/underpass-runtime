@@ -1,0 +1,129 @@
+{{- if and (eq .Values.eventBus.type "nats") (default false (default (dict) (default (dict) .Values.eventBus.nats).embedded).enabled) }}
+{{- $natsName := include "underpass-runtime.natsFullname" . }}
+{{- $embedded := .Values.eventBus.nats.embedded }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $natsName }}
+  labels:
+    {{- include "underpass-runtime.natsLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "underpass-runtime.natsSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: client
+      port: 4222
+      targetPort: 4222
+      protocol: TCP
+    {{- if $embedded.monitoring.enabled }}
+    - name: monitor
+      port: 8222
+      targetPort: 8222
+      protocol: TCP
+    {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $natsName }}
+  labels:
+    {{- include "underpass-runtime.natsLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "underpass-runtime.natsSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "underpass-runtime.natsSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nats
+          image: "{{ $embedded.image.repository }}:{{ $embedded.image.tag }}"
+          imagePullPolicy: {{ $embedded.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          args:
+            {{- if $embedded.jetstream.enabled }}
+            - "-js"
+            - "--store_dir=/data/jetstream"
+            {{- end }}
+            {{- if $embedded.monitoring.enabled }}
+            - "-m"
+            - "8222"
+            {{- end }}
+          ports:
+            - name: client
+              containerPort: 4222
+              protocol: TCP
+            {{- if $embedded.monitoring.enabled }}
+            - name: monitor
+              containerPort: 8222
+              protocol: TCP
+            {{- end }}
+          {{- if $embedded.jetstream.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- end }}
+          resources:
+            {{- toYaml $embedded.resources | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: client
+            initialDelaySeconds: 2
+            periodSeconds: 5
+      {{- if $embedded.jetstream.enabled }}
+      volumes:
+        - name: data
+          {{- if $embedded.jetstream.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ $natsName }}-data
+          {{- else }}
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ $embedded.jetstream.persistence.size }}
+          {{- end }}
+      {{- end }}
+{{- if and $embedded.jetstream.enabled $embedded.jetstream.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $natsName }}-data
+  labels:
+    {{- include "underpass-runtime.natsLabels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with $embedded.jetstream.persistence.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $embedded.jetstream.persistence.size }}
+{{- end }}
+{{- end }}

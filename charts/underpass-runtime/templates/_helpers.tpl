@@ -156,3 +156,47 @@ Resolve the CA secret name used by the cert-gen hook Job.
 {{- define "underpass-runtime.certGen.caSecretName" -}}
 {{- default "rehydration-kernel-internal-ca" .Values.certGen.caSecret -}}
 {{- end -}}
+
+{{/*
+NATS bus name. The runtime treats its event bus as a release-local
+component — every Underpass plane (KMP, choreographer, runtime) owns
+its own NATS so subjects do not collide across deployments and a
+plane can be rolled without taking its peers down.
+*/}}
+{{- define "underpass-runtime.natsFullname" -}}
+{{- printf "%s-nats" (include "underpass-runtime.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "underpass-runtime.natsSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "underpass-runtime.natsFullname" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: nats
+{{- end -}}
+
+{{- define "underpass-runtime.natsLabels" -}}
+{{ include "underpass-runtime.natsSelectorLabels" . }}
+helm.sh/chart: {{ include "underpass-runtime.chart" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: underpass
+{{- end -}}
+
+{{/*
+Resolve the NATS URL the runtime should connect to. When the embedded
+server is enabled and `eventBus.nats.url` was not overridden, this
+points at the release-local Service; otherwise the explicit value
+wins. Fails fast when `eventBus.type=nats` but neither side resolves
+to a URL.
+*/}}
+{{- define "underpass-runtime.natsUrl" -}}
+{{- $explicit := (default (dict) .Values.eventBus.nats).url -}}
+{{- $embeddedEnabled := default false (default (dict) (default (dict) .Values.eventBus.nats).embedded).enabled -}}
+{{- if and $explicit (ne $explicit "nats://nats:4222") -}}
+{{- $explicit -}}
+{{- else if $embeddedEnabled -}}
+nats://{{ include "underpass-runtime.natsFullname" . }}:4222
+{{- else if $explicit -}}
+{{- $explicit -}}
+{{- else -}}
+{{- fail "eventBus.type=nats but no URL: set eventBus.nats.url or eventBus.nats.embedded.enabled=true" -}}
+{{- end -}}
+{{- end -}}

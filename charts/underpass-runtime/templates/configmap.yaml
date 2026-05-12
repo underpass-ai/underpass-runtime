@@ -81,7 +81,7 @@ data:
   {{- end }}
   {{- /* NATS */}}
   {{- if eq .Values.eventBus.type "nats" }}
-  EVENT_BUS_NATS_URL: {{ .Values.eventBus.nats.url | quote }}
+  EVENT_BUS_NATS_URL: {{ include "underpass-runtime.natsUrl" . | quote }}
   {{- if .Values.eventBus.nats.stream }}
   EVENT_BUS_NATS_STREAM: {{ .Values.eventBus.nats.stream | quote }}
   {{- end }}
