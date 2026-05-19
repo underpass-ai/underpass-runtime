@@ -3,7 +3,7 @@ module github.com/underpass-ai/underpass-runtime/services/tool-learning
 go 1.25.6
 
 require (
-	github.com/alicebob/miniredis/v2 v2.37.0
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/google/uuid v1.6.0
 	github.com/marcboeker/go-duckdb v1.8.5
 	github.com/minio/minio-go/v7 v7.0.100
