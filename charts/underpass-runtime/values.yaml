@@ -323,8 +323,11 @@ vllm:
     enabled: false
     # -- cert-manager ClusterIssuer used when ingress TLS is enabled
     clusterIssuer: ""
-    # -- Hostname served by the ingress
+    # -- Hostname served by the ingress. Kept for backwards compatibility when
+    # vllm.ingress.hosts is empty.
     host: ""
+    # -- Hostnames served by the ingress
+    hosts: []
     # -- TLS secret name for the ingress certificate
     tlsSecret: ""
     service:
