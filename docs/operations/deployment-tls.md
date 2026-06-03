@@ -83,13 +83,14 @@ certGen:
   caSecret: rehydration-kernel-internal-ca  # default
 ```
 
-The Job creates three secrets (idempotent — skips if they already exist):
+The Job creates four secrets (idempotent — skips if they already exist):
 
 | Secret | Purpose | Key Usage |
 |--------|---------|-----------|
 | `{fullname}-tls` | Runtime gRPC server cert | serverAuth, clientAuth |
 | `{fullname}-nats-client-tls` | NATS client cert | clientAuth |
 | `{fullname}-valkey-client-tls` | Valkey client cert | clientAuth |
+| `{fullname}-s3-client-tls` | S3/MinIO client cert | clientAuth |
 
 Each secret contains `tls.crt`, `tls.key`, and `ca.crt`. Certificates use
 ECDSA P-256 keys with 365-day validity by default.
@@ -110,7 +111,7 @@ helm upgrade underpass-runtime charts/underpass-runtime ...
 | Value | Default | Description |
 |-------|---------|-------------|
 | `certGen.enabled` | `false` | Enable the cert-gen hook Job |
-| `certGen.image` | `docker.io/alpine:3.19` | Container image (needs openssl, curl, jq) |
+| `certGen.image` | `ghcr.io/underpass-ai/underpass-runtime/cert-gen:v1.0.0` | Container image (openssl, curl, jq preinstalled) |
 | `certGen.caSecret` | `rehydration-kernel-internal-ca` | Name of the CA secret to read |
 | `certGen.keyCurve` | `prime256v1` | ECDSA curve for generated keys |
 | `certGen.validityDays` | `365` | Certificate validity in days |
