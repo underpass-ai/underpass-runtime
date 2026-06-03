@@ -516,6 +516,23 @@ toolLearning:
     existingSecret: ""
     # -- Key in secret for password
     passwordKey: password
+    # -- Valkey key prefix the runtime writes telemetry under; export-lake scans
+    # this prefix to build the lake. Must match the runtime's telemetry recorder
+    # prefix (runtime default: "workspace:telemetry:").
+    telemetryPrefix: "workspace:telemetry:"
+
+  # -- export-lake CronJob: the PRODUCER that exports Valkey telemetry to the S3
+  # Parquet lake. The compute schedules read that lake, so this MUST run before
+  # them. Disabling it leaves the lake empty and compute finds nothing to learn.
+  # NOTE: the lake is only populated when the runtime writes telemetry to Valkey,
+  # i.e. telemetry.backend=valkey (the default "none" uses a no-op recorder, so
+  # the lake stays empty). export-lake reads the same Valkey DB
+  # (toolLearning.valkey.db) and prefix (toolLearning.valkey.telemetryPrefix).
+  exportLake:
+    # -- Deploy the export-lake CronJob
+    enabled: true
+    # -- Schedule — runs at :50 so the lake is fresh before hourly/daily compute at :00
+    schedule: "50 * * * *"
 
   # -- NATS configuration (policy event publisher)
   nats:
