@@ -1,6 +1,6 @@
 # Proposal — Register saturation + escalation-notify tools in `underpass-runtime`
 
-Status: proposed, awaiting runtime team review
+Status: ✅ landed on `main` (PR #141; quality follow-ups in PR #142). Tools registered in `internal/adapters/tools/catalog_defaults.yaml` (`k8s.scale_deployment`, `k8s.restart_pods`, `k8s.circuit_break`, `notify.escalation_channel`), implemented in `k8s_saturation_tools.go` + `notify_tools.go`, enforced in `internal/adapters/policy/static_policy.go`, and covered by `e2e/tests/24-runtime-saturation-notify-tools`.
 Source repo: `underpass-payments-incident-response`
 Target repo: `underpass-runtime`
 Owner of the request: PIR

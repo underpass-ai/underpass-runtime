@@ -4,16 +4,20 @@ All services in the `underpass-runtime` namespace communicate via mutual TLS (mT
 
 ## Certificate Authorities
 
+A single shared internal CA signs **every** certificate in the namespace —
+including the runtime's own gRPC server and client certs. There is no separate
+"runtime CA": the runtime certs are signed by the kernel CA via the cert-gen
+hook (see [Certificate Generation](#certificate-generation)).
+
 | CA | CN | Scope | Secret |
 |----|----|-------|--------|
-| Runtime CA | `underpass-runtime-ca` | Runtime gRPC server + client auth | `runtime-tls` (ca.crt) |
-| Kernel CA | `rehydration-kernel-internal-ca` | NATS, Valkey, Neo4j, MinIO | `rehydration-kernel-internal-ca` |
+| Kernel CA (shared) | `rehydration-kernel-internal-ca` | All mTLS in the namespace: runtime gRPC, NATS, Valkey, Neo4j, MinIO | `rehydration-kernel-internal-ca` (`tls.crt` + `tls.key`) |
 
 ## Service Certificates
 
 | Service | Port | TLS Mode | Server Cert Secret | CA |
 |---------|------|----------|-------------------|-----|
-| underpass-runtime (gRPC) | 50053 | mutual | `runtime-tls` | Runtime CA |
+| underpass-runtime (gRPC) | 50053 | mutual | `runtime-tls` | Kernel CA |
 | rehydration-kernel (gRPC) | 50054 | mutual | `rehydration-kernel-grpc-tls` | Kernel CA |
 | NATS | 4222 | mutual | `rehydration-kernel-nats-tls` | Kernel CA |
 | Valkey | 6379 | mutual | `rehydration-kernel-valkey-tls` | Kernel CA |
@@ -94,13 +98,28 @@ valkey:
 
 ## Certificate Generation
 
-Certificates are currently generated manually. See `memory/project_certs_reorg.md`
-for the planned migration to automated cert management.
+Certificates are generated **automatically** by the cert-gen Helm hook
+(`certGen.enabled=true`) — a `pre-install`/`pre-upgrade` Job that reads the
+shared CA from `certGen.caSecret` (default `rehydration-kernel-internal-ca`) and
+signs four secrets idempotently (skipping any that already exist):
 
-### Quick Reference
+| Secret | Purpose | Key Usage |
+|--------|---------|-----------|
+| `{fullname}-tls` | Runtime gRPC server cert | serverAuth, clientAuth |
+| `{fullname}-nats-client-tls` | NATS client cert | clientAuth |
+| `{fullname}-valkey-client-tls` | Valkey client cert | clientAuth |
+| `{fullname}-s3-client-tls` | S3/MinIO client cert | clientAuth |
+
+Each secret contains `tls.crt`, `tls.key`, and `ca.crt` (ECDSA P-256, 365-day
+validity by default). To rotate, delete the target secret and run `helm upgrade`.
+See [deployment-tls.md](../operations/deployment-tls.md) for the full guide.
+
+### Manual fallback (without cert-gen)
+
+If you are not using the cert-gen hook, sign certs against the shared CA by hand:
 
 ```bash
-# Generate client cert for runtime, signed by kernel CA
+# Generate client cert for runtime, signed by the shared CA
 openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
   -keyout client.key -out client.csr -subj "/CN=underpass-runtime"
 
