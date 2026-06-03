@@ -434,7 +434,26 @@ class RuntimeSaturationNotifyToolsE2E(WorkspaceE2EBase):
             self.record_step("scale_deployment_succeeded", "passed", {"target_replicas": 2})
             print_success("Scale deployment updated the target to 2 replicas")
 
-            print_step(6, "Restart pods in label-selector mode deletes only bounded replicas")
+            print_step(6, "Restart pods without mode is rejected")
+            status, body, invocation = self.invoke(
+                session_id=saturation_sid,
+                tool_name="k8s.restart_pods",
+                args={
+                    "namespace": self.namespace,
+                    "deployment_name": self.target_name,
+                },
+                approved=True,
+                timeout=180,
+            )
+            if status != 200 or invocation is None or invocation.get("status") != "failed":
+                raise RuntimeError(f"expected failed restart_pods invocation, got status={status}, invocation={invocation}")
+            error = self.extract_error(invocation, body)
+            if error.get("code") != "invalid_argument" or error.get("message") != "mode is required":
+                raise RuntimeError(f"expected invalid_argument/mode is required, got {error}")
+            self.record_step("restart_pods_mode_required", "passed")
+            print_success("Restart pods without mode failed with invalid_argument as expected")
+
+            print_step(7, "Restart pods in label-selector mode deletes only bounded replicas")
             restart_invocation = self._invoke_ok(
                 session_id=saturation_sid,
                 tool_name="k8s.restart_pods",
@@ -461,7 +480,7 @@ class RuntimeSaturationNotifyToolsE2E(WorkspaceE2EBase):
             self.record_step("restart_pods_succeeded", "passed", {"deleted_pod": deleted_pods[0]})
             print_success("Restart pods deleted one bounded replica and the deployment recovered")
 
-            print_step(7, "Circuit break installs a bounded network policy")
+            print_step(8, "Circuit break installs a bounded network policy")
             circuit_invocation = self._invoke_ok(
                 session_id=saturation_sid,
                 tool_name="k8s.circuit_break",
@@ -489,7 +508,7 @@ class RuntimeSaturationNotifyToolsE2E(WorkspaceE2EBase):
             )
             print_success("Circuit break installed a NetworkPolicy-backed block")
 
-            print_step(8, "Notify escalation succeeds for the e2e route")
+            print_step(9, "Notify escalation succeeds for the e2e route")
             incident_id = f"e2e-incident-{self.run_id}"
             status, body, invocation = self.invoke(
                 session_id=notify_sid,
@@ -529,7 +548,7 @@ class RuntimeSaturationNotifyToolsE2E(WorkspaceE2EBase):
             )
             print_success("Notify escalation delivered through the configured e2e route")
 
-            print_step(9, "Second notify within one minute is rate-limited")
+            print_step(10, "Second notify within one minute is rate-limited")
             status, body, invocation = self.invoke(
                 session_id=notify_sid,
                 tool_name="notify.escalation_channel",

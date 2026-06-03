@@ -1,8 +1,11 @@
 package tools
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
 func TestDefaultCapabilities_Metadata(t *testing.T) {
@@ -230,4 +233,54 @@ func TestValidJSON_Valid(t *testing.T) {
 	if string(raw) != `{"key":"value"}` {
 		t.Fatalf("unexpected raw JSON: %s", string(raw))
 	}
+}
+
+func TestSaturationNotifyCatalogContracts(t *testing.T) {
+	capabilities := DefaultCapabilities()
+	byName := make(map[string]domain.Capability, len(capabilities))
+	for _, capability := range capabilities {
+		byName[capability.Name] = capability
+	}
+
+	scale, ok := byName["k8s.scale_deployment"]
+	if !ok {
+		t.Fatal("expected k8s.scale_deployment capability")
+	}
+	if scale.Idempotency != domain.IdempotencyBestEffort {
+		t.Fatalf("expected k8s.scale_deployment idempotency=best-effort, got %s", scale.Idempotency)
+	}
+	if !strings.Contains(scale.Description, "delta path is best-effort") {
+		t.Fatalf("expected scale deployment description to explain delta semantics, got %q", scale.Description)
+	}
+
+	restart, ok := byName["k8s.restart_pods"]
+	if !ok {
+		t.Fatal("expected k8s.restart_pods capability")
+	}
+	var restartSchema struct {
+		Required []string `json:"required"`
+	}
+	if err := json.Unmarshal(restart.InputSchema, &restartSchema); err != nil {
+		t.Fatalf("unmarshal restart_pods input schema: %v", err)
+	}
+	if !containsRequiredString(restartSchema.Required, "mode") {
+		t.Fatalf("expected restart_pods schema to require mode, got %#v", restartSchema.Required)
+	}
+
+	notify, ok := byName["notify.escalation_channel"]
+	if !ok {
+		t.Fatal("expected notify.escalation_channel capability")
+	}
+	if notify.Constraints.MaxRetries != notifyEscalationMaxRetries {
+		t.Fatalf("expected notify max_retries=%d, got %d", notifyEscalationMaxRetries, notify.Constraints.MaxRetries)
+	}
+}
+
+func containsRequiredString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
