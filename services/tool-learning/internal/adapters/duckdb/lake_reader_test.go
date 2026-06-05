@@ -185,6 +185,30 @@ func TestNewLakeReaderFromS3WithSSL(t *testing.T) {
 	defer reader.Close()
 }
 
+func TestQueryAggregatesEmptyLakeTolerated(t *testing.T) {
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		t.Fatalf("duckdb open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	// A read_parquet glob matching zero files raises DuckDB's
+	// "No files found that match the pattern" IO error. QueryAggregates must
+	// treat that as an empty lake (no aggregates, no error) so a freshly
+	// deployed system does not hard-fail before export-lake first runs.
+	reader := mustNewLakeReader(t, db,
+		"read_parquet('/nonexistent-lake/dt=*/hour=*/*.parquet', hive_partitioning=true)")
+
+	results, err := reader.QueryAggregates(context.Background(),
+		time.Now().Add(-time.Hour), time.Now())
+	if err != nil {
+		t.Fatalf("QueryAggregates on empty lake must not error, got: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 aggregates from empty lake, got %d", len(results))
+	}
+}
+
 func TestNewLakeReaderUnsafeSource(t *testing.T) {
 	db, err := sql.Open("duckdb", "")
 	if err != nil {

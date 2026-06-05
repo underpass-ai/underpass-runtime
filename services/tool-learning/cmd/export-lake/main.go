@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -261,7 +262,7 @@ func buildValkeyClient(ctx context.Context) (*redis.Client, error) {
 	opts := &redis.Options{
 		Addr:     addr,
 		Password: os.Getenv("VALKEY_PASSWORD"),
-		DB:       0,
+		DB:       valkeyDB(),
 	}
 	if os.Getenv("VALKEY_TLS_CA_PATH") != "" {
 		cfg := &tls.Config{MinVersion: tls.VersionTLS13, ServerName: os.Getenv("VALKEY_TLS_SERVER_NAME")}
@@ -286,6 +287,17 @@ func buildValkeyClient(ctx context.Context) (*redis.Client, error) {
 		return nil, fmt.Errorf("ping: %w", err)
 	}
 	return client, nil
+}
+
+// valkeyDB reads VALKEY_DB (default 0). The runtime writes telemetry to this DB,
+// so export-lake must read from the same database or the lake stays empty.
+func valkeyDB() int {
+	if v := os.Getenv("VALKEY_DB"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return 0
 }
 
 func envOrDefault(key, fallback string) string {
