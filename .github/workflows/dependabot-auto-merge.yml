@@ -1,0 +1,23 @@
+name: Dependabot auto-merge
+
+# Enable auto-merge on every Dependabot PR. The merge only completes once all
+# required status checks pass and the branch is up to date (enforced by branch
+# protection), so a bump that breaks the build/tests simply stays open for
+# manual review. Squash-merge keeps one commit per dependency update.
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: Enable auto-merge for Dependabot PRs
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
