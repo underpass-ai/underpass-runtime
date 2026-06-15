@@ -20,7 +20,10 @@ type e2eCatalogEntry struct {
 	JobName string `yaml:"job_name"`
 }
 
-func TestRequiredRuntimeSpecialistE2ETestsAreRegistered(t *testing.T) {
+// TestToolMatrixE2EIsRegistered guards the data-driven per-tool E2E suite: the
+// registry must list the matrix test, its assets must exist, and the unified
+// runner image must ship both the matrix runner and the catalog that drives it.
+func TestToolMatrixE2EIsRegistered(t *testing.T) {
 	root := repoRoot(t)
 
 	catalogPath := filepath.Join(root, "e2e", "tests", "e2e_tests.yaml")
@@ -39,41 +42,22 @@ func TestRequiredRuntimeSpecialistE2ETestsAreRegistered(t *testing.T) {
 		entries[entry.ID] = entry
 	}
 
-	required := map[string]struct {
-		name    string
-		jobName string
-		script  string
-	}{
-		"23": {
-			name:    "23-runtime-rollout-tools",
-			jobName: "e2e-runtime-rollout-tools",
-			script:  "test_runtime_rollout_tools.py",
-		},
-		"24": {
-			name:    "24-runtime-saturation-notify-tools",
-			jobName: "e2e-runtime-saturation-notify-tools",
-			script:  "test_runtime_saturation_notify_tools.py",
-		},
+	entry, ok := entries["00"]
+	if !ok {
+		t.Fatalf("per-tool matrix E2E (id 00) is missing from %s", catalogPath)
+	}
+	if entry.Name != "00-tool-matrix" {
+		t.Fatalf("E2E test 00: expected name %q, got %q", "00-tool-matrix", entry.Name)
+	}
+	if entry.JobName != "e2e-tool-matrix" {
+		t.Fatalf("E2E test 00: expected job_name %q, got %q", "e2e-tool-matrix", entry.JobName)
 	}
 
-	for id, expected := range required {
-		entry, ok := entries[id]
-		if !ok {
-			t.Fatalf("required E2E test %s is missing from %s", id, catalogPath)
-		}
-		if entry.Name != expected.name {
-			t.Fatalf("E2E test %s: expected name %q, got %q", id, expected.name, entry.Name)
-		}
-		if entry.JobName != expected.jobName {
-			t.Fatalf("E2E test %s: expected job_name %q, got %q", id, expected.jobName, entry.JobName)
-		}
-
-		testDir := filepath.Join(root, "e2e", "tests", expected.name)
-		for _, rel := range []string{"Dockerfile", "Makefile", "job.yaml", expected.script} {
-			path := filepath.Join(testDir, rel)
-			if _, statErr := os.Stat(path); statErr != nil {
-				t.Fatalf("required E2E asset missing for test %s: %s (%v)", id, path, statErr)
-			}
+	testDir := filepath.Join(root, "e2e", "tests", "00-tool-matrix")
+	for _, rel := range []string{"Dockerfile", "job.yaml", "test_tool_matrix.py"} {
+		path := filepath.Join(testDir, rel)
+		if _, statErr := os.Stat(path); statErr != nil {
+			t.Fatalf("required E2E asset missing: %s (%v)", path, statErr)
 		}
 	}
 
@@ -85,8 +69,8 @@ func TestRequiredRuntimeSpecialistE2ETestsAreRegistered(t *testing.T) {
 	dockerfile := string(rawDockerfile)
 
 	requiredCopies := []string{
-		"COPY e2e/tests/23-runtime-rollout-tools/test_runtime_rollout_tools.py",
-		"COPY e2e/tests/24-runtime-saturation-notify-tools/test_runtime_saturation_notify_tools.py",
+		"COPY e2e/tests/00-tool-matrix/test_tool_matrix.py",
+		"COPY internal/adapters/tools/catalog_defaults.yaml",
 	}
 	for _, requiredCopy := range requiredCopies {
 		if !strings.Contains(dockerfile, requiredCopy) {
