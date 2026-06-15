@@ -1237,6 +1237,34 @@ func (s *Service) recordTelemetry(ctx context.Context, session domain.Session, i
 		Timestamp:     time.Now().UTC(),
 	}
 	_ = s.telemetry.Record(ctx, rec)
+
+	// Close the online contextual-bandit loop: feed this outcome to the
+	// HyLinUCB manager so it learns within the process lifetime.
+	s.updateOnlineBandit(ctx, session, inv, digest)
+}
+
+// updateOnlineBandit feeds an invocation outcome to the online HyLinUCB
+// contextual bandit so it learns from real executions. It uses the
+// tool-independent context signature so the update targets the same instance
+// created during Recommend (which derives the signature with an empty tool
+// name). Only executed invocations (succeeded/failed) carry a reward signal;
+// policy denials and in-flight invocations are skipped because they reflect
+// governance decisions, not tool efficacy. Missing policy data or a context
+// that was never recommended makes this a no-op — the loop only closes for
+// contexts the scorer has actually seen.
+func (s *Service) updateOnlineBandit(ctx context.Context, session domain.Session, inv domain.Invocation, digest ContextDigest) {
+	if s.hylinucb == nil || s.policyLearned == nil {
+		return
+	}
+	if inv.Status != domain.InvocationStatusSucceeded && inv.Status != domain.InvocationStatusFailed {
+		return
+	}
+	banditSig := DeriveContextSignature(session, "", digest)
+	pol, found, err := s.policyLearned.ReadPolicy(ctx, banditSig, inv.ToolName)
+	if err != nil || !found {
+		return
+	}
+	s.hylinucb.Update(banditSig, inv.ToolName, pol, inv.Status == domain.InvocationStatusSucceeded)
 }
 
 // publishEvent builds a DomainEvent and publishes it. Errors are silently

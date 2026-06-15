@@ -5,22 +5,20 @@ import (
 	"math"
 	"strings"
 	"sync"
-
-	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
 const (
 	hylinucbAlgorithmID = "hylinucb_hybrid"
 	hylinucbVersion     = "1.0.0"
 	hylinucbArmDim      = 13
-	hylinucbSharedDim   = 17
 	hylinucbAlpha       = 0.25
 )
 
-// HyLinUCBScorer implements RecommendationScorer using Hybrid Linear UCB.
-// It maintains mutable state (matrix accumulation) per context signature,
-// so it is session-scoped: learning resets across sessions but explores
-// efficiently within one.
+// HyLinUCBScorer implements RecommendationScorer using a diagonal
+// approximation of Hybrid Linear UCB (per-arm diagonal precision). It
+// maintains mutable state (diagonal precision accumulation) per context
+// signature, so it is session-scoped: learning resets across process
+// restarts but explores efficiently within a process lifetime.
 //
 // Priority in the selection chain: fills the gap between Thompson (batch,
 // offline) and NeuralTS (model-based). HyLinUCB provides fast online
@@ -40,11 +38,9 @@ func (s HyLinUCBScorer) Score(base float64, policy ToolPolicy) (float64, string)
 
 	// Encode policy → arm-specific context features (x, 13-dim).
 	x := policyToArmFeatures(policy)
-	// Encode policy → shared features (z, 17-dim = context + arm metadata).
-	z := policyToSharedFeatures(policy)
 
 	// UCB score with exploration bonus.
-	ucbScore := s.instance.score(policy.ToolID, x, z)
+	ucbScore := s.instance.score(policy.ToolID, x)
 
 	// Blend with heuristic base — weight grows with samples.
 	weight := math.Min(float64(policy.NSamples)/80.0, 0.7)
@@ -84,7 +80,7 @@ func newHyLinUCBInstance() *hyLinUCBInstance {
 	return &hyLinUCBInstance{arms: make(map[string]*hyLinUCBArm)}
 }
 
-func (h *hyLinUCBInstance) score(toolID string, x, z []float64) float64 {
+func (h *hyLinUCBInstance) score(toolID string, x []float64) float64 {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
@@ -184,31 +180,8 @@ func (m *HyLinUCBManager) Update(contextSig, toolID string, policy ToolPolicy, s
 func policyToArmFeatures(p ToolPolicy) []float64 {
 	f := make([]float64, hylinucbArmDim)
 
-	// Confidence as primary signal.
-	f[0] = p.Confidence
-
-	// Error rate.
-	f[1] = p.ErrorRate
-
-	// Latency (log scale, normalized).
-	if p.P95LatencyMs > 0 {
-		f[2] = math.Min(math.Log1p(float64(p.P95LatencyMs))/10.0, 1.0)
-	}
-
-	// Sample size (log scale).
-	if p.NSamples > 0 {
-		f[3] = math.Min(math.Log1p(float64(p.NSamples))/10.0, 1.0)
-	}
-
-	// Alpha/Beta ratio (Thompson posterior shape).
-	if p.Alpha+p.Beta > 0 {
-		f[4] = p.Alpha / (p.Alpha + p.Beta)
-	}
-
-	// Cost (log scale).
-	if p.P95Cost > 0 {
-		f[5] = math.Min(math.Log1p(p.P95Cost)/5.0, 1.0)
-	}
+	// Policy-derived scalar features [0-5], shared with the neural encoder.
+	encodePolicyScalarFeatures(f, p)
 
 	// Context signature encoding (language family).
 	sig := p.ContextSignature
@@ -237,48 +210,5 @@ func policyToArmFeatures(p ToolPolicy) []float64 {
 		}
 	}
 
-	return f
-}
-
-// policyToSharedFeatures encodes a ToolPolicy into a 17-dim shared feature
-// vector (context + arm metadata concatenated).
-func policyToSharedFeatures(p ToolPolicy) []float64 {
-	arm := policyToArmFeatures(p)
-	// Pad with 4 tool-level features (risk, side_effects, cost, approval).
-	// These are not available from ToolPolicy alone, so use policy-derived proxies.
-	toolFeatures := make([]float64, 4)
-	// Error rate proxy for risk.
-	toolFeatures[0] = math.Min(p.ErrorRate*2, 1.0)
-	// Cost proxy.
-	if p.P95Cost > 0 {
-		toolFeatures[1] = math.Min(p.P95Cost/10.0, 1.0)
-	}
-	// Confidence inverse as approval proxy.
-	toolFeatures[2] = 1.0 - p.Confidence
-	// Latency proxy for side effects.
-	if p.P95LatencyMs > 1000 {
-		toolFeatures[3] = 1.0
-	}
-
-	z := make([]float64, hylinucbSharedDim)
-	copy(z, arm)
-	copy(z[hylinucbArmDim:], toolFeatures)
-	return z
-}
-
-// ─── Capability-based feature encoding ────────────────────────────────────
-
-// capabilityToArmFeatures encodes tool capability metadata for HyLinUCB
-// arm features when ToolPolicy data is unavailable.
-func capabilityToArmFeatures(cap domain.Capability) []float64 {
-	f := make([]float64, hylinucbArmDim)
-	switch cap.RiskLevel {
-	case domain.RiskLow:
-		f[0] = 0.8 // high confidence for low-risk
-	case domain.RiskMedium:
-		f[0] = 0.5
-	case domain.RiskHigh:
-		f[0] = 0.2
-	}
 	return f
 }
