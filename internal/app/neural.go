@@ -192,36 +192,33 @@ func (s NeuralTSScorer) Score(base float64, policy ToolPolicy) (float64, string)
 	return blended, why
 }
 
+// encodePolicyScalarFeatures writes the six policy-derived scalar features
+// into the first six slots of f: confidence, error rate, log-scaled latency,
+// log-scaled sample count, the Beta posterior mean, and log-scaled cost.
+// Shared by the neural and HyLinUCB encoders to keep the layout in lockstep.
+func encodePolicyScalarFeatures(f []float64, p ToolPolicy) {
+	f[0] = p.Confidence
+	f[1] = p.ErrorRate
+	if p.P95LatencyMs > 0 {
+		f[2] = math.Min(math.Log1p(float64(p.P95LatencyMs))/10.0, 1.0)
+	}
+	if p.NSamples > 0 {
+		f[3] = math.Min(math.Log1p(float64(p.NSamples))/10.0, 1.0)
+	}
+	if p.Alpha+p.Beta > 0 {
+		f[4] = p.Alpha / (p.Alpha + p.Beta)
+	}
+	if p.P95Cost > 0 {
+		f[5] = math.Min(math.Log1p(p.P95Cost)/5.0, 1.0)
+	}
+}
+
 // policyToFeatures encodes a ToolPolicy into the 17-dim feature vector
 // expected by the MLP. This mirrors the encoding in tool-learning/features.go.
 func policyToFeatures(p ToolPolicy) []float64 {
 	f := make([]float64, neuralInputDim)
 
-	// Confidence as primary signal (0-1).
-	f[0] = p.Confidence
-
-	// Error rate (0-1).
-	f[1] = p.ErrorRate
-
-	// Normalized latency (log scale, capped).
-	if p.P95LatencyMs > 0 {
-		f[2] = math.Min(math.Log1p(float64(p.P95LatencyMs))/10.0, 1.0)
-	}
-
-	// Sample size (log scale, normalized).
-	if p.NSamples > 0 {
-		f[3] = math.Min(math.Log1p(float64(p.NSamples))/10.0, 1.0)
-	}
-
-	// Alpha/Beta ratio (Thompson posterior shape).
-	if p.Alpha+p.Beta > 0 {
-		f[4] = p.Alpha / (p.Alpha + p.Beta)
-	}
-
-	// Cost (log scale).
-	if p.P95Cost > 0 {
-		f[5] = math.Min(math.Log1p(p.P95Cost)/5.0, 1.0)
-	}
+	encodePolicyScalarFeatures(f, p)
 
 	// Freshness: how recent the policy is (decay).
 	// Remaining features [6-16] are reserved for context encoding
