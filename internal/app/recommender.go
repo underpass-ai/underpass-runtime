@@ -113,8 +113,8 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 		}
 	}
 
-	// Select scoring algorithm based on available policy data + neural model.
-	scorer := SelectScorerWithModel(learnedPolicies, neuralWeights)
+	// Select scoring algorithm based on available policy data + neural model + HyLinUCB.
+	scorer := SelectScorerFull(learnedPolicies, neuralWeights, s.hylinucb, contextSig)
 
 	// Derive algorithm metadata from the selected scorer.
 	algorithmID := AlgorithmIDHeuristic
