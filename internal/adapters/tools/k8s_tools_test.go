@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
@@ -234,6 +235,84 @@ func TestK8sGetDeploymentsHandler_ListDeployments(t *testing.T) {
 	containers := deployments[0]["containers"].([]map[string]any)
 	if len(containers) != 1 || containers[0]["image"] != testK8sImageAPI1 {
 		t.Fatalf("unexpected deployment containers: %#v", containers)
+	}
+}
+
+func TestK8sGetReplicaSetsHandler_ListOwnedReplicaSets(t *testing.T) {
+	replicas := int32(3)
+	deploymentUID := types.UID("deploy-uid")
+	client := k8sfake.NewSimpleClientset(
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: testK8sNsSandbox, UID: deploymentUID},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "api"}},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "new"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: testK8sImageAPI1}}},
+				},
+			},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "api-new",
+				Namespace:   testK8sNsSandbox,
+				Labels:      map[string]string{"app": "api", "pod-template-hash": "new"},
+				Annotations: map[string]string{"deployment.kubernetes.io/revision": "5"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "new"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: testK8sImageAPI1}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 3, AvailableReplicas: 3},
+		},
+		&appsv1.ReplicaSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "api-old",
+				Namespace:   testK8sNsSandbox,
+				Labels:      map[string]string{"app": "api", "pod-template-hash": "old"},
+				Annotations: map[string]string{"deployment.kubernetes.io/revision": "4"},
+				OwnerReferences: []metav1.OwnerReference{{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "api",
+					UID:        deploymentUID,
+				}},
+			},
+			Spec: appsv1.ReplicaSetSpec{
+				Replicas: &replicas,
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "api", "pod-template-hash": "old"}},
+					Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "api", Image: "ghcr.io/acme/api:0"}}},
+				},
+			},
+			Status: appsv1.ReplicaSetStatus{ReadyReplicas: 2, AvailableReplicas: 2},
+		},
+	)
+	handler := NewK8sGetReplicaSetsHandler(client, testK8sNsDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`))
+	if err != nil {
+		t.Fatalf("unexpected k8s.get_replicasets error: %#v", err)
+	}
+
+	output := result.Output.(map[string]any)
+	replicaSets := output["replicasets"].([]map[string]any)
+	if len(replicaSets) != 2 {
+		t.Fatalf("expected 2 replicasets, got %#v", replicaSets)
+	}
+	if replicaSets[0]["name"] != "api-new" || replicaSets[0]["current"] != true {
+		t.Fatalf("expected highest revision/current replicaset first, got %#v", replicaSets[0])
 	}
 }
 

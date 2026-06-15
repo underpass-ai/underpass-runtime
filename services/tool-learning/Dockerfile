@@ -6,10 +6,12 @@ COPY internal/ internal/
 COPY cmd/ cmd/
 RUN --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=1 go build -o /app/tool-learning ./cmd/tool-learning && \
-    CGO_ENABLED=1 go build -o /app/seed-lake ./cmd/seed-lake
+    CGO_ENABLED=1 go build -o /app/seed-lake ./cmd/seed-lake && \
+    CGO_ENABLED=1 go build -o /app/export-lake ./cmd/export-lake
 
 FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=builder /app/tool-learning /app/tool-learning
 COPY --from=builder /app/seed-lake /app/seed-lake
+COPY --from=builder /app/export-lake /app/export-lake
 USER nonroot
 ENTRYPOINT ["/app/tool-learning"]

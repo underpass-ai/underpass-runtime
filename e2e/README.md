@@ -20,6 +20,8 @@ End-to-end tests run as Kubernetes Jobs against a live runtime deployment.
 | 13 | multi-agent-pipeline | full | 5-agent pipeline (architect → developer → test → review → QA) |
 | 14 | full-infra-stack | full | TLS + Valkey persistence + NATS events + S3 artifacts end-to-end |
 | 15 | vllm-learning-loop | full | vLLM agent → discovery → invoke → telemetry → recommendations adapt |
+| 23 | runtime-rollout-tools | full | Specialist rollout tools (`get_replicasets`, `rollout_pause`, `rollout_undo`) against a live Deployment |
+| 24 | runtime-saturation-notify-tools | full | Specialist saturation writes (`scale_deployment`, `restart_pods`, `circuit_break`) plus `notify.escalation_channel` |
 
 ## Running
 
@@ -39,6 +41,12 @@ End-to-end tests run as Kubernetes Jobs against a live runtime deployment.
 ```
 
 Requires `ghcr.io` authentication for image push and an `imagePullSecrets` named `ghcr-pull` in the namespace.
+
+Test `24-runtime-saturation-notify-tools` also requires the runtime deployment to
+set `WORKSPACE_NOTIFY_ESCALATION_ROUTES_JSON` for environment `e2e`. The
+recommended route points at
+`http://underpass-runtime-notify-sink.<namespace>.svc.cluster.local:8080/notify`;
+the test creates that sink Service itself before invoking `notify.escalation_channel`.
 
 ## TLS Validation
 

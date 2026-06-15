@@ -51,6 +51,18 @@ spec:
           value: "/var/run/e2e-tls/tls.crt"
         - name: WORKSPACE_TLS_KEY_PATH
           value: "/var/run/e2e-tls/tls.key"
+        - name: WORKSPACE_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.auth.existingSecret | default (include "underpass-runtime.fullname" $) }}
+              key: {{ $.Values.auth.tokenKey }}
+              optional: true
+        - name: WORKSPACE_AUTH_TENANT_ID
+          value: "e2e-tenant"
+        - name: WORKSPACE_AUTH_ACTOR_ID
+          value: "e2e-actor"
+        - name: WORKSPACE_AUTH_ROLES
+          value: "developer,devops,platform_admin"
         - name: NATS_URL
           value: {{ $natsURL | quote }}
         - name: SSL_CERT_FILE

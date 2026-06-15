@@ -14,12 +14,19 @@ updates:
       aws:
         patterns:
           - "github.com/aws/*"
+        update-types: ["minor", "patch"]
       k8s:
         patterns:
           - "k8s.io/*"
+        update-types: ["minor", "patch"]
       otel:
         patterns:
           - "go.opentelemetry.io/*"
+        update-types: ["minor", "patch"]
+      go-deps:
+        patterns:
+          - "*"
+        update-types: ["minor", "patch"]
 
   # Go modules — tool-learning service
   - package-ecosystem: gomod
@@ -32,6 +39,11 @@ updates:
       - dependencies
       - go
       - tool-learning
+    groups:
+      tool-learning-go:
+        patterns:
+          - "*"
+        update-types: ["minor", "patch"]
 
   # GitHub Actions
   - package-ecosystem: github-actions
@@ -43,6 +55,11 @@ updates:
     labels:
       - dependencies
       - ci
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types: ["minor", "patch"]
 
   # Docker — root Dockerfile
   - package-ecosystem: docker
@@ -53,6 +70,11 @@ updates:
     labels:
       - dependencies
       - docker
+    groups:
+      docker-root:
+        patterns:
+          - "*"
+        update-types: ["minor", "patch"]
 
   # Docker — runner images
   - package-ecosystem: docker
@@ -64,6 +86,11 @@ updates:
       - dependencies
       - docker
       - runner-images
+    groups:
+      runner-images:
+        patterns:
+          - "*"
+        update-types: ["minor", "patch"]
 
   # Docker — tool-learning
   - package-ecosystem: docker
@@ -75,3 +102,8 @@ updates:
       - dependencies
       - docker
       - tool-learning
+    groups:
+      tool-learning-docker:
+        patterns:
+          - "*"
+        update-types: ["minor", "patch"]

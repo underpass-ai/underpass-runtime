@@ -84,6 +84,365 @@ func TestStaticPolicy_DeniesPathOutsideAllowList(t *testing.T) {
 	}
 }
 
+func TestStaticPolicy_RuntimeRolloutRequiresToolProfile(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata:  map[string]string{},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.get_replicasets",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if decision.Allow {
+		t.Fatal("expected rollout tool profile denial")
+	}
+	if decision.ErrorCode != app.ErrorCodePolicyDenied {
+		t.Fatalf("unexpected error code: %s", decision.ErrorCode)
+	}
+}
+
+func TestStaticPolicy_RuntimeRolloutWriteRequiresEnvironmentMatch(t *testing.T) {
+	t.Setenv("WORKSPACE_ENV", "prod")
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata: map[string]string{
+				"tool_profile": "runtime-rollout-narrow",
+				"environment":  "staging",
+			},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.rollout_pause",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if decision.Allow {
+		t.Fatal("expected environment mismatch denial")
+	}
+	if decision.ErrorCode != app.ErrorCodeEnvironmentMismatch {
+		t.Fatalf("unexpected error code: %s", decision.ErrorCode)
+	}
+}
+
+func TestStaticPolicy_RuntimeRolloutReadAllowsMatchingProfile(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata:  map[string]string{"tool_profile": runtimeRolloutToolProfile},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.get_replicasets",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if !decision.Allow {
+		t.Fatalf("expected rollout read capability to be allowed, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_RuntimeRolloutWriteAllowsMatchingRuntimeEnvironment(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata: map[string]string{
+				"tool_profile":        runtimeRolloutToolProfile,
+				"environment":         "prod",
+				"runtime_environment": "prod",
+			},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.rollout_undo",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if !decision.Allow {
+		t.Fatalf("expected rollout write capability to be allowed, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_RuntimeRolloutHelpers(t *testing.T) {
+	if !requiresRuntimeRolloutProfile("k8s.get_replicasets") {
+		t.Fatal("expected k8s.get_replicasets to require rollout profile")
+	}
+	if requiresRuntimeRolloutProfile("shell.exec") {
+		t.Fatal("did not expect unrelated capability to require rollout profile")
+	}
+	if !isRuntimeRolloutWriteCapability("k8s.rollout_pause") {
+		t.Fatal("expected rollout pause to be treated as write capability")
+	}
+	if isRuntimeRolloutWriteCapability("k8s.get_replicasets") {
+		t.Fatal("did not expect get_replicasets to be treated as write capability")
+	}
+
+	t.Setenv("WORKSPACE_ENV", "prod")
+	if got := runtimeRolloutEnvironment(map[string]string{"runtime_environment": " staging "}); got != "staging" {
+		t.Fatalf("expected metadata runtime environment, got %q", got)
+	}
+	if got := runtimeRolloutEnvironment(map[string]string{"runtime_environment": "unknown"}); got != "prod" {
+		t.Fatalf("expected fallback WORKSPACE_ENV, got %q", got)
+	}
+
+	t.Setenv("WORKSPACE_ENV", "unknown")
+	if got := runtimeRolloutEnvironment(nil); got != "" {
+		t.Fatalf("expected empty runtime environment, got %q", got)
+	}
+}
+
+func TestStaticPolicy_SaturationRequiresToolProfile(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata:  map[string]string{"environment": "prod", "runtime_environment": "prod"},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.scale_deployment",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api","replicas":3}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if decision.Allow || decision.Reason != "tool_profile_mismatch" {
+		t.Fatalf("expected tool_profile_mismatch, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_SaturationAllowsMatchingProfile(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"devops"}},
+			Metadata: map[string]string{
+				"tool_profile":        saturationToolProfile,
+				"environment":         "prod",
+				"runtime_environment": "prod",
+			},
+		},
+		Capability: domain.Capability{
+			Name:  "k8s.scale_deployment",
+			Scope: domain.ScopeCluster,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","deployment_name":"api","replicas":3}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if !decision.Allow {
+		t.Fatalf("expected saturation capability to be allowed, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_CircuitBreakEnforcesTTLBounds(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"platform_admin"}},
+			Metadata: map[string]string{
+				"tool_profile":        saturationToolProfile,
+				"environment":         "prod",
+				"runtime_environment": "prod",
+			},
+		},
+		Capability: domain.Capability{
+			Name:      "k8s.circuit_break",
+			Scope:     domain.ScopeCluster,
+			RiskLevel: domain.RiskHigh,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"namespace":"sandbox","target_service":"api","downstream":"provider","ttl_seconds":30}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if decision.Allow || decision.Reason != "ttl_out_of_bounds" {
+		t.Fatalf("expected ttl_out_of_bounds, got %#v", decision)
+	}
+}
+
+func TestStaticPolicy_NotifyAllowsIncidentCommunicator(t *testing.T) {
+	engine := NewStaticPolicy()
+	decision, err := engine.Authorize(context.Background(), app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"incident_communicator"}},
+			Metadata: map[string]string{
+				"tool_profile":        humanEscalationToolProfile,
+				"environment":         "prod",
+				"runtime_environment": "prod",
+			},
+		},
+		Capability: domain.Capability{
+			Name:  "notify.escalation_channel",
+			Scope: domain.ScopeExternal,
+		},
+		Approved: true,
+		Args:     json.RawMessage(`{"incident_id":"inc-42","handoff_node_id":"handoff:inc-42:human","summary":"Need human review","upstream_specialist":"saturation-operator","upstream_decision":"escalate","reason":"automated remediation exhausted"}`),
+	})
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorFmt, err)
+	}
+	if !decision.Allow {
+		t.Fatalf("expected notify capability to be allowed, got %#v", decision)
+	}
+}
+
+func TestAuthorizeNotifyCapability_Denials(t *testing.T) {
+	t.Setenv("WORKSPACE_ENV", "prod")
+
+	t.Run("profile_mismatch", func(t *testing.T) {
+		decision := authorizeNotifyCapability(app.PolicyInput{
+			Session: domain.Session{
+				Principal: domain.Principal{Roles: []string{"incident_communicator"}},
+				Metadata: map[string]string{
+					"tool_profile":        saturationToolProfile,
+					"environment":         "prod",
+					"runtime_environment": "prod",
+				},
+			},
+		})
+		if decision.Allow || decision.Reason != "tool_profile_mismatch" {
+			t.Fatalf("expected tool_profile_mismatch, got %#v", decision)
+		}
+	})
+
+	t.Run("environment_mismatch", func(t *testing.T) {
+		decision := authorizeNotifyCapability(app.PolicyInput{
+			Session: domain.Session{
+				Principal: domain.Principal{Roles: []string{"incident_communicator"}},
+				Metadata: map[string]string{
+					"tool_profile":        humanEscalationToolProfile,
+					"environment":         "staging",
+					"runtime_environment": "prod",
+				},
+			},
+		})
+		if decision.Allow || decision.ErrorCode != app.ErrorCodeEnvironmentMismatch {
+			t.Fatalf("expected environment mismatch, got %#v", decision)
+		}
+	})
+}
+
+func TestAuthorizeSaturationCapability_BoundsAndPayloadErrors(t *testing.T) {
+	baseInput := app.PolicyInput{
+		Session: domain.Session{
+			Principal: domain.Principal{Roles: []string{"platform_admin"}},
+			Metadata: map[string]string{
+				"tool_profile":        saturationToolProfile,
+				"environment":         "prod",
+				"runtime_environment": "prod",
+			},
+		},
+	}
+
+	t.Run("invalid_json", func(t *testing.T) {
+		decision := authorizeSaturationCapability(app.PolicyInput{
+			Session:    baseInput.Session,
+			Capability: domain.Capability{Name: "k8s.scale_deployment"},
+			Args:       json.RawMessage(`{"replicas":`),
+		})
+		if decision.Allow || decision.Reason != invalidArgsPayload {
+			t.Fatalf("expected invalid args payload, got %#v", decision)
+		}
+	})
+
+	t.Run("replicas_out_of_bounds_string", func(t *testing.T) {
+		decision := authorizeSaturationCapability(app.PolicyInput{
+			Session:    baseInput.Session,
+			Capability: domain.Capability{Name: "k8s.scale_deployment"},
+			Args:       json.RawMessage(`{"replicas":"250"}`),
+		})
+		if decision.Allow || decision.Reason != "replicas_out_of_bounds" {
+			t.Fatalf("expected replicas_out_of_bounds, got %#v", decision)
+		}
+	})
+
+	t.Run("delta_out_of_bounds", func(t *testing.T) {
+		decision := authorizeSaturationCapability(app.PolicyInput{
+			Session:    baseInput.Session,
+			Capability: domain.Capability{Name: "k8s.scale_deployment"},
+			Args:       json.RawMessage(`{"replicas_delta":-60}`),
+		})
+		if decision.Allow || decision.Reason != "replicas_delta_out_of_bounds" {
+			t.Fatalf("expected replicas_delta_out_of_bounds, got %#v", decision)
+		}
+	})
+
+	t.Run("circuit_break_ttl_string", func(t *testing.T) {
+		decision := authorizeSaturationCapability(app.PolicyInput{
+			Session:    baseInput.Session,
+			Capability: domain.Capability{Name: "k8s.circuit_break"},
+			Args:       json.RawMessage(`{"ttl_seconds":"1900"}`),
+		})
+		if decision.Allow || decision.Reason != "ttl_out_of_bounds" {
+			t.Fatalf("expected ttl_out_of_bounds, got %#v", decision)
+		}
+	})
+}
+
+func TestAuthorizeEnvironmentMatchAndJSONNumberAsInt(t *testing.T) {
+	t.Run("environment_mismatch_without_runtime_env", func(t *testing.T) {
+		t.Setenv("WORKSPACE_ENV", "prod")
+		decision, ok := authorizeEnvironmentMatch(map[string]string{"environment": "staging"})
+		if !ok || decision.ErrorCode != app.ErrorCodeEnvironmentMismatch {
+			t.Fatalf("expected environment mismatch, got decision=%#v ok=%v", decision, ok)
+		}
+	})
+
+	t.Run("json_number_variants", func(t *testing.T) {
+		cases := []struct {
+			name  string
+			value any
+			want  int
+			ok    bool
+		}{
+			{name: "float64", value: float64(7), want: 7, ok: true},
+			{name: "int32", value: int32(8), want: 8, ok: true},
+			{name: "int64", value: int64(9), want: 9, ok: true},
+			{name: "json_number", value: json.Number("10"), want: 10, ok: true},
+			{name: "string", value: " 11 ", want: 11, ok: true},
+			{name: "invalid", value: struct{}{}, want: 0, ok: false},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				got, ok := jsonNumberAsInt(tc.value)
+				if got != tc.want || ok != tc.ok {
+					t.Fatalf("jsonNumberAsInt(%#v) = (%d,%v), want (%d,%v)", tc.value, got, ok, tc.want, tc.ok)
+				}
+			})
+		}
+	})
+}
+
 func TestStaticPolicy_PathAndArgExtractors(t *testing.T) {
 	payload := map[string]any{
 		testFieldPath: "src/main.go",

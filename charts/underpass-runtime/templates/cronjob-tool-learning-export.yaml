@@ -1,0 +1,81 @@
+{{- if and .Values.toolLearning.enabled .Values.toolLearning.exportLake.enabled }}
+{{- $fullName := include "underpass-runtime.fullname" . -}}
+{{- /*
+export-lake is the PRODUCER half of the tool-learning pipeline: it reads
+telemetry records from Valkey and writes them as Hive-partitioned Parquet to the
+S3 telemetry lake. The compute CronJobs (cronjob-tool-learning.yaml) read that
+lake, so this job MUST run before them — schedule it ahead of the compute crons.
+*/}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $fullName }}-tool-learning-export
+  labels:
+    {{- include "underpass-runtime.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tool-learning-export
+spec:
+  schedule: {{ .Values.toolLearning.exportLake.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.toolLearning.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.toolLearning.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.toolLearning.startingDeadlineSeconds }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "underpass-runtime.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: tool-learning-export
+    spec:
+      activeDeadlineSeconds: {{ .Values.toolLearning.activeDeadlineSeconds }}
+      backoffLimit: {{ .Values.toolLearning.backoffLimit }}
+      template:
+        metadata:
+          labels:
+            {{- include "underpass-runtime.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: tool-learning-export
+          {{- with .Values.toolLearning.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "underpass-runtime.serviceAccountName" . }}
+          automountServiceAccountToken: false
+          restartPolicy: OnFailure
+          securityContext:
+            {{- toYaml .Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: export-lake
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              image: "{{ .Values.toolLearning.image.repository }}:{{ .Values.toolLearning.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.toolLearning.image.pullPolicy }}
+              command:
+                - /app/export-lake
+              env:
+                {{- include "underpass-runtime.toolLearning.env" . | nindent 16 }}
+              resources:
+                {{- toYaml .Values.toolLearning.resources | nindent 16 }}
+              volumeMounts:
+                {{- include "underpass-runtime.toolLearning.volumeMounts" . | nindent 16 }}
+          volumes:
+            {{- include "underpass-runtime.toolLearning.volumes" . | nindent 12 }}
+          {{- with .Values.toolLearning.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.toolLearning.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.toolLearning.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

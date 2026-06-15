@@ -1,4 +1,6 @@
 {{- if .Values.vllm.ingress.enabled }}
+{{- $ingress := .Values.vllm.ingress }}
+{{- $hosts := $ingress.hosts | default (list $ingress.host) }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -21,17 +23,21 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - {{ .Values.vllm.ingress.host | quote }}
-      secretName: {{ .Values.vllm.ingress.tlsSecret }}
+        {{- range $host := $hosts }}
+        - {{ $host | quote }}
+        {{- end }}
+      secretName: {{ $ingress.tlsSecret }}
   rules:
-    - host: {{ .Values.vllm.ingress.host | quote }}
+    {{- range $host := $hosts }}
+    - host: {{ $host | quote }}
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: vllm-server
+                name: {{ $ingress.service.name }}
                 port:
-                  number: 8000
+                  number: {{ $ingress.service.port }}
+    {{- end }}
 {{- end }}

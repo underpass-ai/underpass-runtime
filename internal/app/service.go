@@ -48,6 +48,7 @@ type Service struct {
 	neuralModel     NeuralModelReader
 	decisionStore   RecommendationDecisionStore
 	warmCaches      *sessionWarmCaches
+	hylinucb        *HyLinUCBManager
 	tracer          trace.Tracer
 
 	// sessionInvCount tracks invocation count per session for first-tool metric.
@@ -89,6 +90,7 @@ func NewService(
 		qualityObserver: noopQualityObserver{},
 		decisionStore:   NewInMemoryRecommendationDecisionStore(),
 		warmCaches:      newSessionWarmCaches(),
+		hylinucb:        NewHyLinUCBManager(),
 		tracer:          otel.Tracer("workspace.service"),
 	}
 }
@@ -483,6 +485,10 @@ func (s *Service) completeToolInvocation(
 		inv.LogsRef = logsRef
 	}
 	if tc.runErr != nil {
+		if IsPolicyDeniedCode(tc.runErr.Code) {
+			inv = s.denyInvocation(ctx, inv, tc.startedAt, tc.session, tc.runErr)
+			return inv, policyDeniedError(tc.runErr.Code, tc.runErr.Message)
+		}
 		inv = s.finishWithError(inv, tc.startedAt, tc.runErr)
 		_ = s.storeInvocation(ctx, inv)
 		s.audit.Record(ctx, auditEventFromInvocation(tc.session, inv))
@@ -968,7 +974,7 @@ func unsupportedRuntimeReason(session domain.Session, capability domain.Capabili
 
 func isK8sDeliveryCapability(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "k8s.apply_manifest", "k8s.rollout_status", "k8s.restart_deployment":
+	case "k8s.apply_manifest", "k8s.rollout_status", "k8s.restart_deployment", "k8s.rollout_pause", "k8s.rollout_undo", "k8s.scale_deployment", "k8s.restart_pods", "k8s.circuit_break":
 		return true
 	default:
 		return false
@@ -1231,6 +1237,34 @@ func (s *Service) recordTelemetry(ctx context.Context, session domain.Session, i
 		Timestamp:     time.Now().UTC(),
 	}
 	_ = s.telemetry.Record(ctx, rec)
+
+	// Close the online contextual-bandit loop: feed this outcome to the
+	// HyLinUCB manager so it learns within the process lifetime.
+	s.updateOnlineBandit(ctx, session, inv, digest)
+}
+
+// updateOnlineBandit feeds an invocation outcome to the online HyLinUCB
+// contextual bandit so it learns from real executions. It uses the
+// tool-independent context signature so the update targets the same instance
+// created during Recommend (which derives the signature with an empty tool
+// name). Only executed invocations (succeeded/failed) carry a reward signal;
+// policy denials and in-flight invocations are skipped because they reflect
+// governance decisions, not tool efficacy. Missing policy data or a context
+// that was never recommended makes this a no-op — the loop only closes for
+// contexts the scorer has actually seen.
+func (s *Service) updateOnlineBandit(ctx context.Context, session domain.Session, inv domain.Invocation, digest ContextDigest) {
+	if s.hylinucb == nil || s.policyLearned == nil {
+		return
+	}
+	if inv.Status != domain.InvocationStatusSucceeded && inv.Status != domain.InvocationStatusFailed {
+		return
+	}
+	banditSig := DeriveContextSignature(session, "", digest)
+	pol, found, err := s.policyLearned.ReadPolicy(ctx, banditSig, inv.ToolName)
+	if err != nil || !found {
+		return
+	}
+	s.hylinucb.Update(banditSig, inv.ToolName, pol, inv.Status == domain.InvocationStatusSucceeded)
 }
 
 // publishEvent builds a DomainEvent and publishes it. Errors are silently

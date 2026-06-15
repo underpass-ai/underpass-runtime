@@ -167,6 +167,8 @@ config:
   version: "0.1.0"
   # -- Environment label (for telemetry)
   environment: production
+  # -- Optional JSON map for notify.escalation_channel routing, keyed by environment.
+  notifyEscalationRoutesJSON: ""
 
 # -- Workspace storage
 workspace:
@@ -236,10 +238,45 @@ eventBus:
   # -- Event bus type: none, nats
   type: none
   nats:
-    # -- NATS server URL
+    # -- NATS server URL. When `embedded.enabled: true` and this value
+    # is left at the default placeholder, the chart wires the
+    # `EVENT_BUS_NATS_URL` env var to the release-local Service
+    # (`<release>-nats:4222`); otherwise the explicit URL wins.
     url: nats://nats:4222
     # -- NATS stream name (optional)
     stream: ""
+    # -- Optional in-release NATS server. Each Underpass plane owns
+    # its own bus by design (subjects don't collide cross-plane and
+    # the planes can be rolled independently). Off by default so
+    # `helm install` stays minimal; turn it on in deployment-target
+    # values files when the cluster does not provide a NATS service.
+    embedded:
+      enabled: false
+      image:
+        repository: docker.io/library/nats
+        tag: "2.10-alpine"
+        pullPolicy: IfNotPresent
+      jetstream:
+        # JetStream is on by default because the runtime publishes
+        # `workspace.events.*` through a JetStream stream
+        # (`WORKSPACE_EVENTS`); disabling it would silently break
+        # publish semantics.
+        enabled: true
+        persistence:
+          # In-memory emptyDir by default. Flip on with a storageClass
+          # when the bus needs to survive a NATS pod restart.
+          enabled: false
+          size: 1Gi
+          storageClass: ""
+      monitoring:
+        enabled: false
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
   # -- Enable outbox pattern (requires Valkey)
   outbox: false
 
@@ -286,10 +323,18 @@ vllm:
     enabled: false
     # -- cert-manager ClusterIssuer used when ingress TLS is enabled
     clusterIssuer: ""
-    # -- Hostname served by the ingress
+    # -- Hostname served by the ingress. Kept for backwards compatibility when
+    # vllm.ingress.hosts is empty.
     host: ""
+    # -- Hostnames served by the ingress
+    hosts: []
     # -- TLS secret name for the ingress certificate
     tlsSecret: ""
+    service:
+      # -- Backend Service name exposed by the ingress
+      name: vllm-server
+      # -- Backend Service port exposed by the ingress
+      port: 8000
     mtls:
       # -- Require client certificates at the ingress layer
       enabled: false
@@ -345,11 +390,12 @@ kubernetesBackend:
 
   # -- Delivery tools (K8s apply, rollout, etc.)
   deliveryTools:
-    # -- Create delivery ServiceAccount + Role for K8s delivery tools
+    # -- Enable K8s delivery tools and bind delivery RBAC to the runtime ServiceAccount
     enabled: false
     # -- Target namespace for delivery RBAC (defaults to release namespace)
     namespace: ""
-    # -- ServiceAccount name for delivery tools (auto-generated if empty)
+    # -- Optional additional ServiceAccount name created in the target namespace and
+    # -- added to the delivery RoleBinding. Empty auto-generates <release>-delivery.
     serviceAccount: ""
 
   # -- RBAC for runner pod management
@@ -470,6 +516,23 @@ toolLearning:
     existingSecret: ""
     # -- Key in secret for password
     passwordKey: password
+    # -- Valkey key prefix the runtime writes telemetry under; export-lake scans
+    # this prefix to build the lake. Must match the runtime's telemetry recorder
+    # prefix (runtime default: "workspace:telemetry:").
+    telemetryPrefix: "workspace:telemetry:"
+
+  # -- export-lake CronJob: the PRODUCER that exports Valkey telemetry to the S3
+  # Parquet lake. The compute schedules read that lake, so this MUST run before
+  # them. Disabling it leaves the lake empty and compute finds nothing to learn.
+  # NOTE: the lake is only populated when the runtime writes telemetry to Valkey,
+  # i.e. telemetry.backend=valkey (the default "none" uses a no-op recorder, so
+  # the lake stays empty). export-lake reads the same Valkey DB
+  # (toolLearning.valkey.db) and prefix (toolLearning.valkey.telemetryPrefix).
+  exportLake:
+    # -- Deploy the export-lake CronJob
+    enabled: true
+    # -- Schedule — runs at :50 so the lake is fresh before hourly/daily compute at :00
+    schedule: "50 * * * *"
 
   # -- NATS configuration (policy event publisher)
   nats:

@@ -120,6 +120,31 @@ func TestOutcomeMapping(t *testing.T) {
 	}
 }
 
+func TestValkeyDB(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		want int
+	}{
+		{"unset defaults to 0", "", 0},
+		{"valid non-zero", "3", 3},
+		{"zero", "0", 0},
+		{"non-numeric falls back to 0", "abc", 0},
+		{"negative falls back to 0", "-1", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("VALKEY_DB", tt.env)
+			if tt.env == "" {
+				os.Unsetenv("VALKEY_DB")
+			}
+			if got := valkeyDB(); got != tt.want {
+				t.Errorf("valkeyDB() with VALKEY_DB=%q = %d, want %d", tt.env, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestEstimateCost(t *testing.T) {
 	r := telemetryRecord{ToolFamily: "fs", DurationMs: 100}
 	cost := r.estimateCost()

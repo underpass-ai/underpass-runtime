@@ -8,6 +8,9 @@ import sys
 import time
 from datetime import datetime, timezone
 from typing import Any
+from urllib.error import HTTPError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 import grpc
 from google.protobuf import json_format, struct_pb2
@@ -129,6 +132,26 @@ class WorkspaceE2EBase:
             )
             return grpc.secure_channel(target, creds)
         return grpc.insecure_channel(target)
+
+    def metrics_url(self, path: str = "/metrics") -> str:
+        """Return the plaintext metrics endpoint derived from WORKSPACE_URL."""
+        raw = self.workspace_url
+        if "://" not in raw:
+            raw = "https://" + raw
+        parsed = urlparse(raw)
+        host = parsed.hostname or "underpass-runtime"
+        return f"http://{host}:9090{path}"
+
+    def get_metrics(self, path: str = "/metrics", timeout: int = 10) -> tuple[int, str]:
+        """Fetch the plaintext metrics endpoint."""
+        req = Request(self.metrics_url(path), method="GET")
+        try:
+            with urlopen(req, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+                return resp.status, body
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            return exc.code, body
 
     @staticmethod
     def _build_auth_metadata() -> list[tuple[str, str]]:

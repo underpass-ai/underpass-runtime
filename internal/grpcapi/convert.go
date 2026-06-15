@@ -374,12 +374,14 @@ func serviceErrorToStatus(err *app.ServiceError) error {
 		code = codes.InvalidArgument
 	case app.ErrorCodeNotFound:
 		code = codes.NotFound
-	case app.ErrorCodePolicyDenied:
-		code = codes.PermissionDenied
 	case app.ErrorCodeApprovalRequired:
 		code = codes.FailedPrecondition
 	case app.ErrorCodeTimeout:
 		code = codes.DeadlineExceeded
+	default:
+		if app.IsPolicyDeniedCode(err.Code) {
+			code = codes.PermissionDenied
+		}
 	}
 	return status.Error(code, err.Message)
 }

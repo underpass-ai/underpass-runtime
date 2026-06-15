@@ -1025,6 +1025,40 @@ capabilities:
     examples:
       - '{"profile_id":"dev.rabbit","queue":"sandbox.jobs"}'
 
+  - name: notify.escalation_channel
+    description: Deliver a structured incident handoff to the configured escalation channel for the current environment.
+    input_schema: '{"type":"object","properties":{"incident_id":{"type":"string","maxLength":200},"handoff_node_id":{"type":"string","maxLength":200},"summary":{"type":"string","maxLength":200},"upstream_specialist":{"type":"string","maxLength":100},"upstream_decision":{"type":"string","maxLength":100},"reason":{"type":"string","maxLength":1000},"resource_ref":{"type":"string","maxLength":200}},"required":["incident_id","handoff_node_id","summary","upstream_specialist","upstream_decision","reason"],"additionalProperties":false}'
+    output_schema: '{"type":"object","properties":{"delivered":{"type":"boolean"},"channel":{"type":"string"},"provider":{"type":"string"},"provider_msg_id":{"type":"string"}},"required":["delivered","channel"]}'
+    scope: external
+    side_effects: irreversible
+    risk_level: low
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 10
+      max_retries: 1
+      output_limit_kb: 4
+    preconditions:
+      - principal must have external-scope access
+      - session metadata tool_profile must equal human-escalation-minimal
+      - session metadata environment must match the configured runtime environment
+      - escalation route must be configured for the current environment
+    postconditions:
+      - a human-facing escalation message may be delivered
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: incident_id
+          max_length: 200
+        - field: handoff_node_id
+          max_length: 200
+        - field: summary
+          max_length: 200
+        - field: reason
+          max_length: 1000
+    examples:
+      - '{"incident_id":"inc-42","handoff_node_id":"handoff:inc-42:human","summary":"Automated remediation exhausted","upstream_specialist":"saturation-operator","upstream_decision":"escalate","reason":"bounded automation stopped at human handoff"}'
+
   - name: redis.get
     description: Read a single Redis key from an allowlisted key prefix.
     input_schema: '{"type":"object","properties":{"profile_id":{"type":"string"},"key":{"type":"string"},"max_bytes":{"type":"integer","minimum":1,"maximum":1048576},"timeout_ms":{"type":"integer","minimum":100,"maximum":10000}},"required":["profile_id","key"]}'
@@ -2257,6 +2291,42 @@ capabilities:
     examples:
       - '{"namespace":"underpass-runtime","include_containers":true}'
 
+  - name: k8s.get_replicasets
+    description: List ReplicaSets in a namespace, optionally narrowed to a single Deployment owner.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"}},"required":[]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"replicasets":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"revision":{"type":"integer"},"replicas":{"type":"integer"},"ready_replicas":{"type":"integer"},"available_replicas":{"type":"integer"},"pod_template_hash":{"type":"string"},"current":{"type":"boolean"}}}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: none
+    risk_level: low
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 10
+      max_retries: 2
+      output_limit_kb: 128
+    preconditions:
+      - principal must have cluster-scope access
+      - session metadata tool_profile must equal runtime-rollout-narrow
+    postconditions:
+      - no cluster mutation
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace"}'
+
   - name: k8s.get_images
     description: Aggregate container images used by pods in a namespace.
     input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"label_selector":{"type":"string"},"field_selector":{"type":"string"},"max_images":{"type":"integer","minimum":1,"maximum":1000},"include_workloads":{"type":"boolean"}},"required":[]}'
@@ -2367,6 +2437,86 @@ capabilities:
     examples:
       - '{"namespace":"underpass-runtime","deployment_name":"workspace","timeout_seconds":120}'
 
+  - name: k8s.rollout_pause
+    description: Pause a Deployment so the active rollout stops progressing without reverting changes.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"}},"required":["deployment_name"]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"paused":{"type":"boolean"},"observed_generation":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: guaranteed
+    constraints:
+      timeout_seconds: 15
+      output_limit_kb: 8
+    preconditions:
+      - principal must have cluster-scope access
+      - session metadata tool_profile must equal runtime-rollout-narrow
+      - session metadata environment must match the configured runtime environment
+      - namespace must be allowlisted by policy
+      - deployment must exist
+    postconditions:
+      - deployment rollout progression may stop until resumed or replaced
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace"}'
+
+  - name: k8s.rollout_undo
+    description: Roll a Deployment back to a previous healthy ReplicaSet revision.
+    input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"to_revision":{"type":"integer","minimum":1}},"required":["deployment_name"]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"previous_revision":{"type":"integer"},"target_revision":{"type":"integer"},"rolled_back":{"type":"boolean"},"observed_generation":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}}}'
+    scope: cluster
+    side_effects: reversible
+    risk_level: high
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 16
+    preconditions:
+      - principal must have cluster-scope access
+      - session metadata tool_profile must equal runtime-rollout-narrow
+      - session metadata environment must match the configured runtime environment
+      - namespace must be allowlisted by policy
+      - a previous healthy ReplicaSet must exist
+      - the current rollout must be at least 60 seconds old
+    postconditions:
+      - deployment pod template may be reverted to a previous revision
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace"}'
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace","to_revision":4}'
+
   - name: k8s.set_image
     description: Update a container image on a Kubernetes deployment.
     input_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"container_name":{"type":"string"},"image":{"type":"string"},"wait_for_rollout":{"type":"boolean"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":1800}},"required":["deployment_name","image"]}'
@@ -2412,6 +2562,121 @@ capabilities:
         - namespace
     examples:
       - '{"namespace":"underpass-runtime","deployment_name":"workspace","wait_for_rollout":true,"timeout_seconds":180}'
+
+  - name: k8s.scale_deployment
+    description: Scale a deployment to an absolute replica target or by a bounded delta; the absolute path is effectively idempotent, but the delta path is best-effort under replay.
+    input_schema: '{"type":"object","required":["namespace","deployment_name"],"properties":{"namespace":{"type":"string","maxLength":253},"deployment_name":{"type":"string","maxLength":253},"replicas":{"type":"integer","minimum":0,"maximum":200},"replicas_delta":{"type":"integer","minimum":-50,"maximum":50}},"oneOf":[{"required":["replicas"]},{"required":["replicas_delta"]}],"additionalProperties":false}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"previous_replicas":{"type":"integer"},"target_replicas":{"type":"integer"},"applied":{"type":"boolean"},"observed_generation":{"type":"integer"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}},"required":["namespace","deployment_name","previous_replicas","target_replicas"]}'
+    scope: cluster
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 16
+    preconditions:
+      - principal must have cluster-scope access
+      - session metadata tool_profile must equal saturation-operator-bounded
+      - session metadata environment must match the configured runtime environment
+      - namespace must be allowlisted by policy
+      - deployment must exist
+    postconditions:
+      - deployment replica count may be updated
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace","replicas":6}'
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace","replicas_delta":2}'
+
+  - name: k8s.restart_pods
+    description: Restart a deployment rollout or delete a bounded set of matching pods within that deployment.
+    input_schema: '{"type":"object","required":["namespace","deployment_name","mode"],"properties":{"namespace":{"type":"string","maxLength":253},"deployment_name":{"type":"string","maxLength":253},"mode":{"enum":["rollout_restart","label_selector"]},"label_selector":{"type":"string","maxLength":1024},"max_pods":{"type":"integer","minimum":1,"maximum":5}},"additionalProperties":false,"allOf":[{"if":{"properties":{"mode":{"const":"label_selector"}}},"then":{"required":["label_selector","max_pods"]}}]}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"deployment_name":{"type":"string"},"mode":{"type":"string"},"pods_affected":{"type":"integer"},"rollout_revision":{"type":"integer"},"deleted_pods":{"type":"array","items":{"type":"string"}},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}},"required":["namespace","deployment_name","mode","pods_affected"]}'
+    scope: cluster
+    side_effects: reversible
+    risk_level: medium
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 30
+      output_limit_kb: 16
+    preconditions:
+      - principal must have cluster-scope access
+      - session metadata tool_profile must equal saturation-operator-bounded
+      - session metadata environment must match the configured runtime environment
+      - namespace must be allowlisted by policy
+      - deployment must exist
+    postconditions:
+      - deployment pods may restart or a bounded subset may be deleted
+    cost_hint: low
+    policy:
+      arg_fields:
+        - field: deployment_name
+          max_length: 253
+          deny_characters:
+            - " "
+            - "\n"
+            - "\r"
+            - /
+            - \
+            - ;
+            - "|"
+            - "&"
+        - field: label_selector
+          max_length: 1024
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace","mode":"rollout_restart"}'
+      - '{"namespace":"underpass-runtime","deployment_name":"workspace","mode":"label_selector","label_selector":"pod-template-hash=abc123","max_pods":1}'
+
+  - name: k8s.circuit_break
+    description: Install or renew a bounded egress circuit-break policy for one service against a named downstream service.
+    input_schema: '{"type":"object","required":["namespace","target_service","downstream","ttl_seconds"],"properties":{"namespace":{"type":"string","maxLength":253},"target_service":{"type":"string","maxLength":253},"downstream":{"type":"string","maxLength":253},"ttl_seconds":{"type":"integer","minimum":60,"maximum":1800}},"additionalProperties":false}'
+    output_schema: '{"type":"object","properties":{"namespace":{"type":"string"},"target_service":{"type":"string"},"downstream":{"type":"string"},"policy_id":{"type":"string"},"expires_at":{"type":"string","format":"date-time"},"mesh_kind":{"type":"string"},"summary":{"type":"string"},"output":{"type":"string"},"exit_code":{"type":"integer"}},"required":["namespace","target_service","downstream","policy_id","expires_at"]}'
+    scope: cluster
+    side_effects: reversible
+    risk_level: high
+    requires_approval: true
+    idempotency: best-effort
+    constraints:
+      timeout_seconds: 60
+      output_limit_kb: 16
+    preconditions:
+      - principal must have cluster-scope access
+      - principal must hold platform_admin for high-risk cluster actions
+      - session metadata tool_profile must equal saturation-operator-bounded
+      - session metadata environment must match the configured runtime environment
+      - namespace must be allowlisted by policy
+      - target and downstream services must exist
+    postconditions:
+      - an egress-blocking policy may be installed temporarily
+    cost_hint: medium
+    policy:
+      arg_fields:
+        - field: target_service
+          max_length: 253
+        - field: downstream
+          max_length: 253
+      namespace_fields:
+        - namespace
+    examples:
+      - '{"namespace":"underpass-runtime","target_service":"web-api","downstream":"upstream-gateway","ttl_seconds":300}'
 
   - name: security.scan_dependencies
     description: Collect dependency inventory for the detected project toolchain.
@@ -2968,4 +3233,3 @@ capabilities:
     scope: external
     side_effects: none
     risk_level: low
-

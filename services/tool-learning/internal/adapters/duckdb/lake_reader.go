@@ -156,6 +156,12 @@ func (r *LakeReader) QueryAggregates(ctx context.Context, from, to time.Time) ([
 		rows, err = r.db.QueryContext(ctx, r.query, from, to)
 	}
 	if err != nil {
+		if isEmptyLakeError(err) {
+			// An empty lake (no Parquet files yet) is not a failure: a freshly
+			// deployed or low-traffic system has no telemetry until export-lake
+			// first populates the lake. Treat it as zero aggregates.
+			return nil, nil
+		}
 		return nil, fmt.Errorf("duckdb query: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -178,6 +184,14 @@ func (r *LakeReader) QueryAggregates(ctx context.Context, from, to time.Time) ([
 		results = append(results, s)
 	}
 	return results, rows.Err()
+}
+
+// isEmptyLakeError reports whether err is DuckDB's "no matching files" IO error,
+// raised by read_parquet when the S3 lake glob matches zero Parquet files. This
+// is the expected state of a fresh lake before export-lake has run, so callers
+// treat it as zero aggregates rather than a hard failure.
+func isEmptyLakeError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "No files found")
 }
 
 // Close releases the DuckDB database connection.
