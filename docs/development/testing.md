@@ -122,65 +122,50 @@ End-to-end tests run as Kubernetes Jobs against a live runtime deployment.
 They validate the full stack: TLS, auth, session lifecycle, tool execution,
 event flow, and LLM integration.
 
-### Test Catalog
+### Per-tool matrix
 
-| ID | Name | Tier | Type | Timeout | What It Validates |
-|---|---|---|---|---|---|
-| 01 | health | smoke | workspace | 300s | `/healthz` 200, `/metrics` 200, 405 on wrong method |
-| 02 | session-lifecycle | smoke | workspace | 600s | Create, close, metadata, idempotent close, explicit ID, independence |
-| 03 | tool-discovery | smoke | workspace | 600s | Compact/full detail, filters (risk, tags, scope, cost, side_effects) |
-| 04 | recommendations | core | workspace | 600s | Heuristic scoring, task hint matching, top_k |
-| 05 | invoke-basic | smoke | workspace | 600s | `fs.write_file`, `fs.read_file`, `fs.list` — basic tool invocations |
-| 06 | invoke-policy | core | workspace | 600s | Policy enforcement, approval flows, risk-gated tools |
-| 07 | invocation-retrieval | core | workspace | 600s | GET invocation by ID, logs, artifacts |
-| 08 | data-flow | core | workspace | 900s | Full write → read → list → artifacts cycle |
-| 10 | llm-agent-loop | full | llm | 600s | LLM (Claude/OpenAI/vLLM) drives tool discovery + invocation loop |
-| 11 | tool-learning-pipeline | core | tool-learning | 600s | DuckDB → Thompson Sampling → Valkey → NATS |
-| 12 | event-driven-agent | full | agent | 300s | NATS event → agent activates → workspace → NATS |
-| 13 | multi-agent-pipeline | full | agent | 300s | 5-agent collaborative pipeline |
-| 14 | full-infra-stack | full | infra | 120s | TLS + Valkey + NATS + S3 end-to-end |
+The suite is a single data-driven runner (`e2e/tests/00-tool-matrix`) that loads
+the tool catalog and exercises every registered tool (~130). See
+[`e2e/README.md`](../../e2e/README.md) for the full design. Per tool it derives:
 
-### Tiers
+| Case | Applies to | Asserts |
+|---|---|---|
+| `discovery` | all | tool registered + visible in the session catalog |
+| `happy_path` | tools with an `example` | invoke with the catalog's own example args |
+| `invalid_input` | tools with required fields | empty args are rejected, never executed |
+| `approval_gate` | `requires_approval` tools | invoking without approval is blocked |
+| `policy_traversal` | tools with a `path_field` | a workspace-escape path is denied |
 
-| Tier | Tests | Purpose | When to Run |
-|---|---|---|---|
-| **smoke** | 01, 02, 03, 05 | Basic health and functionality | Every deployment |
-| **core** | 04, 06, 07, 08, 11 | Policy, retrieval, data flow, tool learning | Every PR |
-| **full** | 10, 12, 13, 14 | LLM integration, multi-agent, full infra | Before release |
+The three governance cases are the deterministic backbone; `happy_path` records
+real `succeeded` execution for workspace-local tools, `fail` if a tool's own
+example is rejected by governance, and `executed` (non-failing) when an external
+dependency is unavailable.
 
 ### Running
 
 ```bash
-# All tiers
-./e2e/run-e2e-tests.sh
+# Whole matrix (build + push + deploy the Job)
+./e2e/run-e2e-tests.sh --test 00
 
-# By tier
-./e2e/run-e2e-tests.sh --tier smoke
-./e2e/run-e2e-tests.sh --tier core
+# Skip build/push (image already in registry)
+./e2e/run-e2e-tests.sh --skip-build --skip-push --test 00
 
-# Single test
-./e2e/run-e2e-tests.sh --test 05
-
-# Skip build/push (images already in registry)
-./e2e/run-e2e-tests.sh --skip-build --skip-push --tier smoke
-
-# Custom namespace
-./e2e/run-e2e-tests.sh --namespace my-namespace --test 01
+# Local dry-run of the case matrix (no cluster)
+E2E_DRY_RUN=1 CATALOG_PATH=internal/adapters/tools/catalog_defaults.yaml \
+  python3 e2e/tests/00-tool-matrix/test_tool_matrix.py
 ```
 
 ### Evidence Collection
 
-Each test produces a structured JSON evidence file:
+The runner emits a structured JSON evidence file with every `{tool, case,
+outcome, detail}` plus a roll-up:
 
 ```json
 {
-  "test_id": "05-invoke-basic",
-  "run_id": "e2e-invoke-1773860400",
+  "test_id": "00-tool-matrix",
   "status": "passed",
-  "workspace_url": "https://underpass-runtime:50053",
-  "steps": [...],
-  "invocations": [...],
-  "sessions": [...]
+  "summary": {"tools": 130, "cases": 387, "by_outcome": {"pass": 0, "executed": 0, "fail": 0}},
+  "cases": [{"tool": "fs.write_file", "case": "happy_path", "outcome": "pass"}]
 }
 ```
 
