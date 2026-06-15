@@ -36,14 +36,14 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: golangci-lint (no k8s)
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m
           only-new-issues: true
 
       - name: golangci-lint (k8s)
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
           args: --timeout=5m --build-tags=k8s
@@ -361,11 +361,10 @@ jobs:
           fi
 
       - name: SonarCloud Scan
-        # Dependabot PRs cannot access SONAR_TOKEN (restricted secrets), so the
-        # scan would fail with "Project not found". Skip it for them; the job
-        # still succeeds so the required "SonarCloud" check passes. Pushes and
-        # normal PRs run the scan and enforce the quality gate as usual.
-        if: github.event_name == 'push' || github.actor != 'dependabot[bot]'
+        # Runs on pushes and PRs, including Dependabot — it has SONAR_TOKEN via a
+        # Dependabot secret, so the scan enforces the quality gate for dep bumps
+        # too. Skipped only when no token is available (e.g. fork PRs).
+        if: env.SONAR_TOKEN != ''
         uses: sonarsource/sonarcloud-github-action@ffc3010689be73b8e5ae0c57ce35968afd7909e8 # v5.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
