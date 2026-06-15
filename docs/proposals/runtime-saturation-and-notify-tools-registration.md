@@ -1,62 +1,36 @@
-# Proposal — Register saturation + escalation-notify tools in `underpass-runtime`
+# Reference — saturation + escalation-notify tools in `underpass-runtime`
 
-Status: ✅ landed on `main` (PR #141; quality follow-ups in PR #142). Tools registered in `internal/adapters/tools/catalog_defaults.yaml` (`k8s.scale_deployment`, `k8s.restart_pods`, `k8s.circuit_break`, `notify.escalation_channel`), implemented in `k8s_saturation_tools.go` + `notify_tools.go`, enforced in `internal/adapters/policy/static_policy.go`, and covered by `e2e/tests/24-runtime-saturation-notify-tools`.
-Source repo: `underpass-payments-incident-response`
-Target repo: `underpass-runtime`
-Owner of the request: PIR
-Date: 2026-04-25
+Status: ✅ registered on `main`. Tools are defined in `internal/adapters/tools/catalog_defaults.yaml` (`k8s.scale_deployment`, `k8s.restart_pods`, `k8s.circuit_break`, `notify.escalation_channel`), implemented in `k8s_saturation_tools.go` + `notify_tools.go`, enforced in `internal/adapters/policy/static_policy.go`, and covered by `e2e/tests/24-runtime-saturation-notify-tools`.
 
 ## Summary
 
-PIR has two convergence points that need governed write tools the
-runtime does not register today:
+The runtime registers four governed write tools that let a bounded
+operator actuate two remediation scenarios through the runtime instead
+of stopping at a decision:
 
-1. **`saturation-operator`** (third hop of the resource-saturation
-   3-in-series pipeline, status `implemented` in `contracts/specialists/catalog.v1.yaml`)
-   converges on a plan whose `chosen_action` is one of `scale_up`,
-   `restart_pods`, `circuit_break`. The operator currently records its
-   decision as a graph wave and emits an outcome event, but cannot
-   actuate; the catalog flags this as known v1 debt.
-2. **`human-escalation`** (status `implemented`, lands in this branch)
-   converges on `engage_owner` and emits the catalog terminal
-   `payments.incident.escalated.to-human`. v1 has no notification
-   surface, so the human owner only sees the handoff if they navigate
-   to the kernel handoff node manually.
+1. **Resource saturation** — an operator converges on a plan whose
+   `chosen_action` is one of `scale_up`, `restart_pods`,
+   `circuit_break`, and needs the matching K8s write verb to actuate
+   it.
+2. **Human escalation** — an operator converges on `engage_owner` and
+   needs a notification surface so the human owner sees the handoff
+   without navigating to the kernel handoff node manually.
 
-This proposal asks the runtime team to register **three new K8s
-write tools** (`k8s.scale_deployment`, `k8s.restart_pods`,
-`k8s.circuit_break`) and **one new notification tool**
-(`notify.escalation_channel`), and to enforce the bounded invariants
-in §"Governance invariants" at the policy layer.
-
-The shape mirrors the rollout-tools proposal
-(`docs/proposals/runtime-rollout-tools-registration.md`, accepted /
-pending merge). Where the rollout proposal asks for read tools to
-support investigation and write tools to support a four-value decision
-space, this proposal is purely write-side: PIR's investigators and
-planners read what they need from the kernel via `GetContext`, not
-from the runtime.
-
-## Motivation
-
-The seven-stage flow has stages 4 (tool suggestion + policy check) and
-5 (governed execution) closed for `runtime-rollout-operator` and only
-for that specialist. The saturation pipeline reaches `decision`
-without a runtime hop; the human-escalation specialist reaches its
-terminal outcome without a notify hop. Both pipelines therefore stop
-short of the architecture's "bounded specialist that actuates through
-the runtime" pattern. Registering these four tools is what closes the
-gap without redesigning anything: each operator already produces a
-typed decision with parameters; the runtime just needs to expose the
-verbs and enforce the invariants.
+The runtime exposes **three K8s write tools** (`k8s.scale_deployment`,
+`k8s.restart_pods`, `k8s.circuit_break`) and **one notification tool**
+(`notify.escalation_channel`), and enforces the bounded invariants in
+§"Governance invariants" at the policy layer. These tools are
+purely write-side: callers read what they need from the kernel via
+`GetContext`, not from the runtime.
 
 ## Current state in runtime
 
-`grep -rn '"k8s\.' internal/adapters/tools/` in `underpass-runtime`
-enumerates the K8s capabilities registered today:
+`grep -rn '"k8s\.' internal/adapters/tools/` enumerates the K8s
+capabilities registered today:
 
 ```
 k8s.apply_manifest
+k8s.circuit_break
 k8s.get_deployments
 k8s.get_images
 k8s.get_logs
@@ -64,41 +38,31 @@ k8s.get_pods
 k8s.get_services
 k8s.local
 k8s.restart_deployment
+k8s.restart_pods
 k8s.rollout_status
+k8s.scale_deployment
 k8s.set_image
 ```
 
-Notification tools today: none. PIR's consumption side:
+`notify.escalation_channel` is the first tool in the `notify.*`
+namespace.
 
-| Tool required by PIR contract | Status in runtime | Resolution |
-|---|---|---|
-| `k8s.scale_deployment`        | **Missing** | Register new tool |
-| `k8s.restart_pods`            | **Naming drift** — runtime has `k8s.restart_deployment` (deployment-level rollout restart) | Register a sibling at pod scope, or alias — see §"Naming drift" |
-| `k8s.circuit_break`           | **Missing** | Register new tool |
-| `notify.escalation_channel`   | **Missing** (new namespace) | Register new tool |
+## Tool profiles
 
-## Target state
+Two tool profiles bind these capabilities; the policy engine matches
+them against the session-metadata `tool_profile` key:
 
-`DefaultCapabilities` registers four new tools with the shapes in
-§"Detailed capability specs". The policy engine enforces the
-invariants in §"Governance invariants" before any write reaches the
-target system (K8s API or external notification provider). Two new
-tool profiles bind these capabilities:
-
-- `saturation-operator-bounded` — supersedes the `saturation-operator-deferred`
-  placeholder in PIR's specialist catalog; binds the three K8s
-  saturation tools.
-- `human-escalation-minimal` — already named in PIR's catalog;
-  becomes non-empty by binding `notify.escalation_channel`.
+- `saturation-operator-bounded` — binds the three K8s saturation tools.
+- `human-escalation-minimal` — binds `notify.escalation_channel`.
 
 ## Detailed capability specs
 
-All four new tools share this common shape: scope `CLUSTER` for the
+All four tools share this common shape: scope `CLUSTER` for the
 K8s tools and `EXTERNAL` for the notify tool, a `PolicyMetadata`
 block requiring the matching `tool_profile` session-metadata key, and
 `trace_name` / `span_name` matching the tool name.
 
-### 1. `k8s.scale_deployment` (new, write)
+### 1. `k8s.scale_deployment` (write)
 
 Equivalent to `kubectl scale deployment/{name} -n {namespace}
 --replicas={n}`. The tool accepts either an absolute `replicas` value
@@ -110,8 +74,7 @@ description: |
   Set Deployment.spec.replicas to an absolute target or apply a
   bounded delta. Idempotent on the absolute path (a no-op when the
   desired count already matches). The relative path is one-shot per
-  invocation; PIR's saturation-planner produces parameters the
-  operator forwards verbatim.
+  invocation; the caller forwards the planner's parameters verbatim.
 scope: CLUSTER
 risk_level: MEDIUM
 side_effects: REVERSIBLE
@@ -164,12 +127,12 @@ observability:
   span_name:  "invoke_k8s_scale_deployment"
 ```
 
-### 2. `k8s.restart_pods` (new, write)
+### 2. `k8s.restart_pods` (write)
 
 Equivalent to `kubectl rollout restart deployment/{name} -n {namespace}`
 when invoked at deployment scope, or to deleting pods matching a
-label selector when invoked at label-selector scope. The plan from
-saturation-planner names exactly one mode.
+label selector when invoked at label-selector scope. The plan names
+exactly one mode.
 
 ```yaml
 name: k8s.restart_pods
@@ -233,11 +196,11 @@ observability:
   span_name:  "invoke_k8s_restart_pods"
 ```
 
-### 3. `k8s.circuit_break` (new, write)
+### 3. `k8s.circuit_break` (write)
 
 Apply a traffic-shed policy at the Service / VirtualService / Gateway
 boundary. The exact CRD depends on the cluster's mesh choice; the
-proposed shape stays mesh-agnostic by carrying `target_service` +
+shape stays mesh-agnostic by carrying `target_service` +
 `downstream` and asking the runtime to translate to whatever CRD the
 cluster recognises (Istio `VirtualService`, Linkerd `ServiceProfile`,
 or a NetworkPolicy fallback).
@@ -248,9 +211,9 @@ description: |
   Install or update a traffic-shed policy that blocks traffic from a
   named upstream Service to a named downstream destination, applied
   at the cluster's mesh / network layer. The policy is applied with
-  a TTL so it auto-removes if not renewed; PIR records the policy id
-  in the operator's decision graph so the human owner can observe and
-  remove it after recovery.
+  a TTL so it auto-removes if not renewed; the caller records the
+  policy id in the operator's decision graph so the human owner can
+  observe and remove it after recovery.
 scope: CLUSTER
 risk_level: HIGH
 side_effects: REVERSIBLE
@@ -299,20 +262,20 @@ observability:
   span_name:  "invoke_k8s_circuit_break"
 ```
 
-### 4. `notify.escalation_channel` (new, write — external)
+### 4. `notify.escalation_channel` (write — external)
 
 Post a structured handoff to the configured human-escalation channel.
 v1 targets a Slack incoming webhook; subsequent versions can fan out
 to PagerDuty / Opsgenie / etc. The runtime owns the credential and
-the channel routing; PIR passes only the handoff content.
+the channel routing; the caller passes only the handoff content.
 
 ```yaml
 name: notify.escalation_channel
 description: |
   Notify the configured human-escalation channel with a structured
   handoff message. The runtime resolves channel / webhook by the
-  session's environment + a runtime-side routing config; PIR never
-  ships credentials or URLs. The notification carries a stable
+  session's environment + a runtime-side routing config; callers
+  never ship credentials or URLs. The notification carries a stable
   handoff_node_id so the receiver can pivot to the kernel for the
   full narrative.
 scope: EXTERNAL
@@ -370,24 +333,16 @@ observability:
 `k8s.restart_deployment` (used by `runtime-restart-operator`). The
 overlap is partial: `restart_deployment` always rolls the entire
 Deployment; `restart_pods` adds a label-selector mode for partial
-drains. The runtime team picks one of:
-
-1. Register `k8s.restart_pods` as a new sibling tool with both modes.
-   PIR's saturation-planner uses the new name unconditionally. (PIR's
-   preference — keeps the two operators bound to non-overlapping tool
-   profiles.)
-2. Extend `k8s.restart_deployment` with the optional label-selector
-   mode and have PIR use the existing name. Smaller surface but
-   couples two specialists to one tool.
-
-PIR is fine either way; option 1 is recommended because the policy
-engine can keep `runtime-restart-operator` and `saturation-operator`
-on disjoint capability lists, which is easier to audit.
+drains. The runtime registers `k8s.restart_pods` as a new sibling
+tool with both modes, which keeps the two operators bound to
+non-overlapping tool profiles and the policy engine able to keep
+`runtime-restart-operator` and the saturation operator on disjoint
+capability lists (easier to audit).
 
 ## Governance invariants
 
-The runtime's policy engine MUST enforce the following before any of
-the four writes reaches the target system:
+The runtime's policy engine enforces the following before any of the
+four writes reaches the target system:
 
 1. **Tool profile match.** Session metadata `tool_profile` must equal
    `saturation-operator-bounded` for the three K8s tools and
@@ -395,88 +350,24 @@ the four writes reaches the target system:
    other value (including missing) → `DENIED` with sentinel
    `tool_profile_mismatch`.
 2. **Environment match.** Session metadata `environment` must equal
-   the runtime's notion of the cluster's environment (label,
-   runtime-config, or session value — see Open questions). Mismatch
+   the runtime's notion of the cluster's environment. Mismatch
    → `DENIED` with `environment_mismatch`.
 3. **Replica + delta bounds.** `k8s.scale_deployment` rejects
    `replicas > 200` and `|replicas_delta| > 50` at the policy layer
    (the schema enforces it too; the policy gate is defense in depth).
 4. **TTL bound on circuit-break.** `k8s.circuit_break.ttl_seconds`
    must be between 60 and 1800. Outside that range → `DENIED` with
-   `ttl_out_of_bounds`. The runtime owns the auto-expire mechanism;
-   PIR does not have to remember to call a release verb.
+   `ttl_out_of_bounds`. The runtime owns the auto-expire mechanism, so
+   callers do not have to remember to call a release verb.
 5. **Approval flag.** All four tools have `requires_approval: true`.
-   PIR sets `InvokeToolRequest.approved=true` per invocation. Without
-   it → `DENIED` with `approval_required`.
+   The caller sets `InvokeToolRequest.approved=true` per invocation.
+   Without it → `DENIED` with `approval_required`.
 6. **Notify rate limit.** `notify.escalation_channel` is rate-limited
    per `incident_id` to one delivery per minute (transient
    re-deliveries from JetStream redelivery should not flood the
    channel). Excess → `DENIED` with `rate_limit_exceeded`. The
-   runtime owns the rate-limit state since PIR sessions are
+   runtime owns the rate-limit state since operator sessions are
    short-lived.
 
 Denials materialize as `Invocation{status: DENIED, error: {...}}` with
-the sentinel above, matching the contract `runtime-rollout-operator`
-already consumes.
-
-## Acceptance criteria
-
-- `DefaultCapabilities()` in `internal/adapters/tools/` registers the
-  four tools with the shapes in §"Detailed capability specs".
-- Unit tests in `internal/adapters/tools/` cover the happy path for
-  each tool against fakes (k8s clientset and a mock notify provider).
-- Policy engine enforces the six invariants in §"Governance
-  invariants" with the named sentinel codes.
-- The two tool profiles (`saturation-operator-bounded`,
-  `human-escalation-minimal`) are documented somewhere PIR can
-  reference (the value of `tool_profile` session metadata that the
-  policy engine matches).
-- `EventInvocationCompleted` / `EventInvocationDenied` events on
-  `workspace.events.invocation.{completed,denied}` carry the
-  `correlation_id` PIR passes in `InvokeToolRequest`.
-
-## Open questions for the runtime team
-
-1. **Mesh translation in `k8s.circuit_break`.** Does the runtime want
-   to commit to one mesh CRD per cluster (auto-detected at startup)
-   or accept a `mesh_kind` argument from PIR? PIR can supply
-   `mesh_kind` via planner parameters if that's the cleaner shape.
-2. **Notify provider routing.** PIR proposes the runtime owns the
-   routing config (a map from `environment` to webhook /
-   integration-key). Confirm the runtime is willing to hold this
-   config and rotate credentials without PIR involvement.
-3. **`k8s.restart_pods` vs `k8s.restart_deployment` naming.** Pick
-   option 1 (sibling) or option 2 (extend) — see §"Naming drift".
-4. **Rate limit storage.** Invariant 6 needs persisted state.
-   Acceptable to keep it in process memory if the runtime is single-
-   replica today, with a follow-up to move to a shared KV when the
-   runtime scales out?
-5. **Session approval flow.** Same question as the rollout proposal:
-   per-invocation vs per-session. PIR's design is per-invocation.
-
-## PIR-side readiness
-
-These changes already landed (or are landing in this branch) and do
-not block the proposal:
-
-- **Specialist contract.** `saturation-operator` already lists
-  `tool_profile: saturation-operator-deferred`; PIR will rename to
-  `saturation-operator-bounded` once this proposal merges and add
-  the three primary tools to the catalog. `human-escalation` already
-  lists `tool_profile: human-escalation-minimal` and will gain
-  `notify.escalation_channel` as its primary tool once registered.
-- **Specialist executors.** `saturationoperator` and `humanescalation`
-  packages exist and ship the kernel-first decision path; once tools
-  are registered, each gets a follow-up slice that wires the runtime
-  client and translates the LLM-decided action into an
-  `InvokeToolRequest`. The decision graph + outcome event already
-  materialise as expected without runtime invocation, which makes the
-  follow-up purely additive.
-- **Outcome event families.** Already present in
-  `contracts/events/catalog.v1.yaml` for both pipelines:
-  `payments.incident.resource-saturation.operation.{completed,failed,escalated}`
-  and `payments.incident.{escalated.to-human,failed.terminal}`.
-
-Everything on the PIR side can ship and be tested with fakes today;
-cluster end-to-end of saturation + human-escalation actuation waits
-on this proposal merging.
+the sentinel above.

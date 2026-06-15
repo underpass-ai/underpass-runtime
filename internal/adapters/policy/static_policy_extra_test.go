@@ -267,7 +267,7 @@ func TestStaticPolicy_DeniesTopicOutsideAllowlist(t *testing.T) {
 			},
 		},
 		Approved: true,
-		Args:     json.RawMessage(`{"topic":"prod.payments"}`),
+		Args:     json.RawMessage(`{"topic":"prod.unknown"}`),
 	})
 	if err != nil {
 		t.Fatalf(testUnexpectedErrorFmt, err)

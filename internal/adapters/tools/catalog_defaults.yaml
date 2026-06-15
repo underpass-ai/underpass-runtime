@@ -1057,7 +1057,7 @@ capabilities:
         - field: reason
           max_length: 1000
     examples:
-      - '{"incident_id":"inc-42","handoff_node_id":"handoff:inc-42:human","summary":"Provider callback missing after auth","upstream_specialist":"payment-integrity-operator","upstream_decision":"escalate","reason":"bounded automation stopped at human handoff"}'
+      - '{"incident_id":"inc-42","handoff_node_id":"handoff:inc-42:human","summary":"Automated remediation exhausted","upstream_specialist":"saturation-operator","upstream_decision":"escalate","reason":"bounded automation stopped at human handoff"}'
 
   - name: redis.get
     description: Read a single Redis key from an allowlisted key prefix.
@@ -2676,7 +2676,7 @@ capabilities:
       namespace_fields:
         - namespace
     examples:
-      - '{"namespace":"underpass-runtime","target_service":"payments-api","downstream":"provider-gateway","ttl_seconds":300}'
+      - '{"namespace":"underpass-runtime","target_service":"web-api","downstream":"upstream-gateway","ttl_seconds":300}'
 
   - name: security.scan_dependencies
     description: Collect dependency inventory for the detected project toolchain.

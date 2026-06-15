@@ -58,10 +58,10 @@ func TestNotifyEscalationChannelHandler_Success(t *testing.T) {
 	result, err := handler.Invoke(context.Background(), session, mustNotifyJSON(t, map[string]any{
 		"incident_id":         "inc-42",
 		"handoff_node_id":     "handoff:inc-42:human",
-		"summary":             "Payment needs human review",
-		"upstream_specialist": "payment-integrity-operator",
+		"summary":             "Saturation needs human review",
+		"upstream_specialist": "saturation-operator",
 		"upstream_decision":   "escalate",
-		"reason":              "callback missing after provider timeout",
+		"reason":              "automated remediation exhausted",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected notify error: %#v", err)
@@ -143,10 +143,10 @@ func TestNotifyEscalationChannelHandler_RateLimited(t *testing.T) {
 	args := mustNotifyJSON(t, map[string]any{
 		"incident_id":         "inc-42",
 		"handoff_node_id":     "handoff:inc-42:human",
-		"summary":             "Payment needs human review",
-		"upstream_specialist": "payment-integrity-operator",
+		"summary":             "Saturation needs human review",
+		"upstream_specialist": "saturation-operator",
 		"upstream_decision":   "escalate",
-		"reason":              "callback missing after provider timeout",
+		"reason":              "automated remediation exhausted",
 	})
 	if _, err := handler.Invoke(context.Background(), session, args); err != nil {
 		t.Fatalf("unexpected first notify error: %#v", err)
@@ -213,10 +213,10 @@ func TestNotifyEscalationChannelHandler_MissingRouteAndWebhook(t *testing.T) {
 	args := mustNotifyJSON(t, map[string]any{
 		"incident_id":         "inc-42",
 		"handoff_node_id":     "handoff:inc-42:human",
-		"summary":             "Payment needs human review",
-		"upstream_specialist": "payment-integrity-operator",
+		"summary":             "Saturation needs human review",
+		"upstream_specialist": "saturation-operator",
 		"upstream_decision":   "escalate",
-		"reason":              "callback missing after provider timeout",
+		"reason":              "automated remediation exhausted",
 	})
 
 	t.Run("missing_route", func(t *testing.T) {
@@ -243,10 +243,10 @@ func TestNotifyEscalationChannelHandler_DeliveryFailures(t *testing.T) {
 	args := mustNotifyJSON(t, map[string]any{
 		"incident_id":         "inc-42",
 		"handoff_node_id":     "handoff:inc-42:human",
-		"summary":             "Payment needs human review",
-		"upstream_specialist": "payment-integrity-operator",
+		"summary":             "Saturation needs human review",
+		"upstream_specialist": "saturation-operator",
 		"upstream_decision":   "escalate",
-		"reason":              "callback missing after provider timeout",
+		"reason":              "automated remediation exhausted",
 	})
 
 	t.Run("client_error_retryable", func(t *testing.T) {
@@ -391,10 +391,10 @@ func TestNotifyEscalationChannelHandlerFromEnv_InvalidConfig(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, mustNotifyJSON(t, map[string]any{
 		"incident_id":         "inc-42",
 		"handoff_node_id":     "handoff:inc-42:human",
-		"summary":             "Payment needs human review",
-		"upstream_specialist": "payment-integrity-operator",
+		"summary":             "Saturation needs human review",
+		"upstream_specialist": "saturation-operator",
 		"upstream_decision":   "escalate",
-		"reason":              "callback missing after provider timeout",
+		"reason":              "automated remediation exhausted",
 	}))
 	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("expected config error, got %#v", err)

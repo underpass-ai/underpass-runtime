@@ -305,7 +305,7 @@ func TestStaticPolicy_NotifyAllowsIncidentCommunicator(t *testing.T) {
 			Scope: domain.ScopeExternal,
 		},
 		Approved: true,
-		Args:     json.RawMessage(`{"incident_id":"inc-42","handoff_node_id":"handoff:inc-42:human","summary":"Need human review","upstream_specialist":"payment-integrity-operator","upstream_decision":"escalate","reason":"provider callback missing"}`),
+		Args:     json.RawMessage(`{"incident_id":"inc-42","handoff_node_id":"handoff:inc-42:human","summary":"Need human review","upstream_specialist":"saturation-operator","upstream_decision":"escalate","reason":"automated remediation exhausted"}`),
 	})
 	if err != nil {
 		t.Fatalf(testUnexpectedErrorFmt, err)

@@ -21,7 +21,7 @@ import (
 func TestK8sScaleDeploymentHandler_AbsoluteAndDelta(t *testing.T) {
 	replicas := int32(3)
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+		ObjectMeta: metav1.ObjectMeta{Name: "web-api", Namespace: testK8sNamespaceSandbox},
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 	}
 	client := k8sfake.NewSimpleClientset(deployment)
@@ -30,7 +30,7 @@ func TestK8sScaleDeploymentHandler_AbsoluteAndDelta(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":       testK8sNamespaceSandbox,
-		"deployment_name": "payments-api",
+		"deployment_name": "web-api",
 		"replicas":        5,
 	}))
 	if err != nil {
@@ -41,20 +41,20 @@ func TestK8sScaleDeploymentHandler_AbsoluteAndDelta(t *testing.T) {
 		t.Fatalf("unexpected scale output: %#v", output)
 	}
 
-	updated, _ := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "payments-api", metav1.GetOptions{})
+	updated, _ := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "web-api", metav1.GetOptions{})
 	if got := derefInt32(updated.Spec.Replicas); got != 5 {
 		t.Fatalf("expected replicas=5, got %d", got)
 	}
 
 	_, err = handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":       testK8sNamespaceSandbox,
-		"deployment_name": "payments-api",
+		"deployment_name": "web-api",
 		"replicas_delta":  -2,
 	}))
 	if err != nil {
 		t.Fatalf("unexpected delta scale error: %#v", err)
 	}
-	updated, _ = client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "payments-api", metav1.GetOptions{})
+	updated, _ = client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "web-api", metav1.GetOptions{})
 	if got := derefInt32(updated.Spec.Replicas); got != 3 {
 		t.Fatalf("expected replicas=3 after delta, got %d", got)
 	}
@@ -63,7 +63,7 @@ func TestK8sScaleDeploymentHandler_AbsoluteAndDelta(t *testing.T) {
 func TestK8sScaleDeploymentHandler_ErrorPathsAndNoop(t *testing.T) {
 	replicas := int32(3)
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+		ObjectMeta: metav1.ObjectMeta{Name: "web-api", Namespace: testK8sNamespaceSandbox},
 		Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 	}
 	client := k8sfake.NewSimpleClientset(deployment)
@@ -83,7 +83,7 @@ func TestK8sScaleDeploymentHandler_ErrorPathsAndNoop(t *testing.T) {
 	t.Run("requires_exactly_one_replicas_field", func(t *testing.T) {
 		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 			"namespace":       testK8sNamespaceSandbox,
-			"deployment_name": "payments-api",
+			"deployment_name": "web-api",
 			"replicas":        3,
 			"replicas_delta":  1,
 		}))
@@ -95,7 +95,7 @@ func TestK8sScaleDeploymentHandler_ErrorPathsAndNoop(t *testing.T) {
 	t.Run("negative_target_denied", func(t *testing.T) {
 		_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 			"namespace":       testK8sNamespaceSandbox,
-			"deployment_name": "payments-api",
+			"deployment_name": "web-api",
 			"replicas_delta":  -10,
 		}))
 		if err == nil || err.Code != app.ErrorCodeInvalidArgument {
@@ -106,7 +106,7 @@ func TestK8sScaleDeploymentHandler_ErrorPathsAndNoop(t *testing.T) {
 	t.Run("noop_when_target_unchanged", func(t *testing.T) {
 		result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 			"namespace":       testK8sNamespaceSandbox,
-			"deployment_name": "payments-api",
+			"deployment_name": "web-api",
 			"replicas":        3,
 		}))
 		if err != nil {
@@ -133,27 +133,27 @@ func TestK8sScaleDeploymentHandler_ErrorPathsAndNoop(t *testing.T) {
 func TestK8sRestartPodsHandler_LabelSelectorMode(t *testing.T) {
 	replicas := int32(2)
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+		ObjectMeta: metav1.ObjectMeta{Name: "web-api", Namespace: testK8sNamespaceSandbox},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web-api"}},
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "payments-api"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "web-api"}},
 			},
 		},
 	}
 	podA := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "payments-api-a",
+			Name:      "web-api-a",
 			Namespace: testK8sNamespaceSandbox,
-			Labels:    map[string]string{"app": "payments-api", "pod-template-hash": "abc123"},
+			Labels:    map[string]string{"app": "web-api", "pod-template-hash": "abc123"},
 		},
 	}
 	podB := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "payments-api-b",
+			Name:      "web-api-b",
 			Namespace: testK8sNamespaceSandbox,
-			Labels:    map[string]string{"app": "payments-api", "pod-template-hash": "abc123"},
+			Labels:    map[string]string{"app": "web-api", "pod-template-hash": "abc123"},
 		},
 	}
 	client := k8sfake.NewSimpleClientset(deployment, podA, podB)
@@ -162,7 +162,7 @@ func TestK8sRestartPodsHandler_LabelSelectorMode(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":       testK8sNamespaceSandbox,
-		"deployment_name": "payments-api",
+		"deployment_name": "web-api",
 		"mode":            "label_selector",
 		"label_selector":  "pod-template-hash=abc123",
 		"max_pods":        1,
@@ -187,12 +187,12 @@ func TestK8sRestartPodsHandler_LabelSelectorMode(t *testing.T) {
 func TestK8sRestartPodsHandler_RolloutRestartAndInvalidMode(t *testing.T) {
 	replicas := int32(2)
 	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+		ObjectMeta: metav1.ObjectMeta{Name: "web-api", Namespace: testK8sNamespaceSandbox},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web-api"}},
 			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "payments-api"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "web-api"}},
 			},
 		},
 	}
@@ -202,7 +202,7 @@ func TestK8sRestartPodsHandler_RolloutRestartAndInvalidMode(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":       testK8sNamespaceSandbox,
-		"deployment_name": "payments-api",
+		"deployment_name": "web-api",
 		"mode":            "rollout_restart",
 	}))
 	if err != nil {
@@ -213,7 +213,7 @@ func TestK8sRestartPodsHandler_RolloutRestartAndInvalidMode(t *testing.T) {
 		t.Fatalf("unexpected rollout restart output: %#v", output)
 	}
 
-	updated, getErr := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "payments-api", metav1.GetOptions{})
+	updated, getErr := client.AppsV1().Deployments(testK8sNamespaceSandbox).Get(context.Background(), "web-api", metav1.GetOptions{})
 	if getErr != nil {
 		t.Fatalf("get deployment: %v", getErr)
 	}
@@ -223,7 +223,7 @@ func TestK8sRestartPodsHandler_RolloutRestartAndInvalidMode(t *testing.T) {
 
 	_, err = handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":       testK8sNamespaceSandbox,
-		"deployment_name": "payments-api",
+		"deployment_name": "web-api",
 	}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected missing mode error, got %#v", err)
@@ -231,7 +231,7 @@ func TestK8sRestartPodsHandler_RolloutRestartAndInvalidMode(t *testing.T) {
 
 	_, err = handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":       testK8sNamespaceSandbox,
-		"deployment_name": "payments-api",
+		"deployment_name": "web-api",
 		"mode":            "unknown_mode",
 	}))
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
@@ -241,9 +241,9 @@ func TestK8sRestartPodsHandler_RolloutRestartAndInvalidMode(t *testing.T) {
 
 func TestK8sCircuitBreakHandler_CreatesNetworkPolicy(t *testing.T) {
 	targetService := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+		ObjectMeta: metav1.ObjectMeta{Name: "web-api", Namespace: testK8sNamespaceSandbox},
 		Spec: corev1.ServiceSpec{
-			Selector:  map[string]string{"app": "payments-api"},
+			Selector:  map[string]string{"app": "web-api"},
 			ClusterIP: "10.0.0.10",
 		},
 	}
@@ -261,7 +261,7 @@ func TestK8sCircuitBreakHandler_CreatesNetworkPolicy(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":      testK8sNamespaceSandbox,
-		"target_service": "payments-api",
+		"target_service": "web-api",
 		"downstream":     "provider-gateway",
 		"ttl_seconds":    120,
 	}))
@@ -275,7 +275,7 @@ func TestK8sCircuitBreakHandler_CreatesNetworkPolicy(t *testing.T) {
 	if getErr != nil {
 		t.Fatalf("expected network policy, got error: %v", getErr)
 	}
-	if policy.Spec.PodSelector.MatchLabels["app"] != "payments-api" {
+	if policy.Spec.PodSelector.MatchLabels["app"] != "web-api" {
 		t.Fatalf("unexpected pod selector: %#v", policy.Spec.PodSelector.MatchLabels)
 	}
 	if len(policy.Spec.Egress) != 1 || len(policy.Spec.Egress[0].To) != 1 {
@@ -295,9 +295,9 @@ func TestK8sCircuitBreakHandler_CreatesNetworkPolicy(t *testing.T) {
 
 func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
 	targetService := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+		ObjectMeta: metav1.ObjectMeta{Name: "web-api", Namespace: testK8sNamespaceSandbox},
 		Spec: corev1.ServiceSpec{
-			Selector:  map[string]string{"app": "payments-api"},
+			Selector:  map[string]string{"app": "web-api"},
 			ClusterIP: "10.0.0.10",
 		},
 	}
@@ -310,7 +310,7 @@ func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
 	}
 	existingPolicy := &networkingv1.NetworkPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            circuitBreakPolicyID(testK8sNamespaceSandbox, "payments-api", "provider-gateway"),
+			Name:            circuitBreakPolicyID(testK8sNamespaceSandbox, "web-api", "provider-gateway"),
 			Namespace:       testK8sNamespaceSandbox,
 			ResourceVersion: "1",
 		},
@@ -322,7 +322,7 @@ func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
 
 	result, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":      testK8sNamespaceSandbox,
-		"target_service": "payments-api",
+		"target_service": "web-api",
 		"downstream":     "provider-gateway",
 		"ttl_seconds":    120,
 	}))
@@ -343,7 +343,7 @@ func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
 	t.Run("target_without_selector", func(t *testing.T) {
 		client := k8sfake.NewSimpleClientset(
 			&corev1.Service{
-				ObjectMeta: metav1.ObjectMeta{Name: "payments-api", Namespace: testK8sNamespaceSandbox},
+				ObjectMeta: metav1.ObjectMeta{Name: "web-api", Namespace: testK8sNamespaceSandbox},
 				Spec:       corev1.ServiceSpec{ClusterIP: "10.0.0.10"},
 			},
 			downstreamService.DeepCopy(),
@@ -351,7 +351,7 @@ func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
 		selectorHandler := NewK8sCircuitBreakHandler(client, testK8sNamespaceDefault)
 		_, err := selectorHandler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 			"namespace":      testK8sNamespaceSandbox,
-			"target_service": "payments-api",
+			"target_service": "web-api",
 			"downstream":     "provider-gateway",
 			"ttl_seconds":    120,
 		}))
@@ -371,7 +371,7 @@ func TestK8sCircuitBreakHandler_UpdateAndErrorPaths(t *testing.T) {
 		clusterIPHandler := NewK8sCircuitBreakHandler(client, testK8sNamespaceDefault)
 		_, err := clusterIPHandler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 			"namespace":      testK8sNamespaceSandbox,
-			"target_service": "payments-api",
+			"target_service": "web-api",
 			"downstream":     "provider-gateway",
 			"ttl_seconds":    120,
 		}))
@@ -393,7 +393,7 @@ func TestK8sCircuitBreakHandler_ReconcilesExistingPolicies(t *testing.T) {
 	t.Run("deletes_expired_policy_on_startup", func(t *testing.T) {
 		expiredPolicy := &networkingv1.NetworkPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      circuitBreakPolicyID(testK8sNamespaceSandbox, "payments-api", "provider-gateway"),
+				Name:      circuitBreakPolicyID(testK8sNamespaceSandbox, "web-api", "provider-gateway"),
 				Namespace: testK8sNamespaceSandbox,
 				Annotations: map[string]string{
 					circuitBreakExpiresAtAnnotation: now.Add(-time.Minute).Format(time.RFC3339),
@@ -424,7 +424,7 @@ func TestK8sCircuitBreakHandler_ReconcilesExistingPolicies(t *testing.T) {
 
 	t.Run("schedules_future_policy_cleanup_on_startup", func(t *testing.T) {
 		expiresAt := now.Add(2 * time.Minute)
-		policyName := circuitBreakPolicyID(testK8sNamespaceSandbox, "payments-api", "provider-gateway")
+		policyName := circuitBreakPolicyID(testK8sNamespaceSandbox, "web-api", "provider-gateway")
 		futurePolicy := &networkingv1.NetworkPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      policyName,
@@ -493,7 +493,7 @@ func TestK8sCircuitBreakHandler_TTLDenied(t *testing.T) {
 	session := domain.Session{Principal: domain.Principal{Roles: []string{"platform_admin"}}}
 	_, err := handler.Invoke(context.Background(), session, mustK8sJSON(t, map[string]any{
 		"namespace":      testK8sNamespaceSandbox,
-		"target_service": "payments-api",
+		"target_service": "web-api",
 		"downstream":     "provider-gateway",
 		"ttl_seconds":    30,
 	}))
@@ -507,15 +507,15 @@ func TestK8sSaturationHelpers(t *testing.T) {
 	deployment := &appsv1.Deployment{
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "payments-api"}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web-api"}},
 		},
 	}
 
 	t.Run("build_restart_selector", func(t *testing.T) {
-		if got := buildRestartPodsSelector(deployment, "pod-template-hash=abc123"); got != "app=payments-api,pod-template-hash=abc123" {
+		if got := buildRestartPodsSelector(deployment, "pod-template-hash=abc123"); got != "app=web-api,pod-template-hash=abc123" {
 			t.Fatalf("unexpected combined selector: %q", got)
 		}
-		if got := buildRestartPodsSelector(deployment, ""); got != "app=payments-api" {
+		if got := buildRestartPodsSelector(deployment, ""); got != "app=web-api" {
 			t.Fatalf("unexpected selector without extra: %q", got)
 		}
 		if got := buildRestartPodsSelector(&appsv1.Deployment{}, "pod-template-hash=abc123"); got != "<none>,pod-template-hash=abc123" {
