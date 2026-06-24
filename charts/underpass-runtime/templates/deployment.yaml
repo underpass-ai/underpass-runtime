@@ -84,26 +84,19 @@ spec:
                   name: {{ .Values.artifacts.s3.existingSecret }}
                   key: {{ .Values.artifacts.s3.secretKeyKey }}
             {{- end }}
+          # tcpSocket works with or without TLS. (A grpc probe would need the
+          # standard grpc.health.v1.Health service, which this server does not
+          # implement — it exposes a custom HealthService instead.)
           livenessProbe:
-            {{- if ne $tlsMode "disabled" }}
             tcpSocket:
               port: {{ .Values.service.port }}
-            {{- else }}
-            grpc:
-              port: {{ .Values.service.port }}
-            {{- end }}
             initialDelaySeconds: 10
             periodSeconds: 30
             timeoutSeconds: 3
             failureThreshold: 3
           readinessProbe:
-            {{- if ne $tlsMode "disabled" }}
             tcpSocket:
               port: {{ .Values.service.port }}
-            {{- else }}
-            grpc:
-              port: {{ .Values.service.port }}
-            {{- end }}
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
