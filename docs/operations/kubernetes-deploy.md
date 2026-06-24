@@ -198,10 +198,12 @@ For the rollout-specialist tools added in runtime, create sessions with:
 - `environment=<env>`
 - `runtime_environment=<same-env>` if you want the session to carry the runtime environment explicitly
 
-The job-based E2E test `23-runtime-rollout-tools` expects exactly this setup.
+The per-tool E2E matrix (`00-tool-matrix`) exercises these tools' governance; for
+real happy-path execution of the rollout tools, create a session with the setup
+above.
 
-If you also want the notify specialist test (`24-runtime-saturation-notify-tools`),
-configure an `e2e` route for `notify.escalation_channel` before running the job:
+For `notify.escalation_channel` happy-path, configure an `e2e` route before
+running the matrix:
 
 ```bash
 helm upgrade --install underpass-runtime \

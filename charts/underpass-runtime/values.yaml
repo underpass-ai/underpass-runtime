@@ -589,52 +589,11 @@ e2e:
   # -- Existing Secret with client TLS certs for gRPC + NATS (ca.crt, tls.crt, tls.key)
   clientTlsSecret: e2e-client-tls
   # -- Tests to run (id + timeout). Use `helm test` to execute.
+  # The suite is a single data-driven per-tool matrix (see e2e/README.md).
   tests:
-    - id: "01"
-      name: health
-      timeout: 120
-    - id: "02"
-      name: session-lifecycle
-      timeout: 300
-    - id: "03"
-      name: tool-discovery
-      timeout: 300
-    - id: "04"
-      name: recommendations
-      timeout: 300
-    - id: "05"
-      name: invoke-basic
-      timeout: 300
-    - id: "06"
-      name: invoke-policy
-      timeout: 300
-    - id: "07"
-      name: invocation-retrieval
-      timeout: 300
-    - id: "08"
-      name: data-flow
-      timeout: 600
-    - id: "12"
-      name: event-driven-agent
-      timeout: 300
-    - id: "13"
-      name: multi-agent-pipeline
-      timeout: 300
-    - id: "14"
-      name: full-infra-stack
-      timeout: 120
-    - id: "16"
-      name: recommendation-evidence
-      timeout: 300
-    - id: "18"
-      name: policy-driven-recommendations
-      timeout: 300
-    - id: "19"
-      name: neural-ts-recommendations
-      timeout: 300
-    - id: "21"
-      name: agent-feedback-loop
-      timeout: 300
+    - id: "00"
+      name: tool-matrix
+      timeout: 1800
 
 # ---------------------------------------------------------------------------
 # TLS Certificate Generation (pre-install/pre-upgrade hook)

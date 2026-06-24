@@ -118,18 +118,13 @@ kubectl create secret generic e2e-client-tls \
   --from-file=tls.crt=/tmp/e2e.crt --from-file=tls.key=/tmp/e2e.key \
   --from-file=ca.crt=/tmp/ca.crt -n underpass-runtime
 
-# Run smoke tests
-for test in 01-health 02-session-lifecycle 03-tool-discovery 05-invoke-basic; do
-  job=$(grep "^  name:" "e2e/tests/$test/job.yaml" | head -1 | awk '{print $2}')
-  kubectl delete job $job -n underpass-runtime 2>/dev/null
-  kubectl apply -f "e2e/tests/$test/job.yaml"
-done
+# Run the per-tool E2E matrix
+kubectl delete job e2e-tool-matrix -n underpass-runtime 2>/dev/null
+kubectl apply -f e2e/tests/00-tool-matrix/job.yaml
 
 # Wait and check results
 kubectl wait --for=condition=complete \
-  job/e2e-health job/e2e-session-lifecycle \
-  job/e2e-tool-discovery job/e2e-invoke-basic \
-  -n underpass-runtime --timeout=120s
+  job/e2e-tool-matrix -n underpass-runtime --timeout=1800s
 ```
 
 ### Certificate rotation
