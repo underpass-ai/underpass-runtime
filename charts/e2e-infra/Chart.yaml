@@ -1,0 +1,18 @@
+apiVersion: v2
+name: e2e-infra
+description: >-
+  Self-contained E2E test infrastructure for underpass-runtime. Deploys every
+  backend the per-tool matrix needs (redis, mongo, rabbitmq, kafka, prometheus),
+  an internal git server serving the polyglot fixture repo, HTTP/notify sinks,
+  and k8s rollout/saturation target deployments — plus a dedicated test runtime
+  wired to all of them. No dependency on any pre-existing cluster service:
+  `helm install` brings it all up, `helm uninstall` tears it all down.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: underpass-runtime
+    version: "0.1.0"
+    repository: "file://../underpass-runtime"
+    alias: runtime

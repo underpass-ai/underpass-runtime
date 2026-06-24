@@ -1,0 +1,94 @@
+{{- range .Values.backends }}
+{{- if .image }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: e2e-{{ .name }}
+  labels:
+    {{- include "e2e-infra.labels" $ | nindent 4 }}
+    app: e2e-{{ .name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: e2e-{{ .name }}
+  template:
+    metadata:
+      labels:
+        {{- include "e2e-infra.labels" $ | nindent 8 }}
+        app: e2e-{{ .name }}
+    spec:
+      containers:
+        - name: {{ .name }}
+          image: {{ .image }}
+          {{- with .args }}
+          args: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - containerPort: {{ .port }}
+            {{- range .extraPorts }}
+            - containerPort: {{ . }}
+            {{- end }}
+          {{- with .env }}
+          env: {{ toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .configMount }}
+          volumeMounts:
+            - name: config
+              mountPath: {{ .configMount }}
+              subPath: {{ .configKey }}
+          {{- end }}
+          readinessProbe:
+            {{- if .readyExec }}
+            exec:
+              command: {{ toYaml .readyExec | nindent 16 }}
+            {{- else if .readyHttp }}
+            httpGet:
+              path: {{ .readyHttp }}
+              port: {{ .port }}
+            {{- else }}
+            tcpSocket:
+              port: {{ .port }}
+            {{- end }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+      {{- if .configMount }}
+      volumes:
+        - name: config
+          configMap:
+            name: e2e-{{ .name }}-config
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: e2e-{{ .name }}
+  labels:
+    {{- include "e2e-infra.labels" $ | nindent 4 }}
+    app: e2e-{{ .name }}
+spec:
+  selector:
+    app: e2e-{{ .name }}
+  ports:
+    - name: main
+      port: {{ .port }}
+      targetPort: {{ .port }}
+    {{- range $i, $p := .extraPorts }}
+    - name: extra-{{ $i }}
+      port: {{ $p }}
+      targetPort: {{ $p }}
+    {{- end }}
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: e2e-prometheus-config
+  labels:
+    {{- include "e2e-infra.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    {{- .Values.prometheusConfig | nindent 4 }}

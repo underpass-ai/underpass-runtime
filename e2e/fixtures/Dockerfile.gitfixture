@@ -1,0 +1,31 @@
+# Internal git server for the E2E suite: embeds the polyglot fixture repo and
+# serves it over the git:// daemon protocol (which supports the runtime's
+# shallow `git clone --depth 1`), so session repo_url points at an in-cluster
+# service (git://e2e-gitfixture:9418/polyglot) with zero external dependency.
+# Build context is e2e/fixtures (the repo-root .dockerignore excludes e2e/*).
+# Debian base: git-daemon on glibc is the standard, well-tested path (the Alpine
+# musl git-daemon forks but the child crashes without serving).
+FROM docker.io/library/debian:bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /srv
+COPY polyglot /srv/polyglot-src
+
+RUN git config --global user.email "e2e@underpassai.com" \
+ && git config --global user.name "E2E Fixture" \
+ && git config --global init.defaultBranch main \
+ && git init -q /srv/polyglot \
+ && cp -r /srv/polyglot-src/. /srv/polyglot/ \
+ && cd /srv/polyglot \
+ && git add -A && git commit -q -m "feat: polyglot fixture (go, node, python, rust)" \
+ && printf 'modified\n' >> notes.txt \
+ && git add -A && git commit -q -m "chore: touch notes for git.diff/blame coverage" \
+ && rm -rf /srv/polyglot-src
+
+EXPOSE 9418
+
+CMD ["git", "daemon", "--reuseaddr", "--base-path=/srv", "--export-all", \
+     "--enable=upload-pack", "--listen=0.0.0.0", "--port=9418", "/srv"]

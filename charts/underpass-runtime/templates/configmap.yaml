@@ -13,6 +13,12 @@ data:
   {{- if .Values.config.notifyEscalationRoutesJSON }}
   WORKSPACE_NOTIFY_ESCALATION_ROUTES_JSON: {{ .Values.config.notifyEscalationRoutesJSON | quote }}
   {{- end }}
+  {{- if .Values.config.connProfileEndpointsJSON }}
+  WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON: {{ .Values.config.connProfileEndpointsJSON | quote }}
+  {{- end }}
+  {{- if .Values.config.connProfileHostAllowlistJSON }}
+  WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON: {{ .Values.config.connProfileHostAllowlistJSON | quote }}
+  {{- end }}
   WORKSPACE_ROOT: {{ .Values.workspace.root | quote }}
   ARTIFACT_ROOT: {{ .Values.artifacts.root | quote }}
   ARTIFACT_BACKEND: {{ .Values.artifacts.backend | quote }}

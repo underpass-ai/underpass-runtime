@@ -1,0 +1,51 @@
+{{- /* `helm test e2e` runs the per-tool matrix against the dedicated test
+       runtime, using the in-cluster git fixture and backends. Everything it
+       needs was installed by this same release — no external dependency. */ -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-tool-matrix
+  labels:
+    {{- include "e2e-infra.labels" . | nindent 4 }}
+    app: e2e-tool-matrix
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  restartPolicy: Never
+  imagePullSecrets:
+    - name: {{ .Values.imagePullSecret | default "ghcr-pull" }}
+  containers:
+    - name: tool-matrix
+      image: {{ .Values.registry }}/e2e-tool-matrix:{{ .Values.toolMatrixTag | default "v1.0.0" }}
+      imagePullPolicy: Always
+      env:
+        # Plain gRPC to the test runtime (tls.mode=disabled).
+        - name: WORKSPACE_URL
+          value: "e2e-runtime:{{ .Values.runtime.service.port | default 50053 }}"
+        # Clone the in-cluster fixture (no github dependency).
+        - name: FIXTURE_REPO_URL
+          value: "git://e2e-gitfixture:9418/polyglot"
+        - name: FIXTURE_REPO_REF
+          value: "main"
+        - name: WORKSPACE_AUTH_TENANT_ID
+          value: "e2e-tenant"
+        - name: WORKSPACE_AUTH_ACTOR_ID
+          value: "e2e-actor"
+        - name: WORKSPACE_AUTH_ROLES
+          value: "developer,devops,platform_admin"
+        - name: CATALOG_PATH
+          value: "/app/catalog_defaults.yaml"
+        - name: SPECS_DIR
+          value: "/app/specs"
+        - name: EVIDENCE_FILE
+          value: "/tmp/evidence-tool-matrix.json"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+      resources:
+        requests:
+          cpu: "200m"
+          memory: "256Mi"
+        limits:
+          cpu: "1000m"
+          memory: "512Mi"

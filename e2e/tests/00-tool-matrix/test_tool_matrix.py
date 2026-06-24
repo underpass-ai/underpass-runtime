@@ -63,6 +63,15 @@ WORKSPACE_LOCAL = {
 
 TRAVERSAL_VALUE = "../../../../../../etc/passwd"
 
+# Real polyglot git repo (Go+Node+Python+Rust+Dockerfile, 2 commits) cloned into
+# the session workspace so git/repo/lang/build tools execute against real source
+# and a real .git tree. On the k8s backend the runtime's init container clones
+# this via `git clone --depth 1`.
+FIXTURE_REPO_URL = os.getenv(
+    "FIXTURE_REPO_URL", "https://github.com/underpass-ai/e2e-fixture-repo.git"
+)
+FIXTURE_REPO_REF = os.getenv("FIXTURE_REPO_REF", "main")
+
 # Files seeded into the workspace so read/stat/analysis tools have real content.
 FIXTURE_FILES = {
     "README.md": "# Fixture repo\n\nSeeded by the per-tool E2E matrix.\n",
@@ -162,10 +171,15 @@ class ToolMatrixE2E(WorkspaceE2EBase):
             raise RuntimeError(f"health check failed: {status} {body}")
         self._record("_health", "healthz", "pass", "200")
 
-        session_id = self.create_session(payload={"principal": PRINCIPAL})
+        session_id = self.create_session(payload={
+            "principal": PRINCIPAL,
+            "repo_url": FIXTURE_REPO_URL,
+            "repo_ref": FIXTURE_REPO_REF,
+        }, timeout=240)  # k8s backend spawns a runner pod + clones the repo
         self._record("_session", "create", "pass", session_id)
+        print_success(f"Session {session_id} cloned {FIXTURE_REPO_URL}")
 
-        # Seed a workspace fixture so read/analysis tools have real content.
+        # Seed extra paths the catalog examples reference (on top of the clone).
         for d in FIXTURE_DIRS:
             self.invoke(session_id=session_id, tool_name="fs.mkdir",
                         args={"path": d, "create_parents": True, "exist_ok": True}, approved=True)

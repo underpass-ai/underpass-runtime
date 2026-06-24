@@ -169,6 +169,12 @@ config:
   environment: production
   # -- Optional JSON map for notify.escalation_channel routing, keyed by environment.
   notifyEscalationRoutesJSON: ""
+  # -- JSON map of connection profile_id -> endpoint for db/queue tools
+  # (redis/mongo/kafka/rabbit/nats). Wires WORKSPACE_CONN_PROFILE_ENDPOINTS_JSON.
+  connProfileEndpointsJSON: ""
+  # -- JSON map of profile_id -> allowed host rules for those endpoints
+  # (WORKSPACE_CONN_PROFILE_HOST_ALLOWLIST_JSON). Empty = allow all.
+  connProfileHostAllowlistJSON: ""
 
 # -- Workspace storage
 workspace:
