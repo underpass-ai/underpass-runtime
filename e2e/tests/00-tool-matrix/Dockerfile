@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY e2e/tests/workspace_common /app/workspace_common
 COPY e2e/tests/00-tool-matrix/test_tool_matrix.py /app/test_tool_matrix.py
+COPY e2e/tests/00-tool-matrix/spec_runner.py /app/spec_runner.py
+COPY e2e/tests/00-tool-matrix/specs /app/specs
 # The tool catalog is the source of truth that drives the per-tool case matrix.
 COPY internal/adapters/tools/catalog_defaults.yaml /app/catalog_defaults.yaml
 

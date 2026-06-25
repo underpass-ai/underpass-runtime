@@ -31,6 +31,8 @@ import sys
 
 import yaml
 
+from spec_runner import check_case, load_specs
+
 try:
     from workspace_common import WorkspaceE2EBase, print_error, print_step, print_success
     from workspace_common.console import print_info, print_warning
@@ -146,6 +148,7 @@ class ToolMatrixE2E(WorkspaceE2EBase):
         )
         self.tools = load_catalog(CATALOG_PATH)
         self.results: list[dict] = []
+        self.specs = load_specs()
 
     # ── result recording ──────────────────────────────────────────────────
 
@@ -268,11 +271,37 @@ class ToolMatrixE2E(WorkspaceE2EBase):
                 self._record(name, "discovery", "gated", "session-gated (needs tool_profile/role)")
                 continue
             self._record(name, "discovery", "pass")
-            self.case_happy_path(session_id, tool)
-            self.case_invalid_input(session_id, tool)
-            self.case_approval_gate(session_id, tool)
-            self.case_policy_traversal(session_id, tool)
+            if name in self.specs:
+                self.run_spec_cases(session_id, tool, self.specs[name])
+            else:
+                # No authored spec yet — fall back to the derived governance +
+                # happy-path matrix.
+                self.case_happy_path(session_id, tool)
+                self.case_invalid_input(session_id, tool)
+                self.case_approval_gate(session_id, tool)
+                self.case_policy_traversal(session_id, tool)
         return self.summarize()
+
+    def run_spec_cases(self, session_id: str, tool: dict, cases: list[dict]) -> None:
+        """Run an authored adversarial spec: each case is matched against its
+        expectation; a divergence is recorded as a BUG (outcome 'fail')."""
+        name = tool["name"]
+        default_approved = bool(tool.get("requires_approval"))
+        for case in cases:
+            cname = case.get("name", "?")
+            # Establish prior state.
+            for step in case.get("setup", []):
+                self.invoke(session_id=session_id, tool_name=step["tool"],
+                            args=step.get("args", {}), approved=step.get("approved", False))
+            approved = case.get("approved", default_approved)
+            _, body, inv = self.invoke(session_id=session_id, tool_name=name,
+                                       args=case.get("args", {}), approved=approved)
+            status = self._status(inv)
+            code = self._err_code(inv, body)
+            output = inv.get("output", {}) if isinstance(inv, dict) and isinstance(inv.get("output"), dict) else {}
+            verdict, detail = check_case(case.get("expect", {}), status, code, output)
+            outcome = {"pass": "pass", "bug": "fail", "skip": "skip"}[verdict]
+            self._record(name, f"{case.get('category', 'spec')}:{cname}", outcome, detail)
 
     def summarize(self) -> bool:
         by_outcome: dict[str, int] = {}
