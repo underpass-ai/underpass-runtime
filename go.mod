@@ -12,8 +12,8 @@ require (
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/nats-io/nats.go v1.52.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/rabbitmq/amqp091-go v1.11.0
-	github.com/redis/go-redis/v9 v9.20.1
+	github.com/rabbitmq/amqp091-go v1.12.0
+	github.com/redis/go-redis/v9 v9.21.0
 	github.com/segmentio/kafka-go v0.4.51
 	go.mongodb.org/mongo-driver v1.17.9
 	go.opentelemetry.io/otel v1.43.0
