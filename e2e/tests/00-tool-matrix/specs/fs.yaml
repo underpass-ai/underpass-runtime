@@ -159,6 +159,73 @@ tools:
         approved: true
         expect: {status: succeeded, output_present: [total_lines]}
 
+  - tool: fs.glob
+    cases:
+      - name: glob_doublestar_go
+        category: capability
+        args: {pattern: "**/*.go"}
+        expect: {status: succeeded, output_present: [matches, count, truncated]}
+      - name: glob_scoped_path
+        category: capability
+        args: {pattern: "*.go", path: "cmd/app", max_files: 10}
+        expect: {status: succeeded, output_present: [matches, count]}
+      - name: glob_no_match_empty
+        category: adversarial   # zero matches is a valid empty result, not an error
+        args: {pattern: "**/*.nomatch-ext"}
+        expect: {status: succeeded, output: {count: 0, truncated: false}}
+      - name: missing_required_pattern
+        category: adversarial
+        args: {path: "."}
+        expect: {error_code: invalid_argument}
+      - name: path_traversal_denied
+        category: governance
+        args: {pattern: "*", path: "../../../../etc"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: fs.patch
+    cases:
+      - name: apply_clean_patch
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/patch.txt", content: "hello\n", create_parents: true}, approved: true}
+        args:
+          unified_diff: |
+            diff --git a/e2e/patch.txt b/e2e/patch.txt
+            --- a/e2e/patch.txt
+            +++ b/e2e/patch.txt
+            @@ -1 +1 @@
+            -hello
+            +patched
+          strategy: reject_on_conflict
+        approved: true
+        expect: {status: succeeded, output: {applied: true, strategy: reject_on_conflict}}
+      - name: requires_approval
+        category: governance
+        args: {unified_diff: "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: missing_required_diff
+        category: adversarial
+        args: {strategy: apply}
+        approved: true
+        expect: {error_code: invalid_argument}
+      - name: invalid_strategy
+        category: adversarial
+        args: {unified_diff: "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n", strategy: yolo}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: patch_traversal_denied
+        category: governance   # diff touching a path outside the workspace must be denied
+        args:
+          unified_diff: |
+            diff --git a/../../../../etc/cron.d/evil b/../../../../etc/cron.d/evil
+            --- a/../../../../etc/cron.d/evil
+            +++ b/../../../../etc/cron.d/evil
+            @@ -0,0 +1 @@
+            +pwned
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+
   - tool: fs.delete
     cases:
       - name: delete_file

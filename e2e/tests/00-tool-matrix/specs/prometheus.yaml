@@ -1,0 +1,114 @@
+# Per-tool adversarial spec — prometheus.* family.
+#
+# The family has ONE tool: prometheus.query. It GETs <url>/api/v1/query?query=...
+# parses data.result[0].value[1] as a float, and (optionally) waits up to
+# timeout_seconds for the value to satisfy expected_above / expected_below.
+#
+# Real behavior (read from internal/adapters/tools/prometheus_tools.go):
+#   - On a met threshold (or no thresholds) it returns immediately:
+#       output = {value: <float>, threshold_met: true, query: <query>}   ExitCode 0
+#   - On not-met / budget-exhausted it returns:
+#       output = {threshold_met: false, query: <query>, timeout: true}   ExitCode 1
+#   - ExitCode never changes the invocation status: a nil domain.Error => status
+#     "succeeded", so BOTH shapes above are status:succeeded.
+#   - Validation (handler-side, the Engine does NOT pre-validate args):
+#       * missing/empty/whitespace query            -> invalid_argument
+#       * malformed JSON / wrong arg types          -> invalid_argument
+#       * no url arg AND no prometheus_url metadata  -> invalid_argument
+#     The e2e session carries NO prometheus_url metadata, so url MUST be passed.
+#   - No requires_approval and no path_fields on this tool => no approval-gate and
+#     no traversal governance cases apply (documented; intentionally absent).
+#
+# Environment: a self-scraping Prometheus is reachable at http://e2e-prometheus:9090
+# (charts/e2e-infra). vector(N) is used for deterministic, scrape-independent values.
+tools:
+  - tool: prometheus.query
+    cases:
+      # ── capability: every threshold mode, all returning immediately (met) ──
+      - name: query_value_no_threshold
+        category: capability
+        args: {query: "vector(1)", url: "http://e2e-prometheus:9090"}
+        expect:
+          status: succeeded
+          output: {value: 1, threshold_met: true, query: "vector(1)"}
+
+      - name: expected_above_satisfied
+        category: capability
+        # value 5 > expected_above 1  -> threshold met
+        args: {query: "vector(5)", url: "http://e2e-prometheus:9090", expected_above: 1}
+        expect:
+          status: succeeded
+          output: {value: 5, threshold_met: true}
+
+      - name: expected_below_satisfied
+        category: capability
+        # value 2 < expected_below 100 -> threshold met
+        args: {query: "vector(2)", url: "http://e2e-prometheus:9090", expected_below: 100}
+        expect:
+          status: succeeded
+          output: {value: 2, threshold_met: true}
+
+      - name: both_thresholds_band_satisfied
+        category: capability
+        # 10 < value 50 < 100 -> inside the band, threshold met
+        args: {query: "vector(50)", url: "http://e2e-prometheus:9090", expected_above: 10, expected_below: 100}
+        expect:
+          status: succeeded
+          output: {value: 50, threshold_met: true}
+
+      # ── adversarial: input validation (handler -> invalid_argument, status failed) ──
+      - name: missing_query
+        category: adversarial   # required field absent
+        args: {url: "http://e2e-prometheus:9090"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: empty_query
+        category: adversarial   # present but empty -> "query is required"
+        args: {query: "", url: "http://e2e-prometheus:9090"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: whitespace_only_query
+        category: adversarial   # TrimSpace -> empty -> rejected
+        args: {query: "   ", url: "http://e2e-prometheus:9090"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: query_wrong_type
+        category: adversarial   # number where a string is required -> unmarshal fails
+        args: {query: 123, url: "http://e2e-prometheus:9090"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: timeout_seconds_wrong_type
+        category: adversarial   # string where integer is required -> unmarshal fails
+        args: {query: "vector(1)", url: "http://e2e-prometheus:9090", timeout_seconds: "soon"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: no_url_no_metadata
+        category: adversarial   # session has no prometheus_url metadata -> URL not configured
+        args: {query: "vector(1)"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      # ── adversarial: leniency / boundary behaviors ──
+      - name: extra_unknown_args_tolerated
+        category: adversarial   # unknown fields are ignored by json.Unmarshal, not rejected
+        args: {query: "vector(1)", url: "http://e2e-prometheus:9090", foo: "bar", nonsense: 42}
+        expect:
+          status: succeeded
+          output: {threshold_met: true, value: 1}
+
+      - name: zero_timeout_returns_immediately
+        category: adversarial   # timeout_seconds:0 -> wait loop never runs -> reports not-met/timeout
+        args: {query: "vector(1)", url: "http://e2e-prometheus:9090", timeout_seconds: 0}
+        expect:
+          status: succeeded
+          output: {threshold_met: false, timeout: true}
+
+      - name: non_prometheus_endpoint_masked
+        category: adversarial
+        # httpbin is reachable but returns non-Prometheus JSON. The query error is
+        # masked: instead of surfacing a real failure the tool currently waits out
+        # the budget and reports succeeded+timeout. A reachable-but-broken backend
+        # SHOULD be a failure (execution/connection), so this case targets that bug.
+        args: {query: "vector(1)", url: "http://e2e-httpbin", timeout_seconds: 1}
+        expect:
+          status: failed
+          error_code_in: [execution_failed, connection_failed, unavailable, timeout]

@@ -1,0 +1,145 @@
+# Per-tool adversarial spec — node.* family (npm-backed language tools).
+#
+# IMPORTANT FIXTURE FACT: every node.* handler shells out to `npm` with
+# Cwd = session workspace ROOT (it never cd's into a subdir). The polyglot
+# fixture only carries a package.json under web/, NOT at the root, so a bare
+# node.* invocation runs npm in a directory with no package.json and npm exits
+# non-zero (ENOENT) -> the runner maps the non-zero exit to execution_failed.
+# Therefore every capability case SEEDS a root package.json via an fs.write_file
+# setup step (fs.write_file is approval-gated, so setup passes approved:true).
+#
+# Behavior learned from internal/adapters/tools/language_tool_handlers.go +
+# runner.go: structured output is {exit_code, compiled_binary_path,
+# coverage_percent, diagnostics[]}; a non-zero npm exit -> domain.Error
+# execution_failed (status failed); a bad-typed arg fails json.Unmarshal ->
+# invalid_argument (status failed); `target` is a path_field (workspace_relative)
+# so a traversal value -> policy_denied (status denied). node tools are NOT
+# approval-gated. node.install has no path_field (only use_ci / ignore_scripts).
+tools:
+  # ── node.install ── npm ci (default) / npm install; flags use_ci, ignore_scripts
+  - tool: node.install
+    cases:
+      - name: install_npm_install_mode
+        category: capability   # use_ci:false -> `npm install --ignore-scripts` on a zero-dep root pkg
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0"}'}, approved: true}
+        args: {use_ci: false, ignore_scripts: true}
+        expect: {status: succeeded, output: {exit_code: 0}, output_present: [diagnostics]}
+      - name: install_run_lifecycle_scripts_mode
+        category: capability   # ignore_scripts:false exercises the no-flag branch; pkg has no lifecycle hooks
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0"}'}, approved: true}
+        args: {use_ci: false, ignore_scripts: false}
+        expect: {status: succeeded, output: {exit_code: 0}}
+      - name: npm_ci_requires_lockfile
+        category: adversarial  # default use_ci:true -> `npm ci`; a deps pkg with no/stale lock makes npm ci abort
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","dependencies":{"left-pad":"^1.3.0"}}'}, approved: true}
+        args: {}
+        expect: {status: failed, error_code: execution_failed}
+      - name: type_mismatch_use_ci
+        category: adversarial  # string where a bool is expected -> json.Unmarshal fails before execution
+        args: {use_ci: "yes"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: type_mismatch_ignore_scripts
+        category: adversarial  # number where a bool is expected -> invalid_argument
+        args: {ignore_scripts: 7}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ── node.build ── `npm run build --if-present [-- <target>]`; target is a path_field
+  - tool: node.build
+    cases:
+      - name: build_runs_script
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","scripts":{"build":"echo built"}}'}, approved: true}
+        args: {}
+        expect: {status: succeeded, output: {exit_code: 0}, output_present: [diagnostics]}
+      - name: build_with_target_arg
+        category: capability   # in-workspace target is appended after `--`; web/ exists in the fixture
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","scripts":{"build":"echo built"}}'}, approved: true}
+        args: {target: "web"}
+        expect: {status: succeeded, output: {exit_code: 0}}
+      - name: build_missing_script_is_noop
+        category: adversarial  # --if-present must NOT error when the build script is absent
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","scripts":{"test":"echo ok"}}'}, approved: true}
+        args: {}
+        expect: {status: succeeded, output: {exit_code: 0}}
+      - name: type_mismatch_target
+        category: adversarial  # number where target string is expected -> invalid_argument
+        args: {target: 123}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: target_traversal_denied
+        category: governance   # path_field escape must be denied by policy before npm runs
+        args: {target: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ── node.test ── `npm run test --if-present [-- <target>]`
+  - tool: node.test
+    cases:
+      - name: test_runs_script
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","scripts":{"test":"echo ok"}}'}, approved: true}
+        args: {}
+        expect: {status: succeeded, output: {exit_code: 0}, output_present: [diagnostics]}
+      - name: failing_test_surfaces_execution_failed
+        category: adversarial  # a test script that exits non-zero must surface as execution_failed, not succeed
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","scripts":{"test":"exit 1"}}'}, approved: true}
+        args: {}
+        expect: {status: failed, error_code: execution_failed}
+      - name: type_mismatch_target_array
+        category: adversarial  # array where target string is expected -> invalid_argument
+        args: {target: ["a", "b"]}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: target_traversal_denied
+        category: governance
+        args: {target: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ── node.lint ── `npm run lint --if-present [-- <target>]`
+  - tool: node.lint
+    cases:
+      - name: lint_runs_script
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","scripts":{"lint":"echo linted"}}'}, approved: true}
+        args: {}
+        expect: {status: succeeded, output: {exit_code: 0}, output_present: [diagnostics]}
+      - name: lint_missing_script_is_noop
+        category: adversarial  # --if-present graceful no-op when no lint script defined
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","scripts":{"build":"echo built"}}'}, approved: true}
+        args: {}
+        expect: {status: succeeded, output: {exit_code: 0}}
+      - name: target_traversal_denied
+        category: governance
+        args: {target: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ── node.typecheck ── `npm run typecheck --if-present [-- <target>]`
+  - tool: node.typecheck
+    cases:
+      - name: typecheck_runs_script
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","scripts":{"typecheck":"echo typechecked"}}'}, approved: true}
+        args: {}
+        expect: {status: succeeded, output: {exit_code: 0}, output_present: [diagnostics]}
+      - name: typecheck_failure_surfaces_execution_failed
+        category: adversarial  # non-zero typecheck exit must surface as execution_failed
+        setup:
+          - {tool: fs.write_file, args: {path: "package.json", content: '{"name":"e2e-root","version":"1.0.0","scripts":{"typecheck":"exit 2"}}'}, approved: true}
+        args: {}
+        expect: {status: failed, error_code: execution_failed}
+      - name: type_mismatch_target_bool
+        category: adversarial  # bool where target string is expected -> invalid_argument
+        args: {target: true}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: target_traversal_denied
+        category: governance
+        args: {target: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}

@@ -1,0 +1,204 @@
+# Per-tool adversarial spec — quality.* family.
+#
+# Format/semantics identical to specs/fs.yaml: each case is matched by
+# spec_runner against {status, error_code, output}. `status` is the INVOCATION
+# status (succeeded|failed|denied); `output.*` checks fields of the tool's
+# result object. Nested output fields are addressed with DOTTED paths
+# (e.g. thresholds.max_failed_tests), because each `output` value is matched
+# EXACTLY — a partial nested object would never equal the full one. A
+# divergence is a BUG.
+#
+# The family has exactly ONE tool: quality.gate — a pure, deterministic
+# threshold evaluator (side_effects: none, no path_fields, requires_approval
+# absent). Behavioral facts the cases below pin down (verified against
+# internal/adapters/tools/quality_gate_tools.go):
+#
+#   * A FAILING gate is still a SUCCEEDED invocation. The handler emits
+#     exit_code=1 + output.passed=false but NO error, and the service only
+#     marks status=failed when a domain.Error is returned. So gate-fail =>
+#     {status: succeeded, output: {status: "fail", passed: false}}.
+#   * output.status is the verdict string "pass"/"fail" (NOT the invocation
+#     status). They are independent keys in `expect`.
+#   * The ONLY hard rejection is a JSON type mismatch on the request (metrics
+#     must be an object, thresholds must be numeric) => invalid_argument/failed.
+#   * Out-of-range thresholds are CLAMPED, never rejected (input_schema is not
+#     enforced pre-handler): min_coverage_percent >100->100, <0->-1 (rule
+#     disabled); max_* >100000->100000, <0->-1 (rule disabled).
+#   * Default max_failed_tests is 0 (the other maxima default to -1/disabled),
+#     so even empty args yield exactly ONE active rule (failed_tests <= 0).
+#   * Metrics are read leniently: numeric strings are coerced; "vulns_count"
+#     and "denied_count" are fallback aliases; unknown/unicode keys are ignored.
+#
+# No governance cases: quality.gate exposes no path_field and is not approval-
+# gated, so traversal and approval-gate assertions are not applicable (adding
+# them would manufacture a false bug).
+tools:
+  - tool: quality.gate
+    cases:
+      # ── capability ──────────────────────────────────────────────────────
+      - name: gate_pass_all_five_rules
+        category: capability
+        # All five thresholds active and all metrics within budget -> pass.
+        args:
+          metrics: {coverage_percent: 82.5, diagnostics_count: 0, vulnerabilities_count: 0, denied_licenses_count: 0, failed_tests_count: 0}
+          min_coverage_percent: 80
+          max_diagnostics: 0
+          max_vulnerabilities: 0
+          max_denied_licenses: 0
+          max_failed_tests: 0
+        expect:
+          status: succeeded
+          output: {status: "pass", passed: true, failed_rules_count: 0}
+          output_present: [rules, metrics, thresholds, summary]
+          output_match: {summary: "passed \\(5/5 rules\\)"}
+
+      - name: gate_fail_low_coverage_is_succeeded_invocation
+        category: capability
+        # Pins the key contract: a breached gate is a SUCCEEDED invocation with
+        # passed:false — not a failed/denied invocation. max_failed_tests:-1
+        # disables the default failed_tests rule so coverage is the only rule.
+        args:
+          metrics: {coverage_percent: 50}
+          min_coverage_percent: 80
+          max_failed_tests: -1
+        expect:
+          status: succeeded
+          output: {status: "fail", passed: false, failed_rules_count: 1}
+          output_match: {summary: "failed \\(0/1 rules\\)"}
+
+      - name: gate_empty_args_default_failed_tests_rule
+        category: capability
+        # Empty args is valid: thresholds default to disabled EXCEPT
+        # max_failed_tests=0, so exactly one rule is active (0 <= 0 => pass).
+        args: {}
+        expect:
+          status: succeeded
+          output:
+            status: "pass"
+            passed: true
+            failed_rules_count: 0
+            thresholds.max_failed_tests: 0
+            thresholds.min_coverage_percent: -1
+          output_present: [rules, summary]
+          output_match: {summary: "passed \\(1/1 rules\\)"}
+
+      - name: gate_fail_multiple_rules
+        category: capability
+        # Four active rules all breached (denied_licenses left disabled).
+        args:
+          metrics: {coverage_percent: 40, diagnostics_count: 5, vulnerabilities_count: 3, failed_tests_count: 2}
+          min_coverage_percent: 90
+          max_diagnostics: 0
+          max_vulnerabilities: 0
+          max_failed_tests: 0
+        expect:
+          status: succeeded
+          output: {status: "fail", passed: false, failed_rules_count: 4}
+          output_match: {summary: "failed \\(0/4 rules\\)"}
+
+      - name: gate_vuln_and_denied_aliases
+        category: capability
+        # Fallback aliases: vulns_count->vulnerabilities, denied_count->denied
+        # licenses (used only when the primary field is absent/zero).
+        args:
+          metrics: {vulns_count: 5, denied_count: 2}
+          max_vulnerabilities: 0
+          max_denied_licenses: 0
+        expect:
+          status: succeeded
+          output:
+            status: "fail"
+            passed: false
+            failed_rules_count: 2
+            metrics.vulnerabilities_count: 5
+            metrics.denied_licenses_count: 2
+
+      - name: gate_string_numeric_coercion
+        category: capability
+        # Numeric strings are coerced (floatFromAny/intFromAny), so a quoted
+        # coverage/diagnostics value still evaluates numerically.
+        args:
+          metrics: {coverage_percent: "85.5", diagnostics_count: "3"}
+          min_coverage_percent: 80
+          max_diagnostics: 5
+        expect:
+          status: succeeded
+          output:
+            status: "pass"
+            passed: true
+            failed_rules_count: 0
+            metrics.coverage_percent: 85.5
+            metrics.diagnostics_count: 3
+
+      # ── adversarial ─────────────────────────────────────────────────────
+      - name: metrics_wrong_type_rejected
+        category: adversarial
+        # metrics must be an object; a scalar fails json.Unmarshal -> rejected
+        # at validation (failed, not denied).
+        args: {metrics: "not-an-object"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: threshold_wrong_type_rejected
+        category: adversarial
+        # min_coverage_percent is *float64; a non-numeric string fails unmarshal.
+        args: {min_coverage_percent: "high"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: out_of_range_coverage_clamped_to_100
+        category: adversarial
+        # 150 exceeds the schema max(100) but is CLAMPED, not rejected; with
+        # actual coverage 100 the clamped 100 <= rule still passes.
+        args:
+          metrics: {coverage_percent: 100}
+          min_coverage_percent: 150
+        expect:
+          status: succeeded
+          output:
+            status: "pass"
+            passed: true
+            thresholds.min_coverage_percent: 100
+
+      - name: negative_coverage_disables_rule
+        category: adversarial
+        # A negative min_coverage_percent clamps to -1, which DISABLES the
+        # coverage rule (only the default failed_tests rule remains active).
+        args:
+          metrics: {}
+          min_coverage_percent: -10
+        expect:
+          status: succeeded
+          output:
+            status: "pass"
+            passed: true
+            failed_rules_count: 0
+            thresholds.min_coverage_percent: -1
+          output_match: {summary: "passed \\(1/1 rules\\)"}
+
+      - name: max_threshold_overflow_clamped
+        category: adversarial
+        # 999999 exceeds schema max(100000) -> clamped to 100000, not rejected;
+        # 50000 <= 100000 passes.
+        args:
+          metrics: {diagnostics_count: 50000}
+          max_diagnostics: 999999
+        expect:
+          status: succeeded
+          output:
+            status: "pass"
+            passed: true
+            thresholds.max_diagnostics: 100000
+
+      - name: unicode_and_unknown_metric_keys_ignored
+        category: adversarial
+        # Only recognised keys influence the verdict; unicode/unknown keys are
+        # silently ignored. coverage_percent=70 < 80 => the coverage rule fails.
+        args:
+          metrics: {"覆盖率": 99, "coverage_percent": 70, "bogus_key": 999}
+          min_coverage_percent: 80
+        expect:
+          status: succeeded
+          output:
+            status: "fail"
+            passed: false
+            failed_rules_count: 1
+            metrics.coverage_percent: 70

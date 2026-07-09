@@ -1,0 +1,348 @@
+# Per-tool adversarial spec — git.* family.
+#
+# Each tool gets capability cases (exercise every input mode against the real
+# cloned repo), adversarial cases (malformed/boundary/conflicting input designed
+# to surface bugs), and governance cases (traversal on path_fields, approval gate
+# on requires_approval tools, deny_characters on arg_fields). `setup` establishes
+# prior state; `expect` is matched by spec_runner — a divergence is a BUG.
+#
+# Behaviour model (verified against internal/adapters/tools/git_tools*.go +
+# internal/app/service.go + internal/adapters/policy/static_policy.go):
+#   * invalid_argument (handler validation) -> status: failed
+#   * policy_denied / approval_required (policy Authorize) -> status: denied
+#   * git exit 128 -> git_repo_error, exit 129 -> git_usage_error, else execution_failed
+#   * fixture is a SHALLOW clone (1 commit): HEAD~N / ancestor refs fail (git_repo_error)
+#   * git.push is risk=high (needs platform_admin) AND session-gated -> cases skipped
+#   * git.fetch/pull reach a real remote: success expected, network-absence -> skip
+tools:
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.blame
+    cases:
+      - name: blame_whole_file
+        category: capability
+        args: {path: "cmd/app/main.go"}
+        expect: {status: succeeded, output: {path: "cmd/app/main.go"}, output_match: {blame: "[0-9a-f]{7}"}}
+      - name: blame_line_range
+        category: capability
+        args: {path: "cmd/app/main.go", start_line: 1, end_line: 2}
+        expect: {status: succeeded, output_match: {blame: "[0-9a-f]{7}"}}
+      - name: missing_required_path
+        category: adversarial   # required field absent -> invalid_argument, status failed
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: blame_nonexistent_file
+        category: adversarial   # path resolves but is not tracked -> git fatal
+        args: {path: "e2e/does-not-exist-xyz.go"}
+        expect: {status: failed, error_code_in: [git_repo_error, execution_failed, not_found]}
+      - name: path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.status
+    cases:
+      - name: status_porcelain
+        category: capability
+        args: {short: true}
+        expect: {status: succeeded, output_present: [status]}
+      - name: status_full
+        category: capability
+        args: {short: false}
+        expect: {status: succeeded, output_match: {status: "On branch|HEAD detached|nothing to commit"}}
+      - name: short_wrong_type
+        category: adversarial   # bool field given a string -> json unmarshal fails
+        args: {short: "yes"}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.diff
+    cases:
+      - name: diff_worktree
+        category: capability
+        args: {staged: false}
+        expect: {status: succeeded, output_present: [diff]}
+      - name: diff_staged
+        category: capability
+        args: {staged: true}
+        expect: {status: succeeded, output_present: [diff]}
+      - name: diff_scoped_paths
+        category: capability
+        args: {paths: ["README.md"]}
+        expect: {status: succeeded, output_present: [diff]}
+      - name: diff_bad_base_ref
+        category: adversarial   # base appended verbatim to git diff -> bad revision
+        args: {base: "no-such-ref-xyz"}
+        expect: {status: failed, error_code_in: [git_repo_error, execution_failed]}
+      - name: paths_traversal_denied
+        category: governance
+        args: {paths: ["../../../../etc/passwd"]}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.diff_file
+    cases:
+      - name: diff_file_default_ref
+        category: capability
+        args: {path: "README.md", ref: "HEAD"}
+        expect: {status: succeeded, output: {ref: "HEAD", path: "README.md"}, output_present: [diff]}
+      - name: diff_file_stat_context
+        category: capability
+        args: {path: "cmd/app/main.go", ref: "HEAD", stat: true, context: 5}
+        expect: {status: succeeded, output_present: [diff, stat]}
+      - name: missing_required_path
+        category: adversarial
+        args: {ref: "HEAD"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: diff_file_bad_ref
+        category: adversarial
+        args: {path: "README.md", ref: "no-such-ref-xyz"}
+        expect: {status: failed, error_code_in: [git_repo_error, execution_failed]}
+      - name: path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd", ref: "HEAD"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.apply_patch
+    cases:
+      - name: apply_check_new_file
+        category: capability   # --check verifies without mutating the tree
+        approved: true
+        args:
+          check: true
+          patch: |
+            diff --git a/e2e/patch_check.txt b/e2e/patch_check.txt
+            new file mode 100644
+            index 0000000..3b18e51
+            --- /dev/null
+            +++ b/e2e/patch_check.txt
+            @@ -0,0 +1 @@
+            +hello world
+        expect: {status: succeeded, output: {applied: true}, output_present: [changed_paths]}
+      - name: apply_real_new_file
+        category: capability
+        approved: true
+        args:
+          check: false
+          patch: |
+            diff --git a/e2e/patch_apply.txt b/e2e/patch_apply.txt
+            new file mode 100644
+            index 0000000..3b18e51
+            --- /dev/null
+            +++ b/e2e/patch_apply.txt
+            @@ -0,0 +1 @@
+            +hello world
+        expect: {status: succeeded, output: {applied: true}}
+      - name: malformed_patch
+        category: adversarial   # no +++ headers -> no patch paths -> invalid_argument
+        approved: true
+        args: {patch: "this is not a unified diff at all", check: true}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_required_patch
+        category: adversarial
+        approved: true
+        args: {check: true}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: requires_approval
+        category: governance
+        approved: false
+        args:
+          check: true
+          patch: |
+            diff --git a/e2e/patch_gate.txt b/e2e/patch_gate.txt
+            new file mode 100644
+            index 0000000..3b18e51
+            --- /dev/null
+            +++ b/e2e/patch_gate.txt
+            @@ -0,0 +1 @@
+            +hello world
+        expect: {status: denied, error_code: approval_required}
+      - name: patch_path_escape_denied
+        category: governance   # +++ path escapes workspace -> rejected before git apply
+        approved: true
+        args:
+          check: true
+          patch: |
+            diff --git a/x b/../../../etc/passwd
+            --- /dev/null
+            +++ b/../../../etc/passwd
+            @@ -0,0 +1 @@
+            +x
+        expect: {error_code_in: [invalid_argument, policy_denied]}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.checkout
+    cases:
+      - name: checkout_create_branch
+        category: capability
+        args: {ref: "e2e/feature-branch", create: true}
+        expect: {status: succeeded, output: {ref: "e2e/feature-branch", created: true}}
+      - name: checkout_existing_branch
+        category: capability   # runs after create: already on it -> no-op success
+        args: {ref: "e2e/feature-branch"}
+        expect: {status: succeeded, output: {ref: "e2e/feature-branch", created: false}}
+      - name: missing_required_ref
+        category: adversarial
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: checkout_nonexistent_ref
+        category: adversarial
+        args: {ref: "definitely-nonexistent-ref-xyz"}
+        expect: {status: failed, error_code_in: [execution_failed, git_repo_error, git_usage_error]}
+      - name: ref_shell_metachar_denied
+        category: governance   # arg_field ref deny_characters includes ';'
+        args: {ref: "feature;whoami"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.log
+    cases:
+      - name: log_default_head
+        category: capability
+        args: {ref: "HEAD", max_count: 20}
+        expect: {status: succeeded, output_present: [entries, count], output_match: {"entries.0.hash": "^[0-9a-f]{7,40}$"}}
+      - name: log_max_count_clamped
+        category: adversarial   # max_count 999 is clamped to 200, not rejected
+        args: {ref: "HEAD", max_count: 999}
+        expect: {status: succeeded, output_present: [entries, count]}
+      - name: log_ancestor_unreachable
+        category: adversarial   # shallow clone: HEAD~5 has no such ancestor
+        args: {ref: "HEAD~5"}
+        expect: {status: failed, error_code_in: [git_repo_error, execution_failed]}
+      - name: ref_shell_metachar_denied
+        category: governance
+        args: {ref: "HEAD;whoami"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.show
+    cases:
+      - name: show_head_commit
+        category: capability   # stat+patch both default true -> plain show with patch
+        args: {ref: "HEAD"}
+        expect: {status: succeeded, output_match: {show: "^commit [0-9a-f]"}}
+      - name: show_file_metadata_only
+        category: capability
+        args: {ref: "HEAD", path: "README.md", stat: false, patch: false}
+        expect: {status: succeeded, output: {ref: "HEAD", path: "README.md"}, output_present: [show]}
+      - name: show_ancestor_unreachable
+        category: adversarial
+        args: {ref: "HEAD~9"}
+        expect: {status: failed, error_code_in: [git_repo_error, execution_failed]}
+      - name: path_traversal_denied
+        category: governance
+        args: {ref: "HEAD", path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.branch_list
+    cases:
+      - name: branch_list_all
+        category: capability
+        args: {all: true}
+        expect: {status: succeeded, output_present: [count, branches], output_match: {"branches.0.commit": "^[0-9a-f]{7,40}$"}}
+      - name: branch_list_remotes
+        category: capability
+        args: {remotes: true}
+        expect: {status: succeeded, output_present: [count, branches]}
+      - name: all_wrong_type
+        category: adversarial
+        args: {all: "yes"}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.commit
+    cases:
+      - name: commit_all_staged
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/commit-me.txt", content: "commit fixture\n", create_parents: true}, approved: true}
+        args: {message: "e2e: commit all staged", all: true}
+        approved: true
+        expect: {status: succeeded, output: {committed: true}, output_match: {commit: "^[0-9a-f]{40}$"}}
+      - name: commit_nothing_staged
+        category: adversarial   # after commit_all the tree is clean -> git exit 1
+        args: {message: "e2e: nothing to commit", all: false}
+        approved: true
+        expect: {status: failed, error_code_in: [execution_failed, git_repo_error, git_usage_error]}
+      - name: missing_required_message
+        category: adversarial
+        args: {all: true}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: requires_approval
+        category: governance
+        args: {message: "e2e: unapproved commit", all: true}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: paths_traversal_denied
+        category: governance   # approved so we pass the approval gate; path policy denies
+        args: {message: "e2e: traversal", paths: ["../../../../etc/passwd"]}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.push
+    cases:
+      # git.push is risk=high (needs platform_admin) and session-gated for a
+      # generic developer/devops session -> the runner records it gated/skip and
+      # never executes these. Authored for completeness.
+      - name: push_set_upstream
+        category: capability
+        args: {remote: "origin", refspec: "HEAD:refs/heads/e2e/test-push", set_upstream: true}
+        approved: true
+        expect: {status: succeeded, output: {pushed: true}}
+      - name: requires_approval
+        category: governance
+        args: {remote: "origin", refspec: "HEAD:refs/heads/e2e/test-push"}
+        approved: false
+        expect: {status: denied, error_code_in: [approval_required, policy_denied]}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.fetch
+    cases:
+      - name: fetch_origin
+        category: capability   # reaches a real remote; network-absent -> skip
+        args: {remote: "origin"}
+        approved: true
+        expect: {status: succeeded, output: {fetched: true}, skip_if_error_code: [git_repo_error, execution_failed, timeout]}
+      - name: fetch_refspec_prune
+        category: capability
+        args: {remote: "origin", refspec: "refs/heads/main", prune: true}
+        approved: true
+        expect: {status: succeeded, output: {fetched: true}, skip_if_error_code: [git_repo_error, execution_failed, timeout]}
+      - name: fetch_unknown_remote
+        category: adversarial   # remote name not configured -> git fatal (no network needed)
+        args: {remote: "nonexistent-remote-xyz"}
+        approved: true
+        expect: {status: failed, error_code_in: [git_repo_error, execution_failed]}
+      - name: remote_space_denied
+        category: governance   # arg_field remote deny_characters includes space
+        args: {remote: "origin evil"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: requires_approval
+        category: governance
+        args: {remote: "origin"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+
+  # ────────────────────────────────────────────────────────────────────────
+  - tool: git.pull
+    cases:
+      - name: pull_origin_main
+        category: capability   # reaches a real remote; network-absent/shallow -> skip
+        args: {remote: "origin", refspec: "main"}
+        approved: true
+        expect: {status: succeeded, output: {pulled: true}, skip_if_error_code: [git_repo_error, execution_failed, timeout]}
+      - name: pull_unknown_remote
+        category: adversarial
+        args: {remote: "nonexistent-remote-xyz"}
+        approved: true
+        expect: {status: failed, error_code_in: [git_repo_error, execution_failed]}
+      - name: requires_approval
+        category: governance
+        args: {remote: "origin"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}

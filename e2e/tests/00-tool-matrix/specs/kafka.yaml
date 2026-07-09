@@ -1,0 +1,178 @@
+# Per-tool adversarial spec — kafka.* family.
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (edge/malformed/conflicting input, designed to surface bugs), and governance
+# cases (must be denied). Matched by spec_runner: status + error_code + output
+# fields/presence; a divergence is a BUG.
+#
+# Environment: the dev.kafka connection profile points at the live e2e-kafka:9092
+# broker, is READ_ONLY, and allowlists topics with the prefixes "sandbox." and
+# "dev." (the trailing dot is significant — a bare "sandbox" is out of scope).
+# Because the profile is read_only, every kafka.produce attempt is correctly
+# denied (policy_denied) even when approved; only consume/topic_metadata can
+# reach the backend. Live reads carry skip_if_error_code:[execution_failed] so a
+# transient broker/topic-missing error is recorded as skip, never a false bug —
+# while a real success still has its output validated.
+tools:
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: kafka.topic_metadata
+    cases:
+      - name: describe_allowlisted_topic
+        category: capability
+        args: {profile_id: "dev.kafka", topic: "sandbox.events"}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.kafka", topic: "sandbox.events"}
+          output_present: [partition_count, partitions]
+          skip_if_error_code: [execution_failed]
+      - name: missing_topic
+        category: adversarial   # required field absent -> validation, status failed (not denied)
+        args: {profile_id: "dev.kafka"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_profile_id
+        category: adversarial
+        args: {topic: "sandbox.events"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", topic: "sandbox.events"}
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.redis is a redis profile, not kafka
+        args: {profile_id: "dev.redis", topic: "sandbox.events"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: topic_outside_allowlist
+        category: governance
+        args: {profile_id: "dev.kafka", topic: "prod.secrets"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: kafka.consume
+    cases:
+      # capability — one case per offset mode the schema advertises.
+      - name: consume_latest
+        category: capability
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset_mode: "latest", max_messages: 5, timeout_ms: 2000}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.kafka", topic: "sandbox.events", offset_mode: "latest"}
+          output_present: [messages, message_count, total_bytes, truncated]
+          skip_if_error_code: [execution_failed]
+      - name: consume_earliest
+        category: capability
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset_mode: "earliest", max_messages: 5, timeout_ms: 2000}
+        expect:
+          status: succeeded
+          output: {offset_mode: "earliest"}
+          output_present: [messages, message_count]
+          skip_if_error_code: [execution_failed]
+      - name: consume_absolute_offset
+        category: capability
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset_mode: "absolute", offset: 0, max_messages: 5, timeout_ms: 2000}
+        expect:
+          status: succeeded
+          output: {offset_mode: "absolute", offset: 0}
+          output_present: [messages]
+          skip_if_error_code: [execution_failed]
+      - name: consume_timestamp
+        category: capability
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset_mode: "timestamp", timestamp_ms: 1, max_messages: 5, timeout_ms: 2000}
+        expect:
+          status: succeeded
+          output: {offset_mode: "timestamp", timestamp_ms: 1}
+          output_present: [messages]
+          skip_if_error_code: [execution_failed]
+      - name: consume_legacy_offset_string
+        category: capability   # legacy `offset:"earliest"` (no offset_mode) must resolve to earliest mode
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset: "earliest", max_messages: 5, timeout_ms: 2000}
+        expect:
+          status: succeeded
+          output: {offset_mode: "earliest"}
+          output_present: [messages, message_count]
+          skip_if_error_code: [execution_failed]
+      # adversarial — malformed / conflicting / boundary input. None of these
+      # reach the broker (validation happens before the dial), so they are
+      # deterministic regardless of backend state.
+      - name: missing_topic
+        category: adversarial
+        args: {profile_id: "dev.kafka"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: negative_partition
+        category: adversarial
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", partition: -1}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: bad_offset_mode
+        category: adversarial   # enum violation -> handler rejects with invalid_argument
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset_mode: "sideways"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: absolute_without_offset
+        category: adversarial
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset_mode: "absolute"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: latest_with_numeric_offset_conflict
+        category: adversarial   # numeric offset requires offset_mode=absolute
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset_mode: "latest", offset: 42}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: timestamp_with_offset_conflict
+        category: adversarial   # offset must not be set when offset_mode is timestamp
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset_mode: "timestamp", timestamp_ms: 1000, offset: 5}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: invalid_offset_string
+        category: adversarial   # non-numeric, non-enum offset string
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", offset: "not-a-number"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", topic: "sandbox.events"}
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.mongo is not a kafka profile
+        args: {profile_id: "dev.mongo", topic: "sandbox.events"}
+        expect: {status: failed, error_code: invalid_argument}
+      # governance — topic allowlist confinement.
+      - name: topic_outside_allowlist
+        category: governance
+        args: {profile_id: "dev.kafka", topic: "internal.audit", offset_mode: "latest"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: unscoped_bare_topic_denied
+        category: governance   # "sandbox" lacks the trailing dot the "sandbox." prefix requires
+        args: {profile_id: "dev.kafka", topic: "sandbox", offset_mode: "latest"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: kafka.produce
+    cases:
+      # The only writable-shaped path here is a denial: dev.kafka is read_only,
+      # so a fully valid + approved produce is correctly blocked (policy_denied).
+      - name: produce_blocked_read_only
+        category: governance
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", key: "k1", value: "hello", value_encoding: "utf8", timeout_ms: 2000}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: produce_requires_approval
+        category: governance   # requires_approval=true; without approval the gate blocks before the handler
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", value: "hi"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      # adversarial — validations that run BEFORE the read_only guard, so they
+      # surface their true error code rather than being masked by policy_denied.
+      - name: missing_topic
+        category: adversarial
+        args: {profile_id: "dev.kafka"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: negative_partition
+        category: adversarial
+        args: {profile_id: "dev.kafka", topic: "sandbox.events", partition: -1, value: "x"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", topic: "sandbox.events", value: "x"}
+        approved: true
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.rabbit is a rabbitmq profile, not kafka
+        args: {profile_id: "dev.rabbit", topic: "sandbox.events", value: "x"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}

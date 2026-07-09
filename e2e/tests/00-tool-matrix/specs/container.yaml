@@ -1,0 +1,180 @@
+# Per-tool adversarial spec — container.* family.
+#
+# Runtime behaviour learned from internal/adapters/tools/container_tools.go and
+# container_tools_k8s.go (the deployed image is built with the `k8s` tag):
+#
+#   * The e2e session is a Kubernetes runtime (session.Runtime.Kind ==
+#     kubernetes) and the container handlers are constructed *WithKubernetes,
+#     so every invocation resolves through the K8s adapter (k8sOps), NOT the
+#     local podman/docker/nerdctl probe path.
+#   * container.ps  -> lists pods labelled app=workspace-container-run +
+#     workspace_session_id=<session>. No run pods exist when ps runs first, so
+#     it returns count:0, containers:[], runtime:"k8s", simulated:false.
+#   * container.logs / container.exec -> Pods().Get(container_id). A missing pod
+#     is a tool-level not_found (status: failed). A "sim-…" container_id with
+#     strict:false short-circuits to a synthetic success BEFORE the K8s call
+#     (synthetic fallback is default-on; no WORKSPACE_CONTAINER_* override is
+#     set in the deployment). That synthetic path is the deterministic
+#     capability path used below; the skip_if_error_code hedge keeps the case
+#     honest if a cluster ever disables the fallback.
+#   * container.run -> creates a real pod (busybox); skip_if_error_code covers
+#     image-pull / scheduling flakiness so a slow registry is a skip, not a bug.
+#
+# Error-code contract (verified in internal/app/service.go):
+#   * Tool returns *domain.Error{invalid_argument|not_found|execution_failed}
+#     -> finishWithError -> status: failed.
+#   * Policy arg_field deny_characters / max_length violation -> status: denied,
+#     error_code: policy_denied (argsAllowedByPolicy).
+#   * requires_approval tool without approval -> status: denied,
+#     error_code: approval_required (checked BEFORE arg_fields, so governance
+#     arg_field cases on run/exec pass approved:true to reach the arg check).
+# No container tool declares path_fields, so there is no traversal case.
+tools:
+  - tool: container.ps
+    cases:
+      - name: ps_default
+        category: capability
+        args: {}
+        expect: {status: succeeded, output: {simulated: false, runtime: "k8s"}, output_present: [containers, count, runtime]}
+      - name: ps_all_with_limit
+        category: capability
+        args: {all: true, limit: 50}
+        expect: {status: succeeded, output: {all: true, limit: 50}, output_present: [containers, count]}
+      - name: ps_name_filter
+        category: capability
+        args: {name_filter: "workspace"}
+        expect: {status: succeeded, output: {name_filter: "workspace"}, output_present: [containers]}
+      - name: ps_name_filter_invalid_chars
+        category: adversarial   # '*' passes deny_characters but fails the tool's name regex
+        args: {name_filter: "bad*name"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: ps_name_filter_unicode
+        category: adversarial   # non-ASCII rejected by the name regex, not by policy
+        args: {name_filter: "wörk"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: ps_name_filter_denied_space
+        category: governance    # space is an arg_field deny_character -> policy
+        args: {name_filter: "has space"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: container.logs
+    cases:
+      - name: logs_simulated_basic
+        category: capability    # sim- id + strict:false -> synthetic logs (deterministic)
+        args: {container_id: "sim-deadbeef01", strict: false}
+        expect:
+          status: succeeded
+          output: {simulated: true}
+          output_present: [logs, line_count, bytes]
+          output_match: {logs: "simulated logs"}
+          skip_if_error_code: [not_found, execution_failed]
+      - name: logs_simulated_with_options
+        category: capability
+        args: {container_id: "sim-cafe1234", tail_lines: 50, timestamps: true, since_seconds: 120, strict: false}
+        expect:
+          status: succeeded
+          output: {tail_lines: 50, timestamps: true, since_seconds: 120, simulated: true}
+          skip_if_error_code: [not_found, execution_failed]
+      - name: logs_missing_container_id
+        category: adversarial   # required field absent -> tool invalid_argument
+        args: {strict: false}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: logs_nonexistent_pod
+        category: adversarial   # real (non-sim) id -> K8s Pods.Get -> not found
+        args: {container_id: "no-such-pod-zzz"}
+        expect: {status: failed, error_code: not_found}
+      - name: logs_container_id_denied_char
+        category: governance    # ';' is an arg_field deny_character -> policy
+        args: {container_id: "bad;id"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: container.run
+    cases:
+      - name: run_busybox_detach
+        category: capability    # creates a real pod; skip if the registry is slow/unreachable
+        args: {image_ref: "busybox:1.36", command: ["echo", "hello"], detach: true}
+        approved: true
+        expect:
+          status: succeeded
+          output: {runtime: "k8s", detach: true, image_ref: "busybox:1.36"}
+          output_present: [container_id, status]
+          skip_if_error_code: [execution_failed, deadline_exceeded, timeout]
+      - name: run_with_env_and_name
+        category: capability
+        args: {image_ref: "busybox:1.36", command: ["echo", "hi"], env: {FOO: "bar"}, name: "e2e-runner", detach: true}
+        approved: true
+        expect:
+          status: succeeded
+          output: {runtime: "k8s", name: "e2e-runner"}
+          output_present: [container_id, env]
+          skip_if_error_code: [execution_failed, deadline_exceeded, timeout]
+      - name: run_missing_image_ref
+        category: adversarial   # required field absent -> tool invalid_argument
+        args: {command: ["echo", "hi"]}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: run_invalid_image_ref_leading_colon
+        category: adversarial   # ":latest" has no repository -> validateImageReference
+        args: {image_ref: ":latest", detach: true}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: run_invalid_env_key
+        category: adversarial   # env is not an arg_field; bad key hits the tool sanitizer
+        args: {image_ref: "busybox:1.36", env: {"1BAD": "x"}, detach: true}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: run_requires_approval
+        category: governance    # requires_approval tool without approval
+        args: {image_ref: "busybox:1.36", command: ["echo", "hello"], detach: true}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: run_command_shell_metachar_denied
+        category: governance    # ';' in a command arg -> arg_field deny_characters
+        args: {image_ref: "busybox:1.36", command: ["echo", "a;b"], detach: true}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: container.exec
+    cases:
+      - name: exec_simulated_echo
+        category: capability    # sim- id + strict:false -> synthetic exec (deterministic)
+        args: {container_id: "sim-abc123", command: ["echo", "ready"], strict: false}
+        approved: true
+        expect:
+          status: succeeded
+          output: {simulated: true, exit_code: 0}
+          output_match: {output: "simulated exec"}
+          skip_if_error_code: [not_found, execution_failed]
+      - name: exec_simulated_with_timeout
+        category: capability
+        args: {container_id: "sim-cafe99", command: ["ls"], timeout_seconds: 30, strict: false}
+        approved: true
+        expect:
+          status: succeeded
+          output: {timeout_seconds: 30, simulated: true}
+          skip_if_error_code: [not_found, execution_failed]
+      - name: exec_missing_command
+        category: adversarial   # required field absent -> tool invalid_argument
+        args: {container_id: "sim-abc123"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: exec_command_not_allowlisted
+        category: adversarial   # 'curl' passes policy but is not on the exec allowlist
+        args: {container_id: "sim-abc123", command: ["curl", "http://x"]}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: exec_command_denied_dangerous
+        category: adversarial   # 'rm' is explicitly denied by the exec guardrail
+        args: {container_id: "sim-abc123", command: ["rm", "-rf", "/tmp/x"]}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: exec_requires_approval
+        category: governance    # requires_approval tool without approval
+        args: {container_id: "sim-abc123", command: ["echo", "ready"]}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: exec_command_shell_metachar_denied
+        category: governance    # '|' in a command arg -> arg_field deny_characters
+        args: {container_id: "sim-abc123", command: ["echo", "a|b"]}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}

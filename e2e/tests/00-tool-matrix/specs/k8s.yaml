@@ -1,0 +1,335 @@
+# Per-tool adversarial spec — k8s.* family.
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (edge/malformed input designed to surface bugs), and governance cases (must be
+# denied). `setup` runs invocations first to establish state. `expect` is matched
+# by spec_runner: status + error_code + output fields/presence/regex. A divergence
+# is a BUG.
+#
+# ENVIRONMENT NOTES (load-bearing — wrong expectations create false bugs):
+#   * Session roles = [developer, devops]; NO tool_profile, NO platform_admin,
+#     NO allowed_k8s_namespaces metadata. Namespace governance is therefore
+#     allow-all (no namespace denials), and the session lacks the runtime-rollout
+#     /saturation profiles.
+#   * The runtime does NOT validate args against the JSON input_schema. Handlers
+#     self-validate: a *type mismatch* fails decodeK8sArgs -> invalid_argument
+#     (status failed); an *out-of-range numeric of the right type* is CLAMPED via
+#     clampInt and SUCCEEDS; unknown extra fields are ignored (encoding/json
+#     default) and SUCCEED.
+#   * Policy gate order in StaticPolicy.Authorize: scope -> high-risk(platform_admin)
+#     -> approval -> rollout-profile -> saturation-profile. High-risk DOMINATES the
+#     approval check, so high-risk tools (set_image, rollout_undo, circuit_break)
+#     return policy_denied even when approval is withheld (approval_required never
+#     surfaces for them).
+#   * Handler/policy denial codes {policy_denied, approval_required, rollout_too_young,
+#     no_previous_healthy_replicaset, environment_mismatch} -> status DENIED. Every
+#     other code {invalid_argument, not_found, execution_failed, timeout} -> FAILED.
+#   * Cluster fixture: Deployments web-api (2 replicas) + worker (1) in the session
+#     namespace; pods have generated names (cannot be named statically).
+#   * Only the 5 read/query tools (get_pods/get_services/get_deployments/get_images/
+#     get_logs) are reachable by a generic session — they run for real. The rollout/
+#     saturation/apply tools are session-gated (profile/role) and are recorded as
+#     gated/skip at discovery; their cases below encode the CORRECT outcome should
+#     they ever be invoked.
+tools:
+  # ── reachable read tools (run for real against the cluster) ───────────────
+  - tool: k8s.get_pods
+    cases:
+      - name: list_default_namespace
+        category: capability
+        args: {}
+        expect:
+          status: succeeded
+          output: {source: "k8s_sdk", exit_code: 0}
+          output_present: [count, pods, namespace, truncated]
+          output_match: {summary: "listed [0-9]+ pods from namespace"}
+      - name: list_with_containers_and_labels
+        category: capability
+        args: {include_containers: true, include_labels: true, max_pods: 50}
+        expect:
+          status: succeeded
+          output: {source: "k8s_sdk", include_containers: true, include_labels: true}
+          output_present: [pods, count]
+      - name: list_with_label_selector
+        category: capability   # selector that matches nothing still succeeds (count 0)
+        args: {label_selector: "app=web-api"}
+        expect:
+          status: succeeded
+          output: {source: "k8s_sdk"}
+          output_present: [pods, count]
+      - name: max_pods_out_of_range_is_clamped
+        category: adversarial   # 9999 > schema max 500 -> clampInt -> 500, NOT rejected
+        args: {max_pods: 9999}
+        expect: {status: succeeded, output: {source: "k8s_sdk"}}
+      - name: max_pods_wrong_type_rejected
+        category: adversarial   # string where int expected -> decodeK8sArgs fails
+        args: {max_pods: "not-a-number"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: namespace_wrong_type_rejected
+        category: adversarial
+        args: {namespace: 12345}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_field_ignored
+        category: adversarial   # encoding/json ignores unknown keys -> still succeeds
+        args: {bogus_field: "x", max_pods: 5}
+        expect: {status: succeeded, output: {source: "k8s_sdk"}}
+
+  - tool: k8s.get_services
+    cases:
+      - name: list_services
+        category: capability
+        args: {}
+        expect:
+          status: succeeded
+          output: {source: "k8s_sdk", exit_code: 0}
+          output_present: [services, count]
+          output_match: {summary: "listed [0-9]+ services from namespace"}
+      - name: list_services_with_labels
+        category: capability
+        args: {include_labels: true, max_services: 100}
+        expect:
+          status: succeeded
+          output: {source: "k8s_sdk", include_labels: true}
+          output_present: [services]
+      - name: include_labels_wrong_type_rejected
+        category: adversarial   # bool field given a string -> decode fails
+        args: {include_labels: "yes"}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: k8s.get_deployments
+    cases:
+      - name: list_deployments
+        category: capability   # fixture has web-api + worker -> count >= 2
+        args: {}
+        expect:
+          status: succeeded
+          output: {source: "k8s_sdk", exit_code: 0}
+          output_present: [deployments, count]
+          output_match: {summary: "listed [0-9]+ deployments from namespace"}
+      - name: list_deployments_with_containers
+        category: capability
+        args: {include_containers: true, include_labels: true}
+        expect:
+          status: succeeded
+          output: {source: "k8s_sdk", include_containers: true}
+          output_present: [deployments]
+      - name: max_deployments_wrong_type_rejected
+        category: adversarial
+        args: {max_deployments: "all"}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: k8s.get_images
+    cases:
+      - name: aggregate_images
+        category: capability
+        args: {}
+        expect:
+          status: succeeded
+          output: {source: "k8s_sdk", exit_code: 0}
+          output_present: [images, count]
+          output_match: {summary: "listed [0-9]+ images from namespace"}
+      - name: aggregate_images_with_workloads
+        category: capability
+        args: {include_workloads: true, max_images: 500}
+        expect:
+          status: succeeded
+          output: {source: "k8s_sdk", include_workloads: true}
+          output_present: [images]
+      - name: max_images_out_of_range_is_clamped
+        category: adversarial   # 99999 > schema max 1000 -> clamped to 1000, succeeds
+        args: {max_images: 99999}
+        expect: {status: succeeded, output: {source: "k8s_sdk"}}
+      - name: include_workloads_wrong_type_rejected
+        category: adversarial
+        args: {include_workloads: 1.5}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: k8s.get_logs
+    cases:
+      - name: missing_required_pod_name
+        category: adversarial   # pod_name required by handler -> invalid_argument (failed, not denied)
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: nonexistent_pod_reports_error
+        category: adversarial   # GetLogs on a missing pod -> wrapped execution_failed
+        args: {pod_name: "nonexistent-pod-xyz-000", tail_lines: 100, since_seconds: 60, previous: false}
+        expect: {status: failed, error_code_in: [execution_failed, not_found]}
+      - name: tail_lines_wrong_type_rejected
+        category: adversarial   # decode fails before the pod_name check
+        args: {pod_name: "web-api-abc123", tail_lines: "tail"}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ── session-gated tools (profile/role) — recorded gated/skip at discovery ──
+  # Expectations below encode the correct outcome for a generic session if the
+  # tool were ever reachable (profile/high-risk/approval blocks the invocation).
+
+  - tool: k8s.get_replicasets
+    cases:
+      - name: requires_rollout_profile
+        category: governance   # needs tool_profile=runtime-rollout-narrow -> denied
+        args: {deployment_name: "web-api"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: list_all_also_requires_profile
+        category: governance
+        args: {}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: k8s.apply_manifest
+    cases:
+      - name: dry_run_configmap
+        category: capability   # dry_run avoids mutation; allowlisted ConfigMap kind
+        approved: true
+        args:
+          dry_run: true
+          manifest: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: e2e-matrix-config\ndata:\n  key: value\n"
+        expect:
+          status: succeeded
+          output: {dry_run: true, applied_count: 1}
+          output_present: [resources, created_count, updated_count]
+      - name: requires_approval
+        category: governance
+        approved: false
+        args:
+          manifest: "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: e2e-matrix-config\ndata:\n  key: value\n"
+        expect: {status: denied, error_code: approval_required}
+      - name: disallowed_kind_denied
+        category: governance   # Secret is not in the allowlist {ConfigMap,Deployment,Service}
+        approved: true
+        args:
+          manifest: "apiVersion: v1\nkind: Secret\nmetadata:\n  name: e2e-matrix-secret\n"
+        expect: {status: denied, error_code: policy_denied}
+      - name: missing_required_manifest
+        category: adversarial
+        approved: true
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: invalid_yaml_manifest
+        category: adversarial   # un-parseable -> invalid_argument
+        approved: true
+        args: {manifest: "this: : : not yaml ["}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: k8s.rollout_status
+    cases:
+      - name: wait_for_existing_deployment
+        category: capability   # web-api is stable -> rollout reports completed (or timeout -> skip)
+        approved: true
+        args: {deployment_name: "web-api", timeout_seconds: 60, poll_interval_ms: 1000}
+        expect:
+          status: succeeded
+          output: {status: "completed"}
+          output_present: [rollout, duration_ms]
+      - name: requires_approval
+        category: governance
+        approved: false
+        args: {deployment_name: "web-api"}
+        expect: {status: denied, error_code: approval_required}
+      - name: missing_required_deployment_name
+        category: adversarial   # handler validates after approval passes -> invalid_argument
+        approved: true
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: k8s.rollout_pause
+    cases:
+      - name: requires_rollout_profile
+        category: governance   # approval passes (approved), then profile check denies
+        approved: true
+        args: {deployment_name: "web-api"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: requires_approval
+        category: governance   # approval gate fires before the profile check
+        approved: false
+        args: {deployment_name: "web-api"}
+        expect: {status: denied, error_code: approval_required}
+
+  - tool: k8s.rollout_undo
+    cases:
+      - name: high_risk_requires_platform_admin
+        category: governance   # risk=high, session lacks platform_admin -> denied before approval
+        approved: true
+        args: {deployment_name: "web-api"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: high_risk_denied_even_with_revision
+        category: governance
+        approved: true
+        args: {deployment_name: "web-api", to_revision: 2}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: k8s.set_image
+    cases:
+      - name: high_risk_requires_platform_admin
+        category: governance   # risk=high -> policy_denied regardless of approval
+        approved: true
+        args: {deployment_name: "web-api", container_name: "app", image: "busybox:1.36"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: high_risk_denied_without_approval
+        category: governance   # high-risk check precedes approval -> still policy_denied
+        approved: false
+        args: {deployment_name: "web-api", image: "busybox:1.36"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: k8s.restart_deployment
+    cases:
+      - name: restart_existing_deployment
+        category: capability   # approval passes, not profile-gated -> annotation patch succeeds
+        approved: true
+        args: {deployment_name: "web-api", wait_for_rollout: false}
+        expect:
+          status: succeeded
+          output: {rollout_status: "pending"}
+          output_present: [restarted_at, generation]
+      - name: requires_approval
+        category: governance
+        approved: false
+        args: {deployment_name: "web-api"}
+        expect: {status: denied, error_code: approval_required}
+      - name: missing_required_deployment_name
+        category: adversarial
+        approved: true
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: k8s.scale_deployment
+    cases:
+      - name: requires_saturation_profile
+        category: governance   # approval passes, then saturation profile check denies
+        approved: true
+        args: {namespace: "default", deployment_name: "web-api", replicas: 3}
+        expect: {status: denied, error_code: policy_denied}
+      - name: requires_approval
+        category: governance
+        approved: false
+        args: {namespace: "default", deployment_name: "web-api", replicas: 3}
+        expect: {status: denied, error_code: approval_required}
+      - name: delta_path_also_requires_profile
+        category: governance
+        approved: true
+        args: {namespace: "default", deployment_name: "web-api", replicas_delta: 1}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: k8s.restart_pods
+    cases:
+      - name: requires_saturation_profile
+        category: governance
+        approved: true
+        args: {namespace: "default", deployment_name: "web-api", mode: "rollout_restart"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: requires_approval
+        category: governance
+        approved: false
+        args: {namespace: "default", deployment_name: "web-api", mode: "rollout_restart"}
+        expect: {status: denied, error_code: approval_required}
+
+  - tool: k8s.circuit_break
+    cases:
+      - name: high_risk_requires_platform_admin
+        category: governance   # risk=high -> policy_denied before profile/approval
+        approved: true
+        args: {namespace: "default", target_service: "web-api", downstream: "worker", ttl_seconds: 300}
+        expect: {status: denied, error_code: policy_denied}
+      - name: high_risk_denied_without_approval
+        category: governance
+        approved: false
+        args: {namespace: "default", target_service: "web-api", downstream: "worker", ttl_seconds: 300}
+        expect: {status: denied, error_code: policy_denied}

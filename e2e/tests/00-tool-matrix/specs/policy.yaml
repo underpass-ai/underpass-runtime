@@ -1,0 +1,127 @@
+# Per-tool adversarial spec — policy.* family.
+#
+# Only one tool exists in this family: policy.check. It is a META-tool: it
+# evaluates whether some OTHER tool invocation would pass the policy engine,
+# WITHOUT executing it. Two consequences drive the expectations below:
+#
+#   1. policy.check itself has no path_fields and requires_approval=false, so it
+#      is NEVER denied and NEVER needs approval. Governance violations in the
+#      *checked* tool's args are REPORTED as output.allowed=false (+violations),
+#      status stays "succeeded". Expecting status:denied here would be a FALSE bug.
+#   2. Only malformed/missing input to policy.check ITSELF (empty/whitespace/absent
+#      tool_name, unparseable json) yields status:failed + invalid_argument.
+#
+# Behavior pinned from internal/adapters/tools/policy_check_tools.go:
+#   - found tool  -> output: {tool_name, allowed, reason, requires_approval,
+#                    risk_level, side_effects}, +risk_note when risk_level=high,
+#                    +violations when allowed=false.
+#   - unknown tool -> output: {tool_name, allowed:false, reason:"tool not found in
+#                    catalog"} ONLY (no requires_approval/risk_level/side_effects).
+#   - empty/whitespace/missing tool_name OR unparseable args -> invalid_argument.
+# The session clones the polyglot fixture (README.md, go.mod, notes.txt, etc.).
+tools:
+  - tool: policy.check
+    cases:
+      # ---- capability ----
+      - name: check_read_allowed
+        category: capability
+        # fs.read_file: low risk, no approval, path_field validates README.md (exists) -> allowed.
+        args: {tool_name: "fs.read_file", args: {path: "README.md"}}
+        expect:
+          status: succeeded
+          output: {allowed: true, requires_approval: false, risk_level: "low", side_effects: "none"}
+          output_present: [tool_name, reason]
+
+      - name: check_high_risk_shell_surfaces_risk_note
+        category: capability
+        # shell.exec: high risk + approval; command<=4096 chars & no cwd -> no violation -> allowed.
+        args: {tool_name: "shell.exec", args: {command: "make test"}}
+        expect:
+          status: succeeded
+          output: {allowed: true, risk_level: "high", requires_approval: true}
+          output_present: [risk_note]
+
+      - name: check_requires_approval_flag_surfaced
+        category: capability
+        # fs.delete: irreversible/high/approval; notes.txt exists & in scope -> allowed=true.
+        args: {tool_name: "fs.delete", args: {path: "notes.txt"}}
+        expect:
+          status: succeeded
+          output: {allowed: true, requires_approval: true, risk_level: "high", side_effects: "irreversible"}
+          output_present: [risk_note]
+
+      - name: check_no_args_low_risk
+        category: capability
+        # git.status: no policy block, no args -> trivially allowed.
+        args: {tool_name: "git.status"}
+        expect:
+          status: succeeded
+          output: {allowed: true, requires_approval: false, risk_level: "low", side_effects: "none"}
+
+      # ---- adversarial ----
+      - name: unknown_tool_reported_not_allowed
+        category: adversarial
+        # Unknown tool -> allowed:false via the SHORT output path (no risk_level/requires_approval).
+        args: {tool_name: "nonexistent.tool"}
+        expect:
+          status: succeeded
+          output: {allowed: false}
+          output_match: {reason: "not found in catalog"}
+
+      - name: unicode_tool_name_not_in_catalog
+        category: adversarial
+        # Look-alike unicode name must not fuzzy-match a real tool.
+        args: {tool_name: "fs.réàd_file"}
+        expect:
+          status: succeeded
+          output: {allowed: false}
+          output_match: {reason: "not found in catalog"}
+
+      - name: missing_tool_name
+        category: adversarial
+        # tool_name is required -> input validation failure (failed, not denied).
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: empty_tool_name
+        category: adversarial
+        args: {tool_name: ""}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: whitespace_tool_name
+        category: adversarial
+        # TrimSpace makes a whitespace-only name equivalent to empty.
+        args: {tool_name: "   "}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: args_not_an_object
+        category: adversarial
+        # Nested args that isn't a JSON object -> reported as a violation, allowed:false,
+        # but policy.check itself still succeeds (it parsed its own top-level args fine).
+        args: {tool_name: "fs.read_file", args: "not-an-object"}
+        expect:
+          status: succeeded
+          output: {allowed: false}
+          output_present: [violations]
+
+      # ---- governance ----
+      - name: nested_traversal_reported_not_denied
+        category: governance
+        # KEY: the traversal lives in the *checked* tool's args, not in policy.check's
+        # own path_field. Correct behavior is to REPORT allowed:false (+violations),
+        # NOT to deny policy.check. status:denied here would be a false positive.
+        args: {tool_name: "fs.edit", args: {path: "../../../../etc/passwd", old_string: "a", new_string: "b"}}
+        expect:
+          status: succeeded
+          output: {allowed: false}
+          output_present: [violations]
+
+      - name: self_never_requires_approval
+        category: governance
+        # policy.check has requires_approval=false; invoking it without approval must
+        # still succeed (read-only meta-tool) — it must never emit approval_required.
+        args: {tool_name: "git.status"}
+        approved: false
+        expect:
+          status: succeeded
+          output: {allowed: true}
