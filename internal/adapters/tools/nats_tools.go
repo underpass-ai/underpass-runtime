@@ -487,7 +487,10 @@ func natsSubjectPatternMatch(pattern, subject string) bool {
 	for idx, token := range patternTokens {
 		switch token {
 		case ">":
-			return true
+			// `>` matches ONE OR MORE trailing tokens, so there must be at least
+			// one subject token at this position. A profile scoped to "sandbox.>"
+			// must not authorize the bare parent subject "sandbox".
+			return idx < len(subjectTokens)
 		case "*":
 			if idx >= len(subjectTokens) {
 				return false

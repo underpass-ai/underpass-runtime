@@ -1,0 +1,16 @@
+# Robust "fat" runner: starts from the existing runner image (which already has
+# git, go, node, python, rust, cc, gh, curl, jq, rg) and only adds the three
+# scanners/load tools it lacks (trivy, syft, k6) by copying prebuilt binaries
+# from their official images. Avoids re-running apt-get / re-downloading
+# toolchains, which failed on transient network errors.
+FROM docker.io/aquasec/trivy:0.71.1 AS trivy
+FROM docker.io/anchore/syft:v1.45.1 AS syft
+FROM docker.io/grafana/k6:0.53.0 AS k6
+
+FROM ghcr.io/underpass-ai/underpass-runtime/runner:gh-20260404235607
+USER root
+COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
+COPY --from=syft  /syft                /usr/local/bin/syft
+COPY --from=k6    /usr/bin/k6          /usr/local/bin/k6
+RUN chmod 0755 /usr/local/bin/trivy /usr/local/bin/syft /usr/local/bin/k6
+USER 1000

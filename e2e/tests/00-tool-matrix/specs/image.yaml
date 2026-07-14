@@ -1,0 +1,230 @@
+# Per-tool adversarial spec — image.* family (build / push / inspect).
+#
+# Each tool gets capability cases (valid args that really run against the
+# fixture), adversarial cases (malformed/boundary/conflicting input meant to
+# surface bugs), and governance cases (traversal + approval gate). A divergence
+# from `expect` is reported as a BUG by the spec_runner.
+#
+# Environment facts that drive the expectations (verified against image_tools.go):
+#   * The runner image has NO container builder (no docker/podman/buildah), so
+#     detectImageBuilder() returns "" and every build/push falls back to the
+#     deterministic synthetic path: builder="synthetic", simulated=true, and a
+#     real build/push never executes (pushed stays false).
+#   * The fixture repo has a Dockerfile at the workspace root, so the default
+#     `cat Dockerfile` read succeeds and build/inspect reach the analysis path.
+#   * Handler-level validation returns {status: failed, error_code:
+#     invalid_argument} — invalid_argument is NOT a policy-denied code, so the
+#     status is "failed", never "denied".
+#   * The policy layer runs before the handler; the approval gate is checked
+#     BEFORE the path-field check, so traversal cases on requires_approval tools
+#     must set approved:true to reach (and assert) the policy_denied path check.
+#   * max_issues / max_retries are silently clamped by clampInt (no schema
+#     pre-validation), so out-of-range numeric values SUCCEED (clamped).
+#   * The session sets no allowed_image_registries, so image.push registry
+#     governance is permissive (backward-compatible default) — a valid ref pushes
+#     (i.e. is simulated), it is not registry-denied.
+tools:
+  - tool: image.build
+    cases:
+      # ── capability ──────────────────────────────────────────────────────
+      - name: build_default_synthetic
+        category: capability
+        # Default context "." + root Dockerfile; no builder -> simulated build.
+        args: {context_path: ".", dockerfile_path: "Dockerfile"}
+        approved: true
+        expect:
+          status: succeeded
+          output:
+            builder: "synthetic"
+            simulated: true
+            pushed: false
+            push_requested: false
+            registry: "workspace.local"
+            repository: "workspace"
+          output_present: [image_ref, command, issues_count, summary, tag]
+          output_match: {digest: "^sha256:[0-9a-f]{64}$"}
+      - name: build_tag_and_push_requested_skipped
+        category: capability
+        # push:true is requested but no builder exists -> push skipped, ref parsed.
+        args: {context_path: ".", dockerfile_path: "Dockerfile", tag: "ghcr.io/acme/demo:1.0.0", push: true, no_cache: true}
+        approved: true
+        expect:
+          status: succeeded
+          output:
+            builder: "synthetic"
+            simulated: true
+            push_requested: true
+            pushed: false
+            push_skipped_reason: "no_container_builder_available"
+            registry: "ghcr.io"
+            repository: "acme/demo"
+            tag: "ghcr.io/acme/demo:1.0.0"
+          output_present: [image_ref, digest, summary]
+      # ── adversarial ─────────────────────────────────────────────────────
+      - name: tag_missing_repository
+        category: adversarial
+        # ":1.0.0" has no repository name -> validateImageReference rejects.
+        args: {tag: ":1.0.0"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: push_field_type_mismatch
+        category: adversarial
+        # push must be a bool; a string fails json.Unmarshal in the handler.
+        args: {push: "yes"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_dockerfile
+        category: adversarial
+        # In-workspace but nonexistent Dockerfile -> cat fails -> execution_failed.
+        args: {dockerfile_path: "Nope.Dockerfile"}
+        approved: true
+        expect: {status: failed, error_code_in: [execution_failed, not_found]}
+      # ── governance ──────────────────────────────────────────────────────
+      - name: requires_approval
+        category: governance
+        args: {context_path: ".", dockerfile_path: "Dockerfile"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: traversal_context_path
+        category: governance
+        # approved:true so we pass the approval gate and reach the path check.
+        args: {context_path: "../../../../../../etc/passwd"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: traversal_dockerfile_path
+        category: governance
+        args: {dockerfile_path: "../../../../../../etc/passwd"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: image.push
+    cases:
+      # ── capability ──────────────────────────────────────────────────────
+      - name: push_simulated_with_digest
+        category: capability
+        # Valid ref with digest; no builder -> simulated push, ref fully parsed.
+        args: {image_ref: "ghcr.io/acme/demo:1.0.0@sha256:abc123", max_retries: 1}
+        approved: true
+        expect:
+          status: succeeded
+          output:
+            builder: "synthetic"
+            simulated: true
+            pushed: false
+            push_skipped_reason: "no_container_builder_available"
+            registry: "ghcr.io"
+            repository: "acme/demo"
+            tag: "1.0.0"
+            digest: "sha256:abc123"
+            max_retries: 1
+          output_present: [image_ref, summary, attempts]
+      - name: push_no_digest_max_retries_clamped
+        category: capability
+        # max_retries:99 is clamped to 5; ref has no digest -> digest "".
+        args: {image_ref: "ghcr.io/acme/demo:2.0.0", max_retries: 99}
+        approved: true
+        expect:
+          status: succeeded
+          output:
+            simulated: true
+            pushed: false
+            tag: "2.0.0"
+            digest: ""
+            max_retries: 5
+          output_present: [image_ref, summary]
+      # ── adversarial ─────────────────────────────────────────────────────
+      - name: missing_image_ref
+        category: adversarial
+        # image_ref is required; approved:true so we reach handler validation.
+        args: {}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: image_ref_leading_at
+        category: adversarial
+        # "@sha256:..." has no repository name -> validateImageReference rejects.
+        args: {image_ref: "@sha256:deadbeef"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: strict_mode_no_builder_fails
+        category: adversarial
+        # strict:true forbids the synthetic fallback -> hard execution failure.
+        args: {image_ref: "ghcr.io/acme/demo:1.0.0", strict: true}
+        approved: true
+        expect: {status: failed, error_code: execution_failed}
+      # ── governance ──────────────────────────────────────────────────────
+      - name: requires_approval
+        category: governance
+        args: {image_ref: "ghcr.io/acme/demo:1.0.0"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+
+  - tool: image.inspect
+    cases:
+      # ── capability ──────────────────────────────────────────────────────
+      - name: inspect_dockerfile_default
+        category: capability
+        # No image_ref -> dockerfile mode; reads root Dockerfile via `cat`.
+        args: {context_path: ".", dockerfile_path: "Dockerfile"}
+        expect:
+          status: succeeded
+          output:
+            source_type: "dockerfile"
+            exit_code: 0
+          output_present: [base_images, stages_count, exposed_ports, user, issues_count, recommendations, command]
+          output_match: {summary: "dockerfile inspect completed"}
+      - name: inspect_image_ref_pinned_clean
+        category: capability
+        # Fully-pinned ref (tag + digest) -> zero issues reported.
+        args: {image_ref: "registry.example.com/app:1.2.3@sha256:abc123"}
+        expect:
+          status: succeeded
+          output:
+            source_type: "image_ref"
+            registry: "registry.example.com"
+            repository: "app"
+            tag: "1.2.3"
+            digest: "sha256:abc123"
+            issues_count: 0
+          output_present: [recommendations]
+      - name: inspect_image_ref_latest_flags_issues
+        category: capability
+        # latest tag + no digest -> exactly two issues (latest_tag, missing_digest).
+        args: {image_ref: "nginx:latest"}
+        expect:
+          status: succeeded
+          output:
+            source_type: "image_ref"
+            registry: "docker.io"
+            repository: "nginx"
+            tag: "latest"
+            issues_count: 2
+          output_match: {summary: "with issues"}
+      - name: inspect_max_issues_truncation
+        category: capability
+        # max_issues:1 truncates the 2-issue set down to 1 and flags truncated.
+        args: {image_ref: "nginx:latest", max_issues: 1}
+        expect:
+          status: succeeded
+          output:
+            issues_count: 1
+            truncated: true
+      # ── adversarial ─────────────────────────────────────────────────────
+      - name: inspect_missing_dockerfile
+        category: adversarial
+        # Nonexistent in-workspace Dockerfile -> cat fails -> execution_failed.
+        args: {dockerfile_path: "Nope.Dockerfile"}
+        expect: {status: failed, error_code_in: [execution_failed, not_found]}
+      - name: inspect_max_issues_type_mismatch
+        category: adversarial
+        # max_issues must be an integer; a string fails json.Unmarshal.
+        args: {image_ref: "nginx:latest", max_issues: "big"}
+        expect: {status: failed, error_code: invalid_argument}
+      # ── governance ──────────────────────────────────────────────────────
+      - name: traversal_context_path
+        category: governance
+        args: {context_path: "../../../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: traversal_dockerfile_path
+        category: governance
+        args: {dockerfile_path: "../../../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}

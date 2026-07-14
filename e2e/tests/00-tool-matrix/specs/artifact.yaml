@@ -1,0 +1,164 @@
+# Per-tool adversarial spec — artifact.* family.
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (edge/malformed input, designed to surface bugs), and governance cases (must be
+# denied). `setup` runs invocations first to establish state. `expect` is matched
+# by spec_runner: status + error_code + output fields/presence/regex. A divergence
+# is a BUG. The session clones the polyglot fixture (README.md, go.mod,
+# cmd/app/main.go, notes.txt, web/, py/, rs/, Dockerfile) into a real git repo.
+#
+# Behavior learned from internal/adapters/tools/artifact_tools.go:
+#   * All three tools take `path` as the only workspace path_field (policy:
+#     workspace_relative). Traversal -> resolvePath returns policy_denied -> the
+#     invocation is DENIED (status: denied, error_code: policy_denied).
+#   * None of the three require approval (no requires_approval in catalog).
+#   * In-tool validation (empty path, unknown encoding, undecodable args) returns
+#     ErrorCodeInvalidArgument, which is NOT a policy-denied code, so the
+#     invocation status is "failed" (governance "denied" is reserved for policy).
+#   * Reading a missing file / directory / non-regular path bubbles up as
+#     execution_failed (os.ReadFile error locally; `exit 1` -> toFSRunnerError on
+#     the k8s runner). We accept not_found as an equally-correct alternative.
+#   * upload defaults: name = filepath.Base(path), content_type =
+#     application/octet-stream; truncates to max_bytes (clamped to >=1024).
+#   * download defaults: encoding = base64 (content_base64); utf8 requires the
+#     bytes to be valid UTF-8 else execution_failed.
+#   * list defaults: path ".", recursive true, max_entries 200; truncated is
+#     (count >= max_entries); pattern matches the rel path OR the basename.
+tools:
+  - tool: artifact.upload
+    cases:
+      - name: upload_existing_default_name
+        category: capability
+        args: {path: "README.md"}
+        expect:
+          status: succeeded
+          output: {path: "README.md", artifact_name: "README.md", content_type: "application/octet-stream", truncated: false, exit_code: 0}
+          output_present: [sha256, size_bytes, summary]
+
+      - name: upload_custom_name_and_content_type
+        category: capability
+        args: {path: "go.mod", name: "module-manifest", content_type: "text/plain"}
+        expect:
+          status: succeeded
+          output: {path: "go.mod", artifact_name: "module-manifest", content_type: "text/plain", exit_code: 0}
+          output_present: [sha256, size_bytes]
+
+      - name: upload_truncates_at_max_bytes
+        category: capability   # file (1200 B) > max_bytes (1024) -> truncated payload
+        setup:
+          - tool: fs.write_file
+            args: {path: "e2e/art-big.txt", content: "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789", create_parents: true}
+            approved: true
+        args: {path: "e2e/art-big.txt", max_bytes: 1024}
+        expect:
+          status: succeeded
+          output: {truncated: true, size_bytes: 1024, exit_code: 0}
+
+      - name: upload_missing_path_rejected
+        category: adversarial   # required `path` absent -> in-tool validation -> failed
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: upload_nonexistent_file
+        category: adversarial   # path resolves but file does not exist -> read error
+        args: {path: "does-not-exist.xyz"}
+        expect: {status: failed, error_code_in: [execution_failed, not_found]}
+
+      - name: upload_path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: artifact.download
+    cases:
+      - name: download_utf8_roundtrip
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/art-dl.txt", content: "hello world", create_parents: true}, approved: true}
+        args: {path: "e2e/art-dl.txt", encoding: "utf8"}
+        expect:
+          status: succeeded
+          output: {path: "e2e/art-dl.txt", encoding: "utf8", content: "hello world", size_bytes: 11, truncated: false, exit_code: 0}
+          output_present: [sha256]
+
+      - name: download_base64_default_encoding
+        category: capability   # no encoding arg -> defaults to base64 (content_base64)
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/art-dl5.txt", content: "hello", create_parents: true}, approved: true}
+        args: {path: "e2e/art-dl5.txt"}
+        expect:
+          status: succeeded
+          output: {encoding: "base64", content_base64: "aGVsbG8=", size_bytes: 5, exit_code: 0}
+          output_present: [sha256]
+
+      - name: download_missing_path_rejected
+        category: adversarial
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: download_bad_encoding_enum
+        category: adversarial   # encoding not in {base64,utf8} -> invalid_argument
+        args: {path: "README.md", encoding: "hex"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: download_utf8_on_non_utf8_bytes
+        category: adversarial   # 0xFF 0xFE is not valid UTF-8 -> execution_failed
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/art-bin.dat", content: "//4=", encoding: base64, create_parents: true}, approved: true}
+        args: {path: "e2e/art-bin.dat", encoding: "utf8"}
+        expect: {status: failed, error_code_in: [execution_failed, invalid_argument]}
+
+      - name: download_path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd", encoding: "utf8"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: artifact.list
+    cases:
+      - name: list_default_recursive
+        category: capability   # no args -> path ".", recursive true
+        args: {}
+        expect:
+          status: succeeded
+          output: {path: ".", recursive: true, exit_code: 0}
+          output_present: [artifacts, count, summary]
+          output_match: {summary: "listed [0-9]+ artifact"}
+
+      - name: list_pattern_match
+        category: capability   # *.go matches by basename across the tree
+        args: {pattern: "*.go", recursive: true}
+        expect:
+          status: succeeded
+          output: {pattern: "*.go", recursive: true, exit_code: 0}
+          output_present: [artifacts, count]
+
+      - name: list_non_recursive_root
+        category: capability   # one-level listing (collectFlatArtifactEntries path)
+        args: {path: ".", recursive: false}
+        expect:
+          status: succeeded
+          output: {path: ".", recursive: false}
+          output_present: [artifacts, count]
+
+      - name: list_max_entries_truncates
+        category: capability   # max_entries 1 -> count 1, truncated (count >= max)
+        args: {path: ".", recursive: true, max_entries: 1}
+        expect: {status: succeeded, output: {count: 1, truncated: true}}
+
+      - name: list_pattern_no_match_empty
+        category: adversarial   # no match -> empty result, NOT an error
+        args: {pattern: "*.zzznope", recursive: true}
+        expect:
+          status: succeeded
+          output: {count: 0, truncated: false}
+          output_present: [artifacts]
+
+      - name: list_nonexistent_path
+        category: adversarial   # stat/find on a missing dir -> read error
+        args: {path: "nope-dir-xyz"}
+        expect: {status: failed, error_code_in: [execution_failed, not_found]}
+
+      - name: list_path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}

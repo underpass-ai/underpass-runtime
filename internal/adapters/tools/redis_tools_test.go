@@ -151,6 +151,27 @@ func TestRedisScanHandler_Success(t *testing.T) {
 	}
 }
 
+func TestRedisScanHandler_DeniesShortWideningPrefix(t *testing.T) {
+	// A prefix that is merely a parent of an allowlisted one ("s" for "sandbox:")
+	// must be denied: admitting it would let the scan enumerate every "s*" key,
+	// including keys outside the profile allowlist ("secret:*").
+	handler := NewRedisScanHandler(&fakeRedisClient{
+		scan: func(endpoint string, cursor uint64, match string, count int64) ([]string, uint64, error) {
+			t.Fatalf("scan must not run for a widening prefix (match=%s)", match)
+			return nil, 0, nil
+		},
+	})
+	session := domain.Session{Metadata: map[string]string{}}
+
+	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.redis","prefix":"s"}`))
+	if err == nil {
+		t.Fatal("expected redis.scan to deny a widening prefix")
+	}
+	if err.Code != app.ErrorCodePolicyDenied {
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
+	}
+}
+
 func TestRedisExistsHandler_MapsExecutionErrors(t *testing.T) {
 	handler := NewRedisExistsHandler(&fakeRedisClient{
 		exists: func(endpoint string, keys []string) (int64, error) {
@@ -413,6 +434,33 @@ func TestRedisTTLHandler_Statuses(t *testing.T) {
 	output = result.Output.(map[string]any)
 	if output["status"] != "missing" || output["exists"] != false {
 		t.Fatalf("unexpected missing ttl output: %#v", output)
+	}
+
+	// go-redis v9 returns the sentinels as RAW NANOSECONDS, not scaled to
+	// seconds. A missing key surfaces as time.Duration(-2); it must still be
+	// classified missing (the bug reported it as expiring/exists:true).
+	rawMissing := NewRedisTTLHandler(&fakeRedisClient{
+		ttl: func(endpoint, key string) (time.Duration, error) { return time.Duration(-2), nil },
+	})
+	result, err = rawMissing.Invoke(context.Background(), baseSession, json.RawMessage(`{"profile_id":"dev.redis","key":"sandbox:z"}`))
+	if err != nil {
+		t.Fatalf("unexpected redis.ttl raw-missing error: %#v", err)
+	}
+	output = result.Output.(map[string]any)
+	if output["status"] != "missing" || output["exists"] != false || output["ttl_seconds"] != int64(-2) {
+		t.Fatalf("unexpected raw-nanosecond missing ttl output: %#v", output)
+	}
+
+	rawNoExpiry := NewRedisTTLHandler(&fakeRedisClient{
+		ttl: func(endpoint, key string) (time.Duration, error) { return time.Duration(-1), nil },
+	})
+	result, err = rawNoExpiry.Invoke(context.Background(), baseSession, json.RawMessage(`{"profile_id":"dev.redis","key":"sandbox:w"}`))
+	if err != nil {
+		t.Fatalf("unexpected redis.ttl raw-no-expiry error: %#v", err)
+	}
+	output = result.Output.(map[string]any)
+	if output["status"] != "no_expiry" || output["ttl_seconds"] != int64(-1) {
+		t.Fatalf("unexpected raw-nanosecond no-expiry ttl output: %#v", output)
 	}
 }
 

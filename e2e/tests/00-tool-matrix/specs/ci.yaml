@@ -1,0 +1,180 @@
+# Per-tool adversarial spec — ci.* family.
+#
+# The family has exactly ONE tool: ci.run_pipeline. It runs a deterministic
+# validate -> build -> test -> [static_analysis] -> [coverage] -> quality_gate
+# sequence against the detected project type. The polyglot fixture has go.mod at
+# the repo root, so detection resolves to "go" (go.mod takes precedence over
+# Cargo.toml / package.json / requirements.txt). Effective commands on the
+# fixture:
+#   validate        -> go test ./... -run ^$        (compile only, no tests run)
+#   build           -> go build ./...
+#   test            -> go test ./...                (TestAdd passes)
+#   static_analysis -> go vet ./...                 (clean -> 0 diagnostics)
+#   coverage        -> go test ./... -coverprofile … -covermode=atomic
+#   quality_gate    -> evaluate metrics vs thresholds
+# The fixture is trivially green; main() is uncovered so total coverage < 100%.
+#
+# Governance note: ci.run_pipeline declares NO requires_approval and NO
+# path_fields, so the approval-gate and policy_traversal governance contracts do
+# not apply at the framework level — `target` is a plain toolchain argument, not
+# a governed path. The traversal/odd-target cases below therefore expect a
+# toolchain (execution) failure, NOT a policy_denied. Input-validation failures
+# (json type mismatch) expect status:failed + invalid_argument.
+#
+# `include_quality_gate_false_should_disable_gate` deliberately pins a LATENT
+# BUG: the handler parses include_quality_gate (default true) but never uses it —
+# the gate always runs when no prior step failed. The correct behavior is that
+# disabling it must not let a coverage threshold fail the pipeline, so the case
+# expects status:succeeded; a divergence (got failed) is the bug we want surfaced.
+#
+# SHARED-SESSION CAVEAT: the matrix preamble seeds src/main.go (package main
+# WITHOUT func main) which breaks the pipeline's build step for the whole
+# module; every pipeline case moves it (and root main.go) into .e2e-attic/ in
+# setup via fs.move (fs.delete is session-gated behind platform_admin).
+tools:
+  - tool: ci.run_pipeline
+    cases:
+      # ── capability ────────────────────────────────────────────────────────
+      - name: full_pipeline_default
+        category: capability
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {}
+        expect:
+          status: succeeded
+          output:
+            project_type: "go"
+            failed_step: ""
+            exit_code: 0
+            summary: "pipeline succeeded"
+            steps.0.name: "validate"
+            steps.0.status: "succeeded"
+          output_present: [steps, quality_metrics, quality_gate, output]
+
+      - name: explicit_passing_quality_gate
+        category: capability
+        # Tests pass (0 failed) and go vet is clean (0 diagnostics) -> gate passes.
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {include_static_analysis: true, include_coverage: true, quality_gate: {max_failed_tests: 0, max_diagnostics: 0}}
+        expect:
+          status: succeeded
+          output:
+            failed_step: ""
+            exit_code: 0
+            quality_gate.passed: true
+            quality_gate.status: "pass"
+          output_present: [quality_gate.rules, quality_gate.thresholds, quality_metrics]
+
+      - name: minimal_pipeline_skips_optional_steps
+        category: capability
+        # include flags actually disable static_analysis + coverage (these ARE
+        # honored, unlike include_quality_gate). Pipeline still passes.
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {include_static_analysis: false, include_coverage: false}
+        expect:
+          status: succeeded
+          output:
+            project_type: "go"
+            failed_step: ""
+            exit_code: 0
+            steps.0.name: "validate"
+          output_present: [steps, summary]
+
+      - name: quality_gate_fail_path
+        category: capability
+        # Valid args; gate is allowed to run (include_quality_gate default true).
+        # main() is uncovered so coverage < 100% -> coverage rule fails -> the
+        # whole pipeline fails on the quality_gate step. This is correct behavior.
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {include_coverage: true, quality_gate: {min_coverage_percent: 100}}
+        expect:
+          status: failed
+          error_code: execution_failed
+          output:
+            failed_step: "quality_gate"
+            exit_code: 1
+            quality_gate.passed: false
+            quality_gate.status: "fail"
+
+      # ── adversarial ───────────────────────────────────────────────────────
+      - name: malformed_target_type
+        category: adversarial
+        # target is declared string; a JSON number fails to unmarshal -> rejected
+        # before any toolchain runs. Validation failure => status failed.
+        args: {target: 123}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: malformed_boolean_flag
+        category: adversarial
+        # include_coverage is a boolean; a string value fails to unmarshal.
+        args: {include_coverage: "yes"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: malformed_quality_gate_threshold_type
+        category: adversarial
+        # min_coverage_percent must be a number; a string breaks unmarshal of the
+        # nested quality_gate object -> invalid_argument, nothing executes.
+        args: {quality_gate: {min_coverage_percent: "high"}}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: nonexistent_unicode_target_fails_validate
+        category: adversarial
+        # A non-existent package target reaches the toolchain; `go test` rejects
+        # it -> the first (validate) step fails. fail_fast defaults true.
+        args: {target: "./does-not-exist-π"}
+        expect:
+          status: failed
+          error_code_in: [execution_failed]
+          output:
+            failed_step: "validate"
+
+      - name: out_of_range_coverage_clamped_not_rejected
+        category: adversarial
+        # No input-schema enforcement on the server; min_coverage_percent > 100 is
+        # CLAMPED to 100 by normalizeQualityGateConfig, not rejected. With coverage
+        # < 100% the (clamped-to-100) gate fails -> pipeline fails on quality_gate,
+        # but it must NOT be invalid_argument.
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {include_coverage: true, quality_gate: {min_coverage_percent: 250}}
+        expect:
+          status: failed
+          error_code: execution_failed
+          output:
+            failed_step: "quality_gate"
+            quality_gate.passed: false
+
+      # ── governance (N/A at framework level — documented as toolchain failures) ─
+      - name: target_traversal_is_not_governed
+        category: governance
+        # `target` is NOT a path_field, so a traversal value is not denied by
+        # policy — it is passed to `go test` which rejects the out-of-module path.
+        # Correct outcome is a toolchain (execution) failure, NOT policy_denied.
+        args: {target: "../../../../etc"}
+        expect:
+          status: failed
+          error_code_in: [execution_failed, invalid_argument]
+
+      - name: include_quality_gate_false_should_disable_gate
+        category: governance
+        # LATENT BUG PIN: include_quality_gate:false must disable the gate, so the
+        # min_coverage_percent:100 threshold should have no effect and the pipeline
+        # should succeed. The handler ignores the flag (gate always runs) -> it
+        # fails on coverage. Expecting succeeded surfaces the divergence as a bug.
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {include_quality_gate: false, include_coverage: true, quality_gate: {min_coverage_percent: 100}}
+        expect:
+          status: succeeded
+          output:
+            failed_step: ""
+            exit_code: 0

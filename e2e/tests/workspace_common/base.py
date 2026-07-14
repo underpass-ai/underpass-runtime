@@ -489,8 +489,9 @@ class WorkspaceE2EBase:
         *,
         payload: dict[str, Any],
         session_record: dict[str, Any] | None = None,
+        timeout: int = 60,
     ) -> str:
-        status, body = self.request("POST", "/v1/sessions", payload)
+        status, body = self.request("POST", "/v1/sessions", payload, timeout=timeout)
         if status != 200:
             raise RuntimeError(f"create session failed ({status}): {body}")
 

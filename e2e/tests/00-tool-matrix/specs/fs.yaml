@@ -1,0 +1,242 @@
+# Per-tool adversarial spec — fs.* family.
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (edge/malformed input, designed to surface bugs), and governance cases (must be
+# denied). `setup` runs invocations first to establish state. `expect` is matched
+# by spec_runner: status + error_code + output fields/presence/regex. A divergence
+# is a BUG. The session clones the polyglot fixture (README.md, go.mod,
+# cmd/app/main.go, notes.txt, web/, py/, rs/, Dockerfile).
+tools:
+  - tool: fs.write_file
+    cases:
+      - name: write_utf8
+        category: capability
+        args: {path: "e2e/w.txt", content: "hello", create_parents: true}
+        approved: true
+        expect: {status: succeeded, output: {bytes_written: 5}, output_present: [sha256]}
+      - name: write_base64
+        category: capability
+        args: {path: "e2e/b.txt", content: "aGVsbG8=", encoding: base64, create_parents: true}
+        approved: true
+        expect: {status: succeeded, output: {bytes_written: 5}}
+      - name: requires_approval
+        category: governance
+        args: {path: "e2e/na.txt", content: "x"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd", content: "x"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: missing_required_content
+        category: adversarial   # a missing required field is a validation failure
+        args: {path: "e2e/no-content.txt"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: fs.read_file
+    cases:
+      - name: read_existing
+        category: capability
+        args: {path: "README.md"}
+        expect: {status: succeeded, output_present: [content]}
+      - name: read_missing
+        category: adversarial
+        args: {path: "does-not-exist.xyz"}
+        expect: {status: failed, error_code: not_found}
+      - name: path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: fs.list
+    cases:
+      - name: list_root
+        category: capability
+        args: {}
+        expect: {status: succeeded, output_present: [entries]}
+      - name: list_recursive
+        category: capability
+        args: {recursive: true, max_entries: 500}
+        expect: {status: succeeded, output_present: [entries]}
+
+  - tool: fs.stat
+    cases:
+      - name: stat_existing
+        category: capability
+        args: {path: "go.mod"}
+        expect: {status: succeeded, output: {exists: true}}
+      - name: stat_missing_reports_false
+        category: adversarial   # stat of a missing path should report exists:false, not error
+        args: {path: "nope.nope"}
+        expect: {status: succeeded, output: {exists: false}}
+
+  - tool: fs.mkdir
+    cases:
+      - name: mkdir_new
+        category: capability
+        args: {path: "e2e/newdir", create_parents: true}
+        expect: {status: succeeded, output: {created: true}}
+      - name: mkdir_existing_exist_ok
+        category: adversarial
+        args: {path: "cmd", exist_ok: true}
+        expect: {status: succeeded}
+
+  - tool: fs.search
+    cases:
+      - name: search_pattern
+        category: capability
+        args: {pattern: "module", path: "."}
+        expect: {status: succeeded, output_present: [matches]}
+      - name: missing_required_pattern
+        category: adversarial   # input validation -> status failed (denied is governance only)
+        args: {path: "."}
+        expect: {error_code: invalid_argument}
+
+  - tool: fs.copy
+    cases:
+      - name: copy_file
+        category: capability
+        args: {source_path: "README.md", destination_path: "e2e/readme-copy.md", create_parents: true}
+        expect: {status: succeeded, output: {copied: true}}
+
+  - tool: fs.move
+    cases:
+      - name: move_file
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/mv-src.txt", content: "x", create_parents: true}, approved: true}
+        args: {source_path: "e2e/mv-src.txt", destination_path: "e2e/mv-dst.txt"}
+        expect: {status: succeeded, output: {moved: true}}
+      - name: move_missing_source
+        category: adversarial
+        args: {source_path: "no-such-src.txt", destination_path: "e2e/x.txt"}
+        expect: {status: failed, error_code: not_found}
+
+  - tool: fs.edit
+    cases:
+      - name: edit_replaces_match
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/edit.txt", content: "the foo here", create_parents: true}, approved: true}
+        args: {path: "e2e/edit.txt", old_string: "foo", new_string: "baz", replace_all: false}
+        approved: true
+        expect: {status: succeeded, output: {replacements: 1}}
+      - name: edit_replace_all
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/edit2.txt", content: "foo foo foo", create_parents: true}, approved: true}
+        args: {path: "e2e/edit2.txt", old_string: "foo", new_string: "x", replace_all: true}
+        approved: true
+        expect: {status: succeeded, output: {replacements: 3}}
+      - name: edit_no_match
+        category: adversarial   # old_string absent — must report, not silently succeed
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/edit3.txt", content: "hello", create_parents: true}, approved: true}
+        args: {path: "e2e/edit3.txt", old_string: "NOT_PRESENT", new_string: "x"}
+        approved: true
+        expect: {status: failed, error_code_in: [not_found, invalid_argument, execution_failed]}
+
+  - tool: fs.read_lines
+    cases:
+      - name: read_lines_range
+        category: capability
+        args: {path: "README.md", start_line: 1, end_line: 2}
+        expect: {status: succeeded, output_present: [total_lines]}
+      - name: read_lines_out_of_range
+        category: adversarial
+        args: {path: "go.mod", start_line: 9000, end_line: 9001}
+        expect: {status: succeeded}
+
+  - tool: fs.insert
+    cases:
+      - name: insert_line
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/ins.txt", content: "line1\nline2\n", create_parents: true}, approved: true}
+        args: {path: "e2e/ins.txt", line: 1, content: "inserted"}
+        approved: true
+        expect: {status: succeeded, output_present: [total_lines]}
+
+  - tool: fs.glob
+    cases:
+      - name: glob_doublestar_go
+        category: capability
+        args: {pattern: "**/*.go"}
+        expect: {status: succeeded, output_present: [matches, count, truncated]}
+      - name: glob_scoped_path
+        category: capability
+        args: {pattern: "*.go", path: "cmd/app", max_files: 10}
+        expect: {status: succeeded, output_present: [matches, count]}
+      - name: glob_no_match_empty
+        category: adversarial   # zero matches is a valid empty result, not an error
+        args: {pattern: "**/*.nomatch-ext"}
+        expect: {status: succeeded, output: {count: 0, truncated: false}}
+      - name: missing_required_pattern
+        category: adversarial
+        args: {path: "."}
+        expect: {error_code: invalid_argument}
+      - name: path_traversal_denied
+        category: governance
+        args: {pattern: "*", path: "../../../../etc"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: fs.patch
+    cases:
+      - name: apply_clean_patch
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/patch.txt", content: "hello\n", create_parents: true}, approved: true}
+        args:
+          unified_diff: |
+            diff --git a/e2e/patch.txt b/e2e/patch.txt
+            --- a/e2e/patch.txt
+            +++ b/e2e/patch.txt
+            @@ -1 +1 @@
+            -hello
+            +patched
+          strategy: reject_on_conflict
+        approved: true
+        expect: {status: succeeded, output: {applied: true, strategy: reject_on_conflict}}
+      - name: requires_approval
+        category: governance
+        args: {unified_diff: "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: missing_required_diff
+        category: adversarial
+        args: {strategy: apply}
+        approved: true
+        expect: {error_code: invalid_argument}
+      - name: invalid_strategy
+        category: adversarial
+        args: {unified_diff: "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n", strategy: yolo}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: patch_traversal_denied
+        category: governance   # diff touching a path outside the workspace must be denied
+        args:
+          unified_diff: |
+            diff --git a/../../../../etc/cron.d/evil b/../../../../etc/cron.d/evil
+            --- a/../../../../etc/cron.d/evil
+            +++ b/../../../../etc/cron.d/evil
+            @@ -0,0 +1 @@
+            +pwned
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: fs.delete
+    cases:
+      - name: delete_file
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/del.txt", content: "x", create_parents: true}, approved: true}
+        args: {path: "e2e/del.txt"}
+        approved: true
+        expect: {status: succeeded, output: {deleted: true}}
+      - name: requires_approval
+        category: governance
+        args: {path: "README.md"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}

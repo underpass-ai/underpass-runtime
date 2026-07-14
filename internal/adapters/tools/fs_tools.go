@@ -458,10 +458,10 @@ func (h *FSWriteHandler) Name() string {
 
 func (h *FSWriteHandler) Invoke(ctx context.Context, session domain.Session, args json.RawMessage) (app.ToolRunResult, *domain.Error) {
 	request := struct {
-		Path          string `json:"path"`
-		Content       string `json:"content"`
-		Encoding      string `json:"encoding"`
-		CreateParents bool   `json:"create_parents"`
+		Path          string  `json:"path"`
+		Content       *string `json:"content"`
+		Encoding      string  `json:"encoding"`
+		CreateParents bool    `json:"create_parents"`
 	}{Encoding: "utf8", CreateParents: true}
 
 	if json.Unmarshal(args, &request) != nil {
@@ -470,13 +470,18 @@ func (h *FSWriteHandler) Invoke(ctx context.Context, session domain.Session, arg
 	if request.Path == "" {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: fsErrPathRequired, Retryable: false}
 	}
+	// content is required (a *string tells an omitted field apart from an
+	// explicit empty string, which is a legitimate empty-file write).
+	if request.Content == nil {
+		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "content is required", Retryable: false}
+	}
 
 	resolved, pathErr := resolvePath(session, request.Path)
 	if pathErr != nil {
 		return app.ToolRunResult{}, pathErr
 	}
 
-	payload, payloadErr := decodeFSWritePayload(request.Content, request.Encoding)
+	payload, payloadErr := decodeFSWritePayload(*request.Content, request.Encoding)
 	if payloadErr != nil {
 		return app.ToolRunResult{}, payloadErr
 	}
@@ -734,7 +739,11 @@ type fsMoveParams struct {
 
 func (h *FSMoveHandler) invokeLocal(p fsMoveParams) (app.ToolRunResult, *domain.Error) {
 	if _, err := os.Stat(p.srcResolved); err != nil {
-		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: err.Error(), Retryable: false}
+		code := app.ErrorCodeExecutionFailed
+		if errors.Is(err, os.ErrNotExist) {
+			code = app.ErrorCodeNotFound
+		}
+		return app.ToolRunResult{}, &domain.Error{Code: code, Message: err.Error(), Retryable: false}
 	}
 	if p.createParents {
 		if err := os.MkdirAll(filepath.Dir(p.dstResolved), 0o755); err != nil {
@@ -1325,6 +1334,13 @@ func (h *FSPatchHandler) Invoke(ctx context.Context, session domain.Session, arg
 
 	changedPaths, err := extractPatchPaths(request.UnifiedDiff)
 	if err != nil {
+		if errors.Is(err, errUnsafePatchPath) {
+			return app.ToolRunResult{}, &domain.Error{
+				Code:      app.ErrorCodePolicyDenied,
+				Message:   "patch touches paths outside allowed_paths",
+				Retryable: false,
+			}
+		}
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid unified diff", Retryable: false}
 	}
 	for _, changedPath := range changedPaths {
@@ -1640,11 +1656,37 @@ func toFSRunnerError(err error, output string) *domain.Error {
 	if message == "" {
 		message = err.Error()
 	}
+	// A missing target path is not_found, not a generic execution failure — so
+	// callers can distinguish "the path isn't there" from "the command broke".
+	// The fs shell scripts emit stable signatures for this ("... not found",
+	// "path is not a regular file"); os.Stat surfaces "no such file or directory".
+	if isFSNotFoundMessage(message) {
+		return &domain.Error{
+			Code:      app.ErrorCodeNotFound,
+			Message:   message,
+			Retryable: false,
+		}
+	}
 	return &domain.Error{
 		Code:      app.ErrorCodeExecutionFailed,
 		Message:   message,
 		Retryable: false,
 	}
+}
+
+func isFSNotFoundMessage(message string) bool {
+	lower := strings.ToLower(message)
+	for _, signature := range []string{
+		"not found",
+		"no such file or directory",
+		"not a regular file",
+		"does not exist",
+	} {
+		if strings.Contains(lower, signature) {
+			return true
+		}
+	}
+	return false
 }
 
 func splitOutputLines(output string) []string {
@@ -1749,6 +1791,11 @@ func copyFileWithMode(source, destination string, mode os.FileMode) error {
 	return out.Close()
 }
 
+// errUnsafePatchPath marks a diff whose target path escapes the workspace
+// (traversal or absolute). The caller maps it to policy_denied, distinguishing
+// a governance violation from a merely malformed diff.
+var errUnsafePatchPath = errors.New("unsafe patch path")
+
 func extractPatchPaths(unifiedDiff string) ([]string, error) {
 	lines := strings.Split(unifiedDiff, "\n")
 	paths := []string{}
@@ -1765,8 +1812,14 @@ func extractPatchPaths(unifiedDiff string) ([]string, error) {
 		path = strings.TrimPrefix(path, "a/")
 		path = strings.TrimPrefix(path, "b/")
 		cleaned := filepath.Clean(path)
-		if cleaned == "." || strings.HasPrefix(cleaned, "..") || filepath.IsAbs(cleaned) {
-			return nil, fmt.Errorf("unsafe patch path: %s", path)
+		// A path that escapes the workspace (traversal or absolute) is a policy
+		// violation, not a malformed diff — surface it distinctly so the caller
+		// can deny it with policy_denied, consistent with every other fs tool.
+		if strings.HasPrefix(cleaned, "..") || filepath.IsAbs(cleaned) {
+			return nil, fmt.Errorf("%w: %s", errUnsafePatchPath, path)
+		}
+		if cleaned == "." {
+			return nil, fmt.Errorf("invalid patch path: %s", path)
 		}
 		if !seen[cleaned] {
 			paths = append(paths, cleaned)

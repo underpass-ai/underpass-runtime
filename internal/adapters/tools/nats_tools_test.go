@@ -275,6 +275,11 @@ func TestNATSProfileAndPayloadHelpers(t *testing.T) {
 	if !natsSubjectPatternMatch("sandbox.>", "sandbox.jobs.created") {
 		t.Fatal("expected > wildcard subject match")
 	}
+	// `>` requires at least one trailing token: it must not over-match the bare
+	// parent subject.
+	if natsSubjectPatternMatch("sandbox.>", "sandbox") {
+		t.Fatal("did not expect > to match the bare parent subject")
+	}
 	if !natsSubjectPatternMatch("sandbox.*.created", "sandbox.jobs.created") {
 		t.Fatal("expected * wildcard subject match")
 	}

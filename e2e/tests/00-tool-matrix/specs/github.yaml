@@ -1,0 +1,167 @@
+# Per-tool adversarial spec — github.* family.
+#
+# Every github tool shells out to the `gh` CLI against a real GitHub repo. In a
+# bare e2e cluster `gh` is present but may be unauthenticated and the fixture
+# repo's issues/PRs are unknown — so the SUCCESS path of read/external tools
+# legitimately fails with `execution_failed` (gh exits non-zero, the runner
+# surfaces the error). Capability cases therefore expect `succeeded` with
+# concrete output checks AND `skip_if_error_code: [execution_failed]`, so they
+# assert real output when the backend is live and are recorded as skip (never a
+# false bug) when it isn't.
+#
+# Confirmed behavior from the handlers (github_tools.go, github_issue_tools.go,
+# github_list_issues_tools.go, github_review_tools.go):
+#   * The runtime does NOT validate args against input_schema (only output is
+#     schema-checked). `invalid_argument` comes ONLY from each handler's own
+#     guards: get_issue(number<=0), review_comments/check_pr_status/merge_pr
+#     (empty branch), create_pr(empty title|head), watch_run(no branch & run_id).
+#     Bad enum / out-of-range are NOT rejected (list_issues clamps limit,
+#     ignores unknown state; merge_pr maps an unknown method to --merge) — they
+#     reach gh and fail there (execution_failed).
+#   * check_pr_status & watch_run never return execution_failed: they capture gh
+#     failures into output.status (passed|failed|timeout) and the invocation
+#     itself is `succeeded`.
+#   * create_pr & merge_pr requires_approval -> no approval => denied /
+#     approval_required (policy runs BEFORE the handler, so missing-field
+#     validation cases must pass approved:true to reach the handler).
+#   * No github tool declares path_fields => no path-traversal governance.
+tools:
+  # ───────────────────────────────────────────────────────────────────────────
+  - tool: github.get_issue
+    cases:
+      - name: read_issue_by_number
+        category: capability
+        args: {number: 1}
+        expect: {status: succeeded, output_present: [number, title, state], skip_if_error_code: [execution_failed]}
+      - name: read_issue_explicit_repo
+        category: capability
+        args: {number: 1, repo: "underpass-ai/e2e-fixture-repo"}
+        expect: {status: succeeded, output_present: [title], skip_if_error_code: [execution_failed]}
+      - name: zero_number_rejected
+        category: adversarial   # handler guard number<=0 -> invalid_argument (status failed, not denied)
+        args: {number: 0}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: negative_number_rejected
+        category: adversarial
+        args: {number: -7}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_number_rejected
+        category: adversarial   # empty args -> number defaults to 0 -> invalid_argument
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  - tool: github.list_issues
+    cases:
+      - name: list_defaults_no_required_fields
+        category: capability   # required:[] — empty args is valid, defaults state=open limit=10
+        args: {}
+        expect: {status: succeeded, output_present: [issues, count, state], skip_if_error_code: [execution_failed]}
+      - name: list_with_filters
+        category: capability
+        args: {state: "all", labels: "bug", limit: 5}
+        expect: {status: succeeded, output: {state: "all"}, output_present: [issues, count], skip_if_error_code: [execution_failed]}
+      - name: closed_state_filter
+        category: capability
+        args: {state: "closed", limit: 3}
+        expect: {status: succeeded, output: {state: "closed"}, output_present: [issues], skip_if_error_code: [execution_failed]}
+      - name: bogus_state_enum
+        category: adversarial   # enum NOT validated by runtime/handler -> delegated to gh, which rejects it
+        args: {state: "bogus"}
+        expect: {status: failed, error_code_in: [invalid_argument, execution_failed]}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  - tool: github.review_comments
+    cases:
+      - name: read_reviews_for_branch
+        category: capability
+        args: {branch: "main"}
+        expect: {status: succeeded, output_present: [reviews], skip_if_error_code: [execution_failed]}
+      - name: missing_branch_rejected
+        category: adversarial   # handler guard: empty branch -> invalid_argument
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: nonexistent_pr_fails
+        category: adversarial   # gh pr view on a missing PR exits non-zero -> execution_failed
+        args: {branch: "99999"}
+        expect: {status: failed, error_code_in: [execution_failed, not_found]}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  - tool: github.check_pr_status
+    cases:
+      - name: poll_branch_status
+        category: capability   # never errors: returns succeeded with output.status in passed|failed|timeout
+        args: {branch: "main", timeout_seconds: 1}
+        expect: {status: succeeded, output_match: {status: "passed|failed|timeout"}}
+      - name: poll_with_required_checks
+        category: capability
+        args: {branch: "main", timeout_seconds: 1, required_checks: ["build", "test"]}
+        expect: {status: succeeded, output_present: [status]}
+      - name: missing_branch_rejected
+        category: adversarial   # handler guard: empty branch -> invalid_argument (fast, before the poll loop)
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  - tool: github.create_pr
+    cases:
+      - name: create_pr_valid_args
+        category: capability   # head branch deliberately does not exist -> gh fails benignly, no real PR is created
+        args: {title: "e2e adversarial PR", body: "matrix test", base: "main", head: "e2e-no-such-branch-xyz"}
+        approved: true
+        expect: {status: succeeded, output_present: [base, head], skip_if_error_code: [execution_failed]}
+      - name: approval_gate
+        category: governance   # requires_approval -> invoked without approval must be denied
+        args: {title: "x", head: "e2e-no-such-branch-xyz"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: missing_title_rejected
+        category: adversarial   # approved:true to pass the gate and reach the handler guard
+        args: {head: "e2e-no-such-branch-xyz"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_head_rejected
+        category: adversarial
+        args: {title: "no head"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  - tool: github.merge_pr
+    cases:
+      - name: merge_valid_args
+        category: capability   # nonexistent branch -> no open PR -> gh fails benignly, nothing is merged
+        args: {branch: "e2e-no-such-branch-xyz", method: "squash", delete_branch: false}
+        approved: true
+        expect: {status: succeeded, output_present: [merged, branch, method], skip_if_error_code: [execution_failed]}
+      - name: approval_gate
+        category: governance   # high-risk irreversible tool — must require approval
+        args: {branch: "e2e-no-such-branch-xyz"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: missing_branch_rejected
+        category: adversarial   # approved:true to reach the handler; empty branch -> invalid_argument
+        args: {}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: bogus_method_not_validated
+        category: adversarial   # method enum NOT enforced (unknown -> --merge); gh then fails on the missing PR
+        args: {branch: "e2e-no-such-branch-xyz", method: "fast-forward"}
+        approved: true
+        expect: {status: failed, error_code_in: [invalid_argument, execution_failed]}
+
+  # ───────────────────────────────────────────────────────────────────────────
+  - tool: github.watch_run
+    cases:
+      - name: watch_by_run_id
+        category: capability   # run_id path skips branch resolution; gh fails fast -> succeeded with output.status
+        args: {run_id: 1}
+        expect: {status: succeeded, output_present: [status, run_id], output_match: {status: "passed|failed"}}
+      - name: watch_run_id_echoes_branch
+        category: capability
+        args: {run_id: 1, branch: "main"}
+        expect: {status: succeeded, output: {branch: "main"}, output_present: [status, run_id]}
+      - name: missing_branch_and_run_id_rejected
+        category: adversarial   # handler guard: run_id==0 && branch=="" -> invalid_argument
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}

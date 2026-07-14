@@ -1,0 +1,61 @@
+# Per-tool adversarial spec — workspace.* family.
+#
+# One tool: workspace.undo_edit — single-level revert of the last mutation to a
+# file, restoring from a snapshot that fs.edit/fs.write_file/fs.insert write
+# before mutating. Medium risk + requires_approval; path is a workspace-relative
+# path_field. Pinned from internal/adapters/tools/undo_tools.go +
+# catalog_defaults.yaml.
+#
+# HANDLER CONTRACT:
+#   - required: path. Missing/empty path -> invalid_argument (failed).
+#   - no snapshot for the file -> invalid_argument, "no undo snapshot for this
+#     file" (failed, NOT succeeded — a no-op undo is an error).
+#   - success consumes the snapshot (one level only) and returns
+#     output: {path (cleaned), restored:true, sha256}.
+#   - requires_approval -> approval_required when approved:false; traversal on
+#     path -> policy_denied (both fire in StaticPolicy before the handler).
+tools:
+  - tool: workspace.undo_edit
+    cases:
+      # ---- capability ----
+      - name: undo_after_edit_restores_prior
+        category: capability
+        # Establish a snapshot: write a file, then edit it. write_file on a NEW
+        # file makes no snapshot; the fs.edit snapshots the pre-edit "before".
+        # undo restores "before" and reports the restored path + hash.
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/undo.txt", content: "before", create_parents: true}, approved: true}
+          - {tool: fs.edit, args: {path: "e2e/undo.txt", old_string: "before", new_string: "after"}, approved: true}
+        args: {path: "e2e/undo.txt"}
+        approved: true
+        expect:
+          status: succeeded
+          output: {restored: true, path: "e2e/undo.txt"}
+          output_present: [sha256]
+
+      # ---- adversarial ----
+      - name: undo_without_snapshot
+        category: adversarial
+        # notes.txt is a fixture file that no case mutates -> no snapshot exists,
+        # so undo must report a clean error, not silently succeed.
+        args: {path: "notes.txt"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_path
+        category: adversarial
+        args: {}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      # ---- governance ----
+      - name: requires_approval
+        category: governance
+        # Approval gate fires before the snapshot is even consulted.
+        args: {path: "notes.txt"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}

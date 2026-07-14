@@ -1,0 +1,598 @@
+# Per-tool adversarial spec — repo.* family (repository orientation, analysis,
+# build/test orchestration).
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (edge/malformed input, designed to surface bugs), and governance cases (must be
+# denied). `setup` runs invocations first to establish state. `expect` is matched
+# by spec_runner: status + error_code + output fields/presence/regex. A divergence
+# is a BUG.
+#
+# Fixture: the session clones the polyglot repo (go.mod at the ROOT, so every
+# repo.* detector resolves project_type=go — Cargo.toml/package.json live in
+# subdirs and never win). On top of the clone the matrix seeds README.md,
+# main.go (root, package main + func main), src/main.go (package main, func Add,
+# NO func main) and notes/todo.txt. Empirically verified against the toolchain:
+#   go build ./...              -> exit 1  (seeded src/ is a main package without
+#                                           func main: link error — a deliberate
+#                                           landmine; scope targets to ./cmd/...)
+#   go build ./cmd/...          -> exit 0
+#   go build ./cmd/... -v       -> exit 1  (go BUILD rejects flags after the
+#                                           pattern; buildGoCommand appends
+#                                           extra_args after the target — bug)
+#   go test  ./...              -> exit 0  ("ok  github.com/.../cmd/app")
+#   go test  ./cmd/... -count=1 -> exit 0  (go TEST accepts trailing flags)
+#   go test  ./cmd/... -coverprofile -> cmd/app coverage exactly 50.0%
+#   go vet   ./...              -> exit 0
+#   go test ./... -run ^$       -> exit 0  (repo.validate)
+#   go build -o .workspace-dist/app .   -> exit 0 (root main.go has func main)
+#
+# GOVERNANCE MAP: only repo.test_file declares requires_approval. path_fields
+# (workspace_relative -> traversal must be policy_denied): repo.tree,
+# repo.symbols, repo.changed_files, repo.symbol_search, repo.find_references.
+# arg_fields: extra_args (build/test/run_tests/summaries: allowed/denied prefix
+# lists + shell-metachar deny), base_ref (changed_files), symbol (max_length 160,
+# no NUL/newline). Policy runs BEFORE the handler, so charset/prefix/length
+# violations surface as denied/policy_denied; flags that pass the shared policy
+# allowlist but are foreign to the detected toolchain (e.g. pytest's -q on a Go
+# repo) are rejected in the handler as failed/invalid_argument.
+tools:
+  - tool: repo.tree
+    cases:
+      - name: tree_default_root
+        category: capability
+        # defaults: path=".", max_depth=3, show_files=true, noise dirs ignored.
+        args: {}
+        expect:
+          status: succeeded
+          output_present: [tree, entries, truncated]
+          output_match: {tree: "cmd"}
+      - name: tree_scoped_subdir
+        category: capability
+        args: {path: "cmd", max_depth: 2}
+        expect:
+          status: succeeded
+          output_match: {tree: "main.go"}
+      - name: empty_ignore_disables_noise_filter
+        category: adversarial
+        # ignore:"" overrides the default ignore list with an EMPTY set, so .git
+        # leaks into the tree. Documents that the noise filter is caller-defeatable.
+        args: {ignore: "", max_depth: 1}
+        expect:
+          status: succeeded
+          output_match: {tree: "\\.git"}
+      - name: tree_missing_path
+        category: adversarial
+        # path resolves inside the workspace but does not exist -> read/find fails.
+        args: {path: "does/not/exist"}
+        expect: {status: failed, error_code: execution_failed}
+      - name: malformed_depth_type
+        category: adversarial   # string for an integer field -> unmarshal fails
+        args: {max_depth: "three"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.symbols
+    cases:
+      - name: symbols_go_outline
+        category: capability
+        # cmd/app/main.go = package main / func Add / func main -> exactly 3
+        # symbols (the `import "fmt"` line does NOT match the go import pattern,
+        # which only matches bare quoted lines inside an import block).
+        args: {path: "cmd/app/main.go"}
+        expect:
+          status: succeeded
+          output: {language: go, count: 3, symbols.0.kind: package, symbols.1.name: Add}
+      - name: symbols_javascript
+        category: capability
+        # web/index.js declares exactly one function (add).
+        args: {path: "web/index.js"}
+        expect:
+          status: succeeded
+          output: {language: javascript, count: 1, symbols.0.name: add}
+      - name: unknown_extension_zero_symbols
+        category: adversarial
+        # .txt -> language "unknown", generic fallback patterns, no matches.
+        # Must succeed with an empty outline, not error.
+        args: {path: "notes.txt"}
+        expect: {status: succeeded, output: {language: unknown, count: 0}}
+      - name: missing_required_path
+        category: adversarial
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: symbols_missing_file
+        category: adversarial
+        # BUG-PROBE: the local handler maps a nonexistent file to invalid_argument
+        # (fsErrPathNotExist) instead of not_found; the k8s remote path surfaces
+        # the failed `cat` as execution_failed. Any of the three is "rejected",
+        # but the inconsistency is worth keeping visible.
+        args: {path: "ghost/nope.go"}
+        expect:
+          status: failed
+          error_code_in: [not_found, invalid_argument, execution_failed]
+      - name: path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.test_file
+    cases:
+      - name: test_go_file_passes
+        category: capability
+        # path -> package dir: go test -v -timeout 120s ./cmd/app -> pass.
+        args: {path: "cmd/app/main_test.go"}
+        approved: true
+        expect:
+          status: succeeded
+          output: {passed: true, exit_code: 0}
+          output_match: {command: "go test"}
+      - name: test_go_file_with_pattern
+        category: capability
+        args: {path: "cmd/app/main_test.go", pattern: "TestAdd"}
+        approved: true
+        expect: {status: succeeded, output: {passed: true, exit_code: 0}}
+      - name: missing_package_reports_failed_not_error
+        category: adversarial
+        # nonexistent package -> go test exits nonzero; the handler deliberately
+        # reports succeeded + passed:false (test failure != infrastructure error).
+        args: {path: "ghost/pkg_test.go"}
+        approved: true
+        expect: {status: succeeded, output: {passed: false}}
+      - name: rust_path_is_ignored
+        category: adversarial
+        # BUG-PROBE: for .rs paths the handler runs `cargo test` at the WORKSPACE
+        # ROOT, ignoring the file's directory. Cargo.toml lives in rs/, so cargo
+        # fails and the run is reported passed:false even though rs/ has runnable
+        # tests. Documents the ignored-path defect.
+        args: {path: "rs/src/main.rs"}
+        approved: true
+        expect: {status: succeeded, output: {passed: false}}
+      - name: unsupported_extension
+        category: adversarial
+        args: {path: "README.md"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_required_path
+        category: adversarial
+        args: {}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: requires_approval
+        category: governance
+        args: {path: "cmd/app/main_test.go"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+
+  - tool: repo.detect_project_type
+    cases:
+      - name: detect_go_wins_in_polyglot_root
+        category: capability
+        # go.mod at the root outranks web/package.json, py/, rs/Cargo.toml.
+        args: {}
+        expect: {status: succeeded, output: {project_type: go, flavor: ""}}
+      - name: unknown_fields_tolerated
+        category: adversarial
+        # schema has no properties; a stray field must not corrupt detection
+        # (the handler only checks the payload is a JSON object).
+        args: {bogus: true, project_type: "rust"}
+        expect: {status: succeeded, output: {project_type: go}}
+
+  - tool: repo.detect_toolchain
+    cases:
+      - name: toolchain_go_mod
+        category: capability
+        args: {}
+        expect:
+          status: succeeded
+          output: {language: go, build_system: go-mod, test_framework: testing, containerizable: true}
+      - name: caller_cannot_steer_detection
+        category: adversarial
+        # detection must come from the workspace, never from caller-supplied hints.
+        args: {language: "python"}
+        expect: {status: succeeded, output: {language: go}}
+
+  - tool: repo.validate
+    cases:
+      - name: validate_default_compiles_tests
+        category: capability
+        # go: `go test ./... -run ^$` (compile-only) -> exit 0 on the fixture.
+        args: {}
+        expect:
+          status: succeeded
+          output: {language: go, build_system: go-mod, test_framework: testing, exit_code: 0}
+          output_present: [command, diagnostics, output]
+      - name: validate_scoped_target
+        category: capability
+        args: {target: "./cmd/..."}
+        expect: {status: succeeded, output: {exit_code: 0}}
+      - name: validate_bogus_target
+        category: adversarial   # `go test ./ghost/... -run ^$` -> lstat fails, exit 1
+        args: {target: "./ghost/..."}
+        expect: {status: failed, error_code: execution_failed}
+      - name: malformed_target_type
+        category: adversarial
+        args: {target: 123}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: repo.build
+    cases:
+      - name: build_scoped_pattern
+        category: capability
+        args: {target: "./cmd/..."}
+        expect:
+          status: succeeded
+          output: {project_type: go, exit_code: 0}
+          output_present: [command, output]
+      - name: build_single_package
+        category: capability
+        args: {target: "./cmd/app"}
+        expect: {status: succeeded, output: {exit_code: 0}}
+      - name: default_target_hits_seeded_landmine
+        category: adversarial
+        # empty args -> `go build ./...`; the seeded src/main.go is a main package
+        # WITHOUT func main, so the link step fails ("function main is undeclared").
+        # Deterministic on this fixture — surfaces that the seed set breaks the
+        # tool's own default target.
+        args: {}
+        expect: {status: failed, error_code: execution_failed}
+      - name: extra_args_appended_after_target_break_go_build
+        category: adversarial
+        # BUG-PROBE: buildGoCommand appends extra_args AFTER the package pattern.
+        # `go build ./cmd/... -v` -> `malformed import path "-v"` exit 1, so every
+        # policy-legal extra arg makes repo.build fail (go test tolerates trailing
+        # flags; go build does not). Flags must be inserted before the target.
+        args: {target: "./cmd/...", extra_args: ["-v"]}
+        expect: {status: failed, error_code: execution_failed}
+      - name: foreign_toolchain_flag_rejected_by_handler
+        category: adversarial
+        # "-q" passes the shared catalog allowlist (it is a pytest flag) but the
+        # go-specific handler allowlist rejects it before any command is built.
+        args: {target: "./cmd/...", extra_args: ["-q"]}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: extra_args_shell_metachars_denied
+        category: governance
+        args: {target: "./cmd/...", extra_args: ["-v;id"]}
+        expect: {status: denied, error_code: policy_denied}
+      - name: extra_args_denied_prefix
+        category: governance   # -exec/-toolexec are arbitrary-binary escape hatches
+        args: {target: "./cmd/...", extra_args: ["-exec=whoami"]}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.test
+    cases:
+      - name: test_default_full_suite
+        category: capability
+        # `go test ./...` -> exit 0; output carries the "ok  <module>" lines.
+        args: {}
+        expect:
+          status: succeeded
+          output: {project_type: go, exit_code: 0}
+          output_match: {output: "ok\\s+github"}
+      - name: test_scoped_with_count
+        category: capability
+        # go test (unlike go build) accepts flags after the pattern.
+        args: {target: "./cmd/...", extra_args: ["-count=1"]}
+        expect: {status: succeeded, output: {exit_code: 0}}
+      - name: pytest_flag_rejected_on_go_repo
+        category: adversarial
+        # "-q" survives the catalog allowlist but not the go handler allowlist.
+        args: {extra_args: ["-q"]}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: extra_args_shell_metachars_denied
+        category: governance
+        args: {extra_args: ["-run=x;id"]}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.run_tests
+    cases:
+      - name: run_tests_scoped
+        category: capability
+        args: {target: "./cmd/..."}
+        expect:
+          status: succeeded
+          output: {project_type: go, exit_code: 0}
+          output_present: [command, output]
+      - name: run_tests_with_run_filter
+        category: capability
+        # "-run=" is on both the catalog and handler allowlists.
+        args: {target: "./cmd/...", extra_args: ["-run=TestAdd"]}
+        expect: {status: succeeded, output: {exit_code: 0}}
+      - name: bogus_target
+        category: adversarial
+        args: {target: "./ghost/..."}
+        expect: {status: failed, error_code: execution_failed}
+      - name: extra_args_over_max_items
+        category: adversarial
+        # 9 items exceeds the max_items:8 cap (policy) / handler length gate.
+        args: {target: "./cmd/...", extra_args: ["-v", "-v", "-v", "-v", "-v", "-v", "-v", "-v", "-v"]}
+        expect: {error_code_in: [policy_denied, invalid_argument]}
+      - name: extra_args_denied_prefix
+        category: governance
+        args: {extra_args: ["-toolexec=evil"]}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.test_failures_summary
+    cases:
+      - name: summarize_provided_go_output
+        category: capability
+        # one test failure + one package FAIL line -> exactly 2 entries, first is
+        # the named test (kind go), and no command is executed (source echoes it).
+        args: {output: "--- FAIL: TestCreateTodo (0.00s)\nFAIL\tgithub.com/acme/todo\t0.01s"}
+        expect:
+          status: succeeded
+          output:
+            source: provided_output
+            failed_count: 2
+            failed_tests.0.name: TestCreateTodo
+            failed_tests.0.kind: go
+            exit_code: 0
+      - name: summarize_provided_pytest_output
+        category: capability
+        args: {output: "FAILED tests/test_auth.py::test_login - AssertionError: bad creds"}
+        expect:
+          status: succeeded
+          output: {failed_count: 1, failed_tests.0.kind: python}
+      - name: live_run_green_suite
+        category: capability
+        # output omitted -> the tool runs `go test ./cmd/...` itself; suite passes.
+        args: {target: "./cmd/..."}
+        expect:
+          status: succeeded
+          output: {source: test_run, project_type: go, exit_code: 0, failed_count: 0}
+      - name: clean_output_zero_failures
+        category: adversarial   # no failure markers is a valid empty summary
+        args: {output: "all 12 tests passed in 0.3s"}
+        expect: {status: succeeded, output: {failed_count: 0}}
+      - name: malformed_max_failures_type
+        category: adversarial
+        args: {output: "x", max_failures: "many"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: extra_args_shell_metachars_denied
+        category: governance
+        args: {target: "./cmd/...", extra_args: ["-v|id"]}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.stacktrace_summary
+    cases:
+      - name: summarize_go_panic
+        category: capability
+        # panic header + one .go:NN frame -> 1 trace, type "panic", 1 frame.
+        args: {output: "panic: boom\nmain.main()\n/workspace/repo/main.go:11 +0x29"}
+        expect:
+          status: succeeded
+          output:
+            source: provided_output
+            trace_count: 1
+            stacktraces.0.type: panic
+            stacktraces.0.frame_count: 1
+      - name: summarize_python_traceback
+        category: capability
+        args: {output: "Traceback (most recent call last):\nFile \"app.py\", line 3, in <module>\nboom()"}
+        expect:
+          status: succeeded
+          output: {trace_count: 1, stacktraces.0.type: python_traceback}
+      - name: live_run_no_traces
+        category: capability
+        args: {target: "./cmd/..."}
+        expect:
+          status: succeeded
+          output: {source: test_run, project_type: go, exit_code: 0, trace_count: 0}
+      - name: rust_panic_classified
+        category: adversarial
+        args: {output: "thread 'main' panicked at src/main.rs:5:5:\nboom"}
+        expect: {status: succeeded, output: {trace_count: 1, stacktraces.0.type: rust_panic}}
+      - name: malformed_max_traces_type
+        category: adversarial   # bool for an integer field -> unmarshal fails
+        args: {output: "x", max_traces: true}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: extra_args_shell_metachars_denied
+        category: governance
+        args: {target: "./cmd/...", extra_args: ["-v&id"]}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.changed_files
+    cases:
+      - name: working_tree_live
+        category: capability
+        # the matrix seeds untracked files on top of the clone, so `git status
+        # --porcelain` runs for real; exact counts vary as other specs mutate the
+        # shared workspace, so assert shape + mode, not numbers.
+        args: {}
+        expect:
+          status: succeeded
+          output: {source: git, mode: working_tree, exit_code: 0}
+          output_present: [changed_count, changed_files, summary]
+      - name: provided_porcelain_output
+        category: capability
+        # deterministic parse: entries sorted by path; foo.txt (untracked) first.
+        args: {output: "?? foo.txt\n M go.mod"}
+        expect:
+          status: succeeded
+          output:
+            source: provided_output
+            mode: provided_output   # both mirror the provided-input path
+            changed_count: 2
+            changed_files.0.path: foo.txt
+            changed_files.0.untracked: true
+            changed_files.1.status: modified
+      - name: base_ref_self_diff_is_empty
+        category: capability
+        # HEAD...HEAD -> empty diff, exit 0, base_ref_diff mode.
+        args: {base_ref: "HEAD"}
+        expect:
+          status: succeeded
+          output: {mode: base_ref_diff, exit_code: 0, changed_count: 0}
+      - name: unknown_base_ref
+        category: adversarial
+        # git diff exits 128 on an unknown revision -> mapped to git_repo_error.
+        args: {base_ref: "no-such-ref-xyz"}
+        expect:
+          status: failed
+          error_code_in: [git_repo_error, execution_failed]
+      - name: base_ref_shell_metachars_denied
+        category: governance
+        args: {base_ref: "HEAD;id"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: path_traversal_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.symbol_search
+    cases:
+      - name: literal_symbol_search
+        category: capability
+        # "Add" appears in cmd/app/main.go (decl + call), main_test.go and the
+        # seeded src/main.go; matches are path-sorted so cmd/app/main.go is first.
+        args: {symbol: "Add", path: "."}
+        expect:
+          status: succeeded
+          output: {symbol: Add, truncated: false, matches.0.path: cmd/app/main.go}
+          output_present: [matches_count, command, summary]
+      - name: regex_function_declarations
+        category: capability
+        # exactly two `func Add` declaration lines exist (cmd/app/main.go + the
+        # seeded src/main.go); compiled binaries are excluded as binary files.
+        args: {symbol: "^func Add", use_regex: true, path: "."}
+        expect:
+          status: succeeded
+          output: {matches_count: 2, truncated: false}
+      - name: no_match_is_empty_result
+        category: adversarial   # grep exit 1 (no matches) must NOT be an error
+        args: {symbol: "ZZysNoSuchSymbolZZ"}
+        expect: {status: succeeded, output: {matches_count: 0, truncated: false}}
+      - name: missing_required_symbol
+        category: adversarial
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: invalid_regex_rejected_before_exec
+        category: adversarial
+        args: {symbol: "([", use_regex: true}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: oversized_symbol_denied
+        category: governance
+        # 170 chars > the arg_fields max_length:160 cap -> policy denies first.
+        args: {symbol: "AaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: path_traversal_denied
+        category: governance
+        args: {symbol: "Add", path: "../../../../etc"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.find_references
+    cases:
+      - name: references_with_declarations
+        category: capability
+        # whole-word search: TestAdd does NOT match; first path-sorted hit is the
+        # `func Add` declaration in cmd/app/main.go, tagged is_declaration.
+        args: {symbol: "Add", path: "."}
+        expect:
+          status: succeeded
+          output:
+            symbol: Add
+            include_declarations: true
+            references.0.path: cmd/app/main.go
+            references.0.is_declaration: true
+          output_present: [references_count, declaration_count, command]
+      - name: references_excluding_declarations
+        category: capability
+        # declarations filtered out -> every remaining entry is a usage site.
+        args: {symbol: "Add", path: ".", include_declarations: false}
+        expect:
+          status: succeeded
+          output: {include_declarations: false, references.0.is_declaration: false}
+          output_present: [declaration_count]
+      - name: legacy_max_results_alias
+        category: adversarial
+        # max_results (deprecated alias) must feed max_references: cap at 1 and
+        # report truncation, not silently ignore the field.
+        args: {symbol: "Add", max_results: 1}
+        expect: {status: succeeded, output: {references_count: 1, truncated: true}}
+      - name: missing_required_symbol
+        category: adversarial
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: symbol_newline_injection_denied
+        category: governance
+        args: {symbol: "Add\nid"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: path_traversal_denied
+        category: governance
+        args: {symbol: "Add", path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: repo.coverage_report
+    cases:
+      - name: coverage_scoped_go_deterministic
+        category: capability
+        # cmd/app: Add covered by TestAdd, main not -> exactly 50.0% statements.
+        args: {target: "./cmd/..."}
+        expect:
+          status: succeeded
+          output: {project_type: go, coverage_supported: true, coverage_percent: 50.0, exit_code: 0}
+      - name: coverage_default_all_packages
+        category: capability
+        # ./... includes the seeded uncovered root/src packages, so the exact
+        # percent shifts with workspace pollution — assert support + success only.
+        args: {}
+        expect:
+          status: succeeded
+          output: {coverage_supported: true, exit_code: 0}
+          output_present: [coverage_percent, command, output]
+      - name: bogus_target
+        category: adversarial   # coverage run fails cleanly, no stale report
+        args: {target: "./ghost/..."}
+        expect: {status: failed, error_code: execution_failed}
+      - name: malformed_target_type
+        category: adversarial   # array for a string field -> unmarshal fails
+        args: {target: ["./..."]}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: repo.static_analysis
+    cases:
+      - name: vet_default
+        category: capability
+        # go: `go vet ./...` -> exit 0 on the fixture (+seeds).
+        args: {}
+        expect:
+          status: succeeded
+          output: {project_type: go, exit_code: 0}
+          output_present: [command, diagnostics, output]
+      - name: vet_scoped_target
+        category: capability
+        args: {target: "./cmd/..."}
+        expect: {status: succeeded, output: {exit_code: 0}}
+      - name: bogus_target
+        category: adversarial
+        args: {target: "./ghost/..."}
+        expect: {status: failed, error_code: execution_failed}
+      - name: malformed_target_type
+        category: adversarial
+        args: {target: 7}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: repo.package
+    cases:
+      - name: package_root_binary
+        category: capability
+        # go: mkdir .workspace-dist + `go build -o .workspace-dist/app .`; the
+        # seeded root main.go provides func main, so packaging succeeds.
+        args: {}
+        expect:
+          status: succeeded
+          output: {project_type: go, artifact_path: ".workspace-dist/app", exit_code: 0}
+      - name: package_mainless_target_fails
+        category: adversarial
+        # ./src is a main package WITHOUT func main -> link error at package time.
+        args: {target: "./src"}
+        expect: {status: failed, error_code: execution_failed}
+      - name: bogus_target
+        category: adversarial
+        args: {target: "./ghost"}
+        expect: {status: failed, error_code: execution_failed}
+      - name: malformed_target_type
+        category: adversarial
+        args: {target: false}
+        expect: {status: failed, error_code: invalid_argument}

@@ -1,0 +1,47 @@
+{{- /* Target Deployments so k8s.* and rollout/saturation tools have real
+       objects to inspect and mutate inside the release namespace. */ -}}
+{{- range .Values.k8sTargets }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "e2e-infra.labels" $ | nindent 4 }}
+    app: {{ .name }}
+spec:
+  replicas: {{ .replicas }}
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .name }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: app
+          image: {{ .image }}
+          resources:
+            limits:
+              memory: {{ .memoryLimit | default "256Mi" }}
+            requests:
+              memory: {{ .memoryRequest | default "64Mi" }}
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "e2e-infra.labels" $ | nindent 4 }}
+    app: {{ .name }}
+spec:
+  selector:
+    app: {{ .name }}
+  ports:
+    - port: 80
+      targetPort: 80
+{{- end }}

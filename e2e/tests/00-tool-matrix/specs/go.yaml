@@ -1,0 +1,217 @@
+# Per-tool adversarial spec — go.* family (Go toolchain tools).
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (edge/malformed input, designed to surface bugs), and governance cases where
+# applicable. `setup` runs invocations first to establish state. `expect` is
+# matched by spec_runner: status + error_code + output fields/presence/regex.
+# A divergence is a BUG.
+#
+# Fixture: the session clones the polyglot repo into the workspace root. The Go
+# project is a stdlib-only module (`module github.com/underpass-ai/e2e-fixture`,
+# `go 1.25`, NO external deps so the toolchain works offline). Layout:
+#   go.mod                (root; the root dir itself has NO .go files)
+#   cmd/app/main.go       (package main; func Add(a,b int) int + main())
+#   cmd/app/main_test.go  (TestAdd; coverage of cmd/app is exactly 50.0%)
+#
+# SHARED-SESSION CAVEAT: the matrix preamble seeds `main.go` (root, package main
+# WITH func main) and `src/main.go` (package main WITHOUT func main — it fails to
+# LINK) on top of the clone; repo.yaml's cases run earlier and depend on them.
+# Every case below that executes `./...` or the default "." target therefore
+# fs.move's both files into .e2e-attic/ (a dot-dir the go toolchain ignores) to
+# restore the clean-clone state all the empirical claims in this file were
+# verified against. fs.move, NOT fs.delete: fs.delete is RiskHigh and session-
+# gated behind platform_admin, so a generic developer/devops session gets its
+# setup deletes silently denied (found the hard way — run 2026-07-14). A move
+# of an already-moved source is a no-op for setup, which ignores step results.
+# Empirically verified against the real toolchain:
+#   go build ./...                       -> exit 0
+#   go build .            (default ".")   -> exit 1 "no Go files in <root>"
+#   go build -o app ./cmd/app            -> exit 0, binary written
+#   go build -race -o app ./cmd/app      -> exit 0 (cgo via cc/gcc)
+#   go test ./...                        -> exit 0
+#   go test ./... -coverprofile ...      -> coverage: 50.0% of statements
+#   go test ./... -run NoMatch           -> exit 0 [no tests to run]
+#   go mod tidy -v   /   go mod tidy -diff-> exit 0 (module already tidy)
+#   go generate ./...                    -> exit 0
+#
+# GOVERNANCE NOTE: none of the go.* tools declare `requires_approval` or a
+# `policy.path_fields` block, so there are no approval-gate or path-traversal
+# (policy_denied) cases for this family. Their security guards are handler-level
+# input validators — `sanitizeGoLdflags` (only -s/-w, no shell metachars),
+# `sanitizeOutputName` (no `..`, `/`, `\`, NUL), and the run_pattern length/NUL
+# cap — every one of which rejects with status:failed + error_code:invalid_argument
+# (NOT denied, because validation is not governance). Those guard-bypass attempts
+# are filed under `adversarial`.
+tools:
+  - tool: go.mod.tidy
+    cases:
+      - name: tidy_default_mutating
+        category: capability
+        # check omitted/false -> `go mod tidy -v`; stdlib-only module stays tidy.
+        args: {}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, coverage_percent: 0, compiled_binary_path: ""}
+          output_present: [diagnostics]
+      - name: tidy_check_diff_mode
+        category: capability
+        # check:true -> `go mod tidy -diff`; no pending changes -> exit 0.
+        args: {check: true}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+          output_present: [diagnostics]
+      - name: malformed_check_string
+        category: adversarial   # "true" is a string, not a bool -> unmarshal fails
+        args: {check: "yes"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: malformed_check_number
+        category: adversarial   # numeric for a bool field -> unmarshal fails
+        args: {check: 7}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: go.generate
+    cases:
+      - name: generate_default_all
+        category: capability
+        # target omitted -> defaults to ./... ; no //go:generate directives -> exit 0.
+        args: {}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+          output_present: [diagnostics, coverage_percent, compiled_binary_path]
+      - name: generate_explicit_package
+        category: capability
+        args: {target: "./cmd/app"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: generate_nonexistent_target
+        category: adversarial   # `go generate ./does-not-exist` -> "directory not found", exit 1
+        args: {target: "./does-not-exist"}
+        expect: {status: failed, error_code: execution_failed}
+      - name: malformed_target_type
+        category: adversarial   # number where a string is expected -> unmarshal fails
+        args: {target: 123}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: go.build
+    cases:
+      - name: build_all_packages
+        category: capability
+        # `go build ./...` compiles every package; no -o so no binary path reported.
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {target: "./..."}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: ""}
+          output_present: [diagnostics, coverage_percent]
+      - name: build_with_output_name
+        category: capability
+        # `go build -o e2e-app ./cmd/app` -> binary written, path echoed verbatim.
+        args: {target: "./cmd/app", output_name: "e2e-app"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "e2e-app"}
+          output_match: {compiled_binary_path: "^e2e-app$"}
+      - name: build_ldflags_strip_symbols
+        category: capability
+        # only -s and -w are allowed through sanitizeGoLdflags; this is the happy path.
+        args: {target: "./cmd/app", output_name: "e2e-stripped", ldflags: "-s -w"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "e2e-stripped"}
+      - name: build_with_race_detector
+        category: capability
+        # `go build -race -o e2e-race ./cmd/app` exercises the cgo/race path (gcc present).
+        args: {target: "./cmd/app", output_name: "e2e-race", race: true}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "e2e-race"}
+      - name: default_target_root_no_go_files
+        category: adversarial
+        # empty args -> target defaults to "." -> `go build .`; the repo root has no
+        # .go files (only cmd/), so go exits 1. Surfaces the default-target footgun
+        # (go.test defaults to ./..., go.build defaults to ".").
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {}
+        expect: {status: failed, error_code: execution_failed}
+      - name: ldflags_inject_arbitrary_flag
+        category: adversarial
+        # attempt to smuggle a non -s/-w linker flag -> rejected by sanitizer.
+        args: {target: "./cmd/app", ldflags: "-X main.Version=pwned"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: ldflags_shell_metacharacters
+        category: adversarial
+        # command-substitution attempt in ldflags -> blocked on the charset check.
+        args: {target: "./cmd/app", ldflags: "-w $(id)"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: output_name_path_traversal
+        category: adversarial
+        # output_name is NOT a policy path_field; the handler's sanitizeOutputName
+        # rejects ".." itself -> invalid_argument (failed), never policy_denied.
+        args: {target: "./cmd/app", output_name: "../../evil"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: output_name_with_slash
+        category: adversarial
+        # a nested path in output_name must be a plain file name -> invalid_argument.
+        args: {target: "./cmd/app", output_name: "sub/app"}
+        expect: {status: failed, error_code: invalid_argument}
+
+  - tool: go.test
+    cases:
+      - name: test_all_packages
+        category: capability
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {package: "./..."}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, coverage_percent: 0}
+          output_present: [diagnostics]
+      - name: test_with_coverage
+        category: capability
+        # cmd/app coverage is deterministically 50.0% (Add covered, main not).
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {package: "./...", coverage: true}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, coverage_percent: 50.0}
+      - name: test_run_pattern_filter
+        category: capability
+        args: {package: "./cmd/app", run_pattern: "TestAdd"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: test_run_pattern_no_match
+        category: adversarial
+        # a non-matching -run filter is NOT an error in go ("[no tests to run]", exit 0);
+        # the tool must report succeeded, not invent a failure.
+        setup:
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
+        args: {package: "./...", run_pattern: "TestNothingMatchesXYZ"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: test_nonexistent_package
+        category: adversarial   # `go test ./does-not-exist` -> setup failed, exit 1
+        args: {package: "./does-not-exist"}
+        expect: {status: failed, error_code: execution_failed}
+      - name: run_pattern_oversized
+        category: adversarial
+        # run_pattern length is capped at 512 bytes; 600 'a' chars must be rejected
+        # BEFORE shelling out to `go test`.
+        args: {package: "./...", run_pattern: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: malformed_coverage_type
+        category: adversarial   # string for a bool field -> unmarshal fails
+        args: {package: "./...", coverage: "yes"}
+        expect: {status: failed, error_code: invalid_argument}

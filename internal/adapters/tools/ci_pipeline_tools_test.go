@@ -135,6 +135,50 @@ func TestCIRunPipelineHandler_QualityGateFailure(t *testing.T) {
 	}
 }
 
+func TestCIRunPipelineHandler_IncludeQualityGateFalseDisablesGate(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, testCIGoModFile), []byte(testCIGoModContent), 0o644); err != nil {
+		t.Fatalf(testCIFmtWriteGoMod, err)
+	}
+
+	runner := &fakeSWERuntimeCommandRunner{
+		run: func(callIndex int, _ app.CommandSpec) (app.CommandResult, error) {
+			switch callIndex {
+			case 0:
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputValidateOK}, nil
+			case 1:
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputBuildOK}, nil
+			case 2:
+				return app.CommandResult{ExitCode: 0, Output: testCIOutputTestsOK}, nil
+			default:
+				t.Fatalf("unexpected call index %d", callIndex)
+				return app.CommandResult{}, nil
+			}
+		},
+	}
+	handler := NewCIRunPipelineHandler(runner)
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+
+	// A strict threshold that WOULD fail the gate, but the gate is disabled — the
+	// otherwise-green pipeline must succeed, not fail on quality_gate.
+	result, err := handler.Invoke(context.Background(), session, mustSWERuntimeJSON(t, map[string]any{
+		testCIKeyIncludeStaticAnalysis: false,
+		testCIKeyIncludeCoverage:       false,
+		testCIKeyIncludeQualityGate:    false,
+		testCIKeyFailFast:              true,
+		testCIKeyQualityGate: map[string]any{
+			"min_coverage_percent": 100,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("expected pipeline to succeed with the gate disabled, got %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output[testCIKeyFailedStep] != "" {
+		t.Fatalf("expected no failed_step, got %#v", output[testCIKeyFailedStep])
+	}
+}
+
 func TestCIRunPipelineHandler_NoSupportedToolchain(t *testing.T) {
 	handler := NewCIRunPipelineHandler(&fakeSWERuntimeCommandRunner{})
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{}`))

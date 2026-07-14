@@ -93,8 +93,13 @@ func (h *RepoTestFileHandler) Invoke(ctx context.Context, session domain.Session
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
 
+	// Use a NON-login shell: on the debian runner a login shell sources
+	// /etc/profile, which resets PATH to a minimal set and drops the toolchain
+	// dirs (/usr/local/go/bin, /usr/local/cargo/bin) that the image exports via
+	// ENV — so `go`/`cargo` would fail with exit 127. `sh -c` inherits the
+	// container PATH and finds the toolchain.
 	commandResult, runErr := runner.Run(ctx, session, app.CommandSpec{
-		Cwd: session.WorkspacePath, Command: "sh", Args: []string{"-lc", command}, MaxBytes: 512 * 1024,
+		Cwd: session.WorkspacePath, Command: "sh", Args: []string{"-c", command}, MaxBytes: 512 * 1024,
 	})
 
 	passed := runErr == nil && commandResult.ExitCode == 0

@@ -1,0 +1,116 @@
+# ── e2e-infra values ────────────────────────────────────────────────────────
+# Self-contained test infrastructure. Every component is namespaced under this
+# release; nothing references a pre-existing cluster service.
+
+nameOverride: e2e
+
+# Registry for the images this chart builds (git fixture). Backends use upstream
+# public images so the suite stays dependency-free.
+registry: ghcr.io/underpass-ai/underpass-runtime
+
+# ── Stateful/stateless backends ─────────────────────────────────────────────
+# Generic deployment+service per backend (templates/backends.yaml). Each entry
+# becomes Deployment `e2e-<name>` + Service `e2e-<name>` on the listed port.
+backends:
+  - name: redis
+    image: docker.io/library/redis:7-alpine
+    port: 6379
+    readyExec: ["redis-cli", "ping"]
+
+  - name: mongo
+    image: docker.io/library/mongo:7
+    port: 27017
+    readyTcp: true
+
+  - name: rabbit
+    image: docker.io/library/rabbitmq:3.13-management
+    port: 5672
+    extraPorts: [15672]
+    readyExec: ["rabbitmq-diagnostics", "-q", "ping"]
+
+  - name: kafka
+    image: docker.io/apache/kafka:3.8.0   # KRaft single-node, no zookeeper
+    port: 9092
+    readyTcp: true
+    env:
+      - { name: KAFKA_NODE_ID, value: "1" }
+      - { name: KAFKA_PROCESS_ROLES, value: "broker,controller" }
+      - { name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://:9093" }
+      - { name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://e2e-kafka:9092" }
+      - { name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER" }
+      - { name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@localhost:9093" }
+      - { name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT" }
+      - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1" }
+      - { name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "true" }
+
+  - name: prometheus
+    image: docker.io/prom/prometheus:v2.54.1
+    port: 9090
+    readyHttp: /-/ready
+    configMount: /etc/prometheus/prometheus.yml
+    configKey: prometheus.yml
+
+  - name: httpbin            # target for web.fetch / api.benchmark
+    image: docker.io/kennethreitz/httpbin:latest
+    port: 80
+    readyHttp: /get
+
+  - name: notify-sink        # target for notify.escalation_channel
+    image: docker.io/kennethreitz/httpbin:latest
+    port: 80
+    readyHttp: /get
+
+  - name: gitfixture         # internal git server with the polyglot fixture repo
+    image: ghcr.io/underpass-ai/underpass-runtime/e2e-gitfixture:v1.0.0
+    port: 9418               # git daemon — repo_url = git://e2e-gitfixture:9418/polyglot
+    readyTcp: true
+
+# ── k8s target deployments (for k8s.* + rollout/saturation tools) ───────────
+k8sTargets:
+  - name: web-api
+    image: docker.io/library/nginx:1.27-alpine
+    replicas: 2
+  - name: worker
+    image: docker.io/library/nginx:1.27-alpine
+    replicas: 1
+
+# Prometheus scrape config (minimal — scrapes itself so query has data).
+prometheusConfig: |
+  global:
+    scrape_interval: 5s
+  scrape_configs:
+    - job_name: prometheus
+      static_configs:
+        - targets: ["localhost:9090"]
+
+# ── Dedicated test runtime (subchart `runtime`) ─────────────────────────────
+# Wired to the backends above. Endpoints are stable in-namespace DNS names.
+runtime:
+  config:
+    workspaceBackend: kubernetes
+    # Connection-profile endpoints the runtime resolves for db/queue tools.
+    connProfileEndpointsJSON: >-
+      {"dev.redis":"e2e-redis:6379",
+       "dev.mongo":"mongodb://e2e-mongo:27017",
+       "dev.rabbit":"amqp://e2e-rabbit:5672",
+       "dev.kafka":"e2e-kafka:9092",
+       "dev.nats":"nats://e2e-runtime-nats:4222"}
+    # notify.escalation_channel route for environment "e2e".
+    notifyEscalationRoutesJSON: '{"e2e":"http://e2e-notify-sink/post"}'
+  kubernetesBackend:
+    rbac:
+      create: true
+    deliveryTools:
+      enabled: true
+    namespace: ""   # defaults to release namespace
+    serviceAccount: ""
+    # The fat runner has every toolchain + trivy/syft/k6, so all sessions can
+    # execute every tool family. A session may still request a leaner bundle via
+    # metadata.runner_profile.
+    runnerImage: ghcr.io/underpass-ai/underpass-runtime/workspace-runner-fat:v1.0.0
+    imageBundlesJSON: >-
+      {"fat":"ghcr.io/underpass-ai/underpass-runtime/workspace-runner-fat:v1.0.0",
+       "toolchains":"ghcr.io/underpass-ai/underpass-runtime/runner:gh-20260404235607"}
+  # Simplify for test: no external TLS/cert-gen dependency.
+  tls:
+    mode: disabled

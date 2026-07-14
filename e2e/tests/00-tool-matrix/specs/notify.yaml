@@ -1,0 +1,170 @@
+# Per-tool adversarial spec — notify.* family.
+#
+# The family has a single tool: notify.escalation_channel. It delivers a
+# structured incident handoff over HTTP to the escalation route configured for
+# the session's runtime environment. It is GATED in the matrix: a generic
+# session lacks tool_profile=human-escalation-minimal, so the runner records it
+# as discovery=gated and these authored cases are skipped. They are written
+# against the REAL handler (internal/adapters/tools/notify_tools.go) so they run
+# and assert correctly the moment a properly-profiled session is provisioned.
+#
+# Handler contract worth knowing for precise expectations:
+#   required (each missing/blank -> invalid_argument, status failed):
+#     incident_id, handoff_node_id, summary, upstream_specialist,
+#     upstream_decision, reason   (resource_ref is optional)
+#   requires_approval: true  -> no approval => denied/approval_required
+#   no path_fields (policy is arg_fields max_length only) => no traversal case
+#   per-incident_id rate limit (1m window) => duplicate => denied/policy_denied
+#   success output: {delivered:true, channel, provider, provider_msg_id}
+#     (provider defaults to "webhook"; provider_msg_id may be empty)
+tools:
+  - tool: notify.escalation_channel
+    cases:
+      # ── capability ─────────────────────────────────────────────────────────
+      - name: deliver_full_handoff
+        category: capability
+        args:
+          incident_id: "e2e-inc-cap-full"
+          handoff_node_id: "handoff:e2e-inc-cap-full:human"
+          summary: "Automated remediation exhausted; human handoff"
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+          reason: "bounded automation stopped at the human handoff node"
+          resource_ref: "deploy/web-api"
+        approved: true
+        expect:
+          status: succeeded
+          output: {delivered: true}
+          output_present: [channel, provider]
+
+      - name: deliver_minimal_required
+        category: capability   # all six required fields, resource_ref omitted
+        args:
+          incident_id: "e2e-inc-cap-min"
+          handoff_node_id: "handoff:e2e-inc-cap-min:human"
+          summary: "worker saturation persists"
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+          reason: "retry budget exhausted"
+        approved: true
+        expect:
+          status: succeeded
+          output: {delivered: true}
+          output_present: [channel, provider]
+
+      - name: deliver_unicode_fields
+        category: capability   # multibyte summary/reason within maxLength
+        args:
+          incident_id: "e2e-inc-cap-uni"
+          handoff_node_id: "handoff:e2e-inc-cap-uni:human"
+          summary: "데이터베이스 포화 — 자동 복구 소진 ✅ エスカレーション"
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+          reason: "límite de reintentos agotado; requiere intervención humana 🚨"
+        approved: true
+        expect:
+          status: succeeded
+          output: {delivered: true}
+          output_present: [channel, provider]
+
+      # ── adversarial ────────────────────────────────────────────────────────
+      - name: missing_all_required
+        category: adversarial   # empty args -> first required check fails
+        args: {}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: missing_reason
+        category: adversarial   # one required field omitted
+        args:
+          incident_id: "e2e-inc-adv-noreason"
+          handoff_node_id: "handoff:e2e-inc-adv-noreason:human"
+          summary: "missing reason field"
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: blank_summary_whitespace
+        category: adversarial   # present but whitespace-only -> TrimSpace == "" rejects
+        args:
+          incident_id: "e2e-inc-adv-blank"
+          handoff_node_id: "handoff:e2e-inc-adv-blank:human"
+          summary: "   "
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+          reason: "blank summary must be rejected, not delivered"
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: wrong_type_incident_id
+        category: adversarial   # number where schema/handler expects a string
+        args:
+          incident_id: 42
+          handoff_node_id: "handoff:wrongtype:human"
+          summary: "type mismatch on incident_id"
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+          reason: "non-string incident_id must be rejected at unmarshal"
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: summary_exceeds_maxlength
+        category: adversarial   # 230 chars > schema maxLength 200 / policy max_length 200
+        args:
+          incident_id: "e2e-inc-adv-long"
+          handoff_node_id: "handoff:e2e-inc-adv-long:human"
+          summary: "ABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJABCDEFGHIJ"
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+          reason: "oversized summary must be rejected before delivery"
+        approved: true
+        expect: {error_code_in: [invalid_argument, policy_denied]}
+
+      - name: additional_property_rejected
+        category: adversarial   # input_schema declares additionalProperties:false
+        args:
+          incident_id: "e2e-inc-adv-extra"
+          handoff_node_id: "handoff:e2e-inc-adv-extra:human"
+          summary: "unknown field present"
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+          reason: "schema forbids unknown properties"
+          bogus_field: "should-be-rejected"
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      # ── governance ─────────────────────────────────────────────────────────
+      - name: requires_approval
+        category: governance   # requires_approval:true, valid args, no approval
+        args:
+          incident_id: "e2e-inc-gov-approval"
+          handoff_node_id: "handoff:e2e-inc-gov-approval:human"
+          summary: "approval gate must block delivery"
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+          reason: "side-effecting external notify must require explicit approval"
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+
+      - name: duplicate_incident_rate_limited
+        category: governance   # second delivery for same incident_id within 1m window
+        setup:
+          - tool: notify.escalation_channel
+            args:
+              incident_id: "e2e-inc-gov-rl"
+              handoff_node_id: "handoff:e2e-inc-gov-rl:human"
+              summary: "first delivery primes the rate limiter"
+              upstream_specialist: "saturation-operator"
+              upstream_decision: "escalate"
+              reason: "first delivery"
+            approved: true
+        args:
+          incident_id: "e2e-inc-gov-rl"
+          handoff_node_id: "handoff:e2e-inc-gov-rl:human"
+          summary: "second delivery for same incident must be rate-limited"
+          upstream_specialist: "saturation-operator"
+          upstream_decision: "escalate"
+          reason: "duplicate within rate-limit window"
+        approved: true
+        expect: {status: denied, error_code: policy_denied}

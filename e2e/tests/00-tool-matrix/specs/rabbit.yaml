@@ -1,0 +1,123 @@
+# Per-tool adversarial spec — rabbit.* family (RabbitMQ over the dev.rabbit
+# connection profile).
+#
+# Environment contract this spec is written against:
+#   * dev.rabbit -> amqp://e2e-rabbit:5672, scopes.queues = ["sandbox.", "dev."],
+#     read_only = true (like every provisioned profile).
+#   * Queue names must start with `sandbox.`/`dev.` to be in scope; otherwise the
+#     allowlist check returns policy_denied (status: denied).
+#   * Because the profile is read_only, rabbit.publish ALWAYS resolves to
+#     {status: denied, error_code: policy_denied} once it clears the approval
+#     gate — there is no writable profile in the fixture. consume/queue_info are
+#     reads and succeed against the live broker.
+#
+# Implementation facts that drive the expectations (read from rabbit_tools.go):
+#   * Empty/whitespace queue            -> invalid_argument (checked before the
+#                                          profile + read_only checks).
+#   * Missing/blank profile_id          -> invalid_argument ("profile_id is required").
+#   * Unknown profile_id                -> not_found ("connection profile not found").
+#   * Wrong-kind profile (e.g. dev.kafka) -> invalid_argument ("profile kind ...").
+#   * Numeric fields (max_messages/max_bytes/timeout_ms) are CLAMPED, never
+#     rejected: out-of-range still succeeds.
+#   * publish ordering: approval-gate -> queue-empty(invalid_argument) ->
+#     profile resolve -> read_only(policy_denied) -> allowlist(policy_denied) ->
+#     payload decode(invalid_argument). read_only short-circuits scope/payload.
+#   * Broker-side failures (queue missing, connection) collapse to
+#     execution_failed; live-read happy paths carry skip_if_error_code so a
+#     bare cluster records skip, not a false bug.
+tools:
+  - tool: rabbit.consume
+    cases:
+      - name: consume_basic
+        category: capability
+        args: {profile_id: "dev.rabbit", queue: "sandbox.jobs"}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.rabbit", queue: "sandbox.jobs"}
+          output_present: [messages, message_count, total_bytes, truncated]
+          skip_if_error_code: [execution_failed]
+      - name: consume_bounded_options
+        category: capability
+        args: {profile_id: "dev.rabbit", queue: "sandbox.jobs", max_messages: 5, max_bytes: 4096, timeout_ms: 1000}
+        expect:
+          status: succeeded
+          output_present: [message_count, total_bytes]
+          skip_if_error_code: [execution_failed]
+      - name: consume_clamps_out_of_range
+        category: adversarial   # max_messages>200 & timeout_ms<100 are clamped, not rejected
+        args: {profile_id: "dev.rabbit", queue: "sandbox.jobs", max_messages: 9999, timeout_ms: 50}
+        expect:
+          status: succeeded
+          output_present: [message_count]
+          skip_if_error_code: [execution_failed]
+      - name: consume_missing_queue
+        category: adversarial   # required field absent -> input validation
+        args: {profile_id: "dev.rabbit"}
+        expect: {error_code: invalid_argument}
+      - name: consume_wrong_kind_profile
+        category: adversarial   # dev.kafka is kind=kafka, not rabbitmq
+        args: {profile_id: "dev.kafka", queue: "sandbox.jobs"}
+        expect: {error_code_in: [invalid_argument, not_found]}
+      - name: consume_nonexistent_queue
+        category: adversarial   # in-scope name, but no such queue on the broker
+        args: {profile_id: "dev.rabbit", queue: "sandbox.no-such-queue-xyz"}
+        expect: {status: failed, error_code_in: [execution_failed, not_found]}
+      - name: consume_queue_out_of_scope
+        category: governance    # queue outside the sandbox./dev. allowlist
+        args: {profile_id: "dev.rabbit", queue: "prod.secrets"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: rabbit.queue_info
+    cases:
+      - name: queue_info_basic
+        category: capability
+        args: {profile_id: "dev.rabbit", queue: "sandbox.jobs"}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.rabbit"}
+          output_present: [queue, messages, consumers]
+          skip_if_error_code: [execution_failed]
+      - name: queue_info_missing_queue
+        category: adversarial
+        args: {profile_id: "dev.rabbit"}
+        expect: {error_code: invalid_argument}
+      - name: queue_info_unknown_profile
+        category: adversarial   # no such profile id
+        args: {profile_id: "dev.ghost", queue: "sandbox.jobs"}
+        expect: {status: failed, error_code: not_found}
+      - name: queue_info_nonexistent_queue
+        category: adversarial   # passive declare of a missing queue -> broker error
+        args: {profile_id: "dev.rabbit", queue: "sandbox.absent-queue-xyz"}
+        expect: {status: failed, error_code_in: [execution_failed, not_found]}
+      - name: queue_info_out_of_scope
+        category: governance
+        args: {profile_id: "dev.rabbit", queue: "dev2.metrics"}
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: rabbit.publish
+    cases:
+      - name: publish_readonly_denied
+        category: governance    # valid, in-scope, approved -> still denied (profile read_only)
+        args: {profile_id: "dev.rabbit", queue: "sandbox.jobs", payload: "hello", payload_encoding: "utf8"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: publish_requires_approval
+        category: governance    # requires_approval tool invoked WITHOUT approval
+        args: {profile_id: "dev.rabbit", queue: "sandbox.jobs", payload: "x"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: publish_out_of_scope_queue
+        category: governance    # out-of-allowlist queue -> denied (read_only short-circuits, same code)
+        args: {profile_id: "dev.rabbit", queue: "prod.deploy", payload: "x"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: publish_missing_queue
+        category: adversarial   # queue-empty check fires before the read_only check
+        args: {profile_id: "dev.rabbit", payload: "x"}
+        approved: true
+        expect: {error_code: invalid_argument}
+      - name: publish_bad_arg_type
+        category: adversarial   # timeout_ms must be an integer -> unmarshal fails
+        args: {profile_id: "dev.rabbit", queue: "sandbox.jobs", payload: "x", timeout_ms: "soon"}
+        approved: true
+        expect: {error_code: invalid_argument}

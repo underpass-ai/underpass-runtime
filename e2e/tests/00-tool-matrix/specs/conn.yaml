@@ -1,0 +1,94 @@
+# Per-tool adversarial spec — conn.* family (governable external connection profiles).
+#
+# The conn.* tools are read-only metadata tools: they enumerate/describe the
+# connection profiles a session principal may use (redis/kafka/rabbit/mongo/nats),
+# WITHOUT exposing credentials. Neither tool mutates state, requires approval, or
+# takes a path_field, so the only governance surface is profile scoping.
+#
+# Environment (per the matrix fixture): five read-only profiles are visible —
+# dev.redis, dev.kafka, dev.rabbit, dev.mongo, dev.nats — matching the runtime's
+# defaultConnectionProfiles(). describe_profile returns {id,kind,description,
+# read_only,scopes}; the handler ONLY returns when profile.id == requested id, so
+# profile.id is a guaranteed-exact check.
+#
+# Governance note on profile_fields: enforcement (policy_denied "profile not
+# allowed") only engages when the session sets `allowed_profiles` metadata (and it
+# is not "*"). This session is created with principal+repo only, so profile
+# governance is in its backward-compatible pass-through mode: an out-of-scope but
+# well-formed id falls through to the handler and returns not_found. Cases that
+# probe scoping therefore accept error_code_in: [not_found, policy_denied] so the
+# spec stays correct under either deployment posture.
+tools:
+  - tool: conn.list_profiles
+    cases:
+      - name: list_all_profiles
+        category: capability
+        # Empty args is the only documented input mode (input_schema has no props).
+        args: {}
+        expect: {status: succeeded, output_present: [profiles, count]}
+      - name: list_entries_well_formed
+        category: capability
+        # Structural check that does not depend on profile order/count/config: at
+        # least one entry exists and carries the credential-free metadata shape.
+        args: {}
+        expect:
+          status: succeeded
+          output_present: [profiles.0.id, profiles.0.kind, profiles.0.read_only]
+      - name: ignores_unknown_args
+        category: adversarial
+        # Handler unmarshals into a permissive map; unexpected fields on a valid
+        # JSON object must be ignored, not error or crash.
+        args: {bogus_field: "x", nested: {a: 1}}
+        expect: {status: succeeded, output_present: [profiles, count]}
+
+  - tool: conn.describe_profile
+    cases:
+      - name: describe_redis
+        category: capability
+        # profile.id is guaranteed to equal the requested id (handler matches on
+        # it). read_only must be reported true for every dev.* profile.
+        args: {profile_id: "dev.redis"}
+        expect:
+          status: succeeded
+          output: {profile.id: "dev.redis", profile.read_only: true}
+          output_present: [profile.kind, profile.scopes, profile.description]
+      - name: describe_nats
+        category: capability
+        args: {profile_id: "dev.nats"}
+        expect:
+          status: succeeded
+          output: {profile.id: "dev.nats", profile.read_only: true}
+          output_present: [profile.kind, profile.scopes]
+      - name: missing_profile_id
+        category: adversarial
+        # Required field absent -> input validation, status failed (not denied).
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: empty_profile_id
+        category: adversarial
+        args: {profile_id: ""}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: whitespace_profile_id
+        category: adversarial
+        # Handler trims before the empty check; whitespace must be rejected.
+        args: {profile_id: "   "}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: wrong_type_profile_id
+        category: adversarial
+        # Type confusion: a number where a string is required. Pass-through =>
+        # handler unmarshal fails (invalid_argument); allowlist-on => profile
+        # policy rejects the non-string field (policy_denied).
+        args: {profile_id: 123}
+        expect: {error_code_in: [invalid_argument, policy_denied]}
+      - name: unknown_profile
+        category: adversarial
+        # Well-formed but non-existent id. Pass-through => not_found; if the
+        # session pins an allowlist this id is out of it => policy_denied.
+        args: {profile_id: "dev.elasticsearch"}
+        expect: {error_code_in: [not_found, policy_denied]}
+      - name: out_of_scope_profile
+        category: governance
+        # A profile clearly outside the dev/sandbox scope must never be
+        # describable: it is either denied by policy or simply not found.
+        args: {profile_id: "prod.payments.redis"}
+        expect: {error_code_in: [policy_denied, not_found]}

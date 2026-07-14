@@ -1,0 +1,77 @@
+# Per-tool adversarial spec — sbom.* family.
+#
+# Format/semantics identical to specs/fs.yaml. The family has exactly ONE tool:
+# sbom.generate. A divergence from `expect` is a BUG.
+#
+# Behavioral facts the cases pin down (verified against dependency_tools.go
+# buildSBOMResult + collectDependencyInventory):
+#   * Not approval-gated (side_effects: none); the only governance surface is
+#     the `path` policy path_field -> traversal is policy_denied.
+#   * Project detection is workspace-root based: the fixture's root go.mod
+#     makes project_type "go" and the inventory command `go list -m all`.
+#     go.mod declares no requires, so the SBOM has exactly ONE component:
+#     the module itself at version "unknown".
+#   * The only accepted format is "cyclonedx-json", but it is lowercased and
+#     trimmed first — a mixed-case value is ACCEPTED (leniency pinned below);
+#     anything else is invalid_argument from the handler (schema enum is not
+#     enforced pre-handler).
+#   * max_components is clamped by clampInt(1..10000, default 1000), never
+#     rejected: an oversized value silently succeeds.
+#   * The document itself is emitted as the sbom.cdx.json artifact; the output
+#     carries generator/format/components metadata plus a 25-entry preview.
+tools:
+  - tool: sbom.generate
+    cases:
+      # ── capability ──────────────────────────────────────────────────────
+      - name: generate_default_cyclonedx
+        category: capability
+        # Empty args: format defaults to cyclonedx-json, path ".", and the go
+        # inventory yields the single root-module component with a golang purl.
+        args: {}
+        expect:
+          status: succeeded
+          output:
+            project_type: "go"
+            format: "cyclonedx-json"
+            generator: "workspace.sbom.generate/v1"
+            command: ["go", "list", "-m", "all"]
+            components_count: 1
+            components.0.type: "library"
+            components.0.name: "github.com/underpass-ai/e2e-fixture"
+            components.0.version: "unknown"
+            components.0.purl: "pkg:golang/github.com/underpass-ai/e2e-fixture@unknown"
+            truncated: false
+            artifact_name: "sbom.cdx.json"
+            exit_code: 0
+      - name: format_mixed_case_accepted
+        category: capability
+        # The handler lowercases/trims before the equality check, so the enum
+        # is effectively case-insensitive (schema is stricter than reality).
+        args: {format: "CycloneDX-JSON"}
+        expect:
+          status: succeeded
+          output: {format: "cyclonedx-json", components_count: 1}
+      # ── adversarial ─────────────────────────────────────────────────────
+      - name: unsupported_format_rejected
+        category: adversarial
+        # Anything other than cyclonedx-json is a handler-level rejection.
+        args: {format: "spdx-json"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: max_components_type_mismatch
+        category: adversarial
+        # max_components must be an integer; a string fails json.Unmarshal.
+        args: {max_components: "a-few"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: max_components_overflow_clamped
+        category: adversarial
+        # 999999 exceeds the schema max(10000) but clampInt silently clamps —
+        # the request is NOT rejected and the single component is untruncated.
+        args: {max_components: 999999}
+        expect:
+          status: succeeded
+          output: {components_count: 1, truncated: false}
+      # ── governance ──────────────────────────────────────────────────────
+      - name: traversal_path_denied
+        category: governance
+        args: {path: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}

@@ -1,0 +1,133 @@
+# Per-tool adversarial spec — api.* family.
+#
+# The family has a single tool: api.benchmark (bounded k6 load test against an
+# allowlisted http/api connection profile). Cases are matched by spec_runner:
+# status + error_code + output fields/presence. A divergence is a BUG.
+#
+# ENVIRONMENT NOTE (load-bearing for the expectations below):
+#   api.benchmark resolves its target via resolveAPIBenchmarkProfile, which only
+#   accepts profiles of kind "http"/"api". The e2e fixture provisions ONLY
+#   non-http profiles (dev.redis/kafka/rabbit/mongo/nats), so there is NO profile
+#   the tool can benchmark. Consequently a genuine `succeeded` run is impossible
+#   here: the capability cases below carry the real happy-path args but expect
+#   `succeeded` guarded by skip_if_error_code, so they record `skip`
+#   ("profile not provisioned") on this cluster and `pass` the day an http/api
+#   profile is wired — never a false BUG.
+#
+# What IS deterministic and fully exercised here:
+#   - governance (StaticPolicy.Authorize, runs BEFORE the tool):
+#       * requires_approval -> approval_required (denied)
+#       * arg_fields on request.path: denied_prefix http://|https://,
+#         deny_characters \n|\r, allowed_prefix "/" -> policy_denied (denied)
+#   - tool-side validation (parseBenchmarkRequest, profile resolution FIRST):
+#       * unknown profile_id      -> not_found        (failed)
+#       * wrong-kind profile_id   -> invalid_argument (failed)
+#       * missing/empty profile_id-> invalid_argument (failed)
+#
+# Note: method/load/threshold validation lives AFTER profile resolution in the
+# tool, so it is unreachable without a real http/api profile and is not asserted
+# here (asserting it would only ever observe the profile-resolution error).
+tools:
+  - tool: api.benchmark
+    cases:
+      # ── capability: real happy-path args, skipped until an http/api profile
+      #    is provisioned (the fixture has none) ──────────────────────────────
+      - name: benchmark_constant_vus
+        category: capability
+        args:
+          profile_id: "bench.api"
+          request: {method: "GET", path: "/get", headers: {accept: "application/json"}}
+          load: {mode: "constant_vus", duration_ms: 1000, vus: 2}
+          thresholds: {p95_ms: 1000, error_rate: 0.5, checks: 0}
+        approved: true
+        expect:
+          status: succeeded
+          output_present: [latency_ms, requests, rps_observed, thresholds]
+          skip_if_error_code: [not_found, execution_failed, profile_not_found, no_profile]
+      - name: benchmark_arrival_rate_raw_metrics
+        category: capability
+        args:
+          profile_id: "bench.api"
+          request: {method: "GET", path: "/get"}
+          load: {mode: "arrival_rate", duration_ms: 1000, rps: 10}
+          include_raw_metrics: true
+        approved: true
+        expect:
+          status: succeeded
+          output_present: [http_codes, error_rate, raw_metrics_attached]
+          skip_if_error_code: [not_found, execution_failed, profile_not_found, no_profile]
+
+      # ── adversarial: tool-side validation (profile resolution is checked
+      #    first, so these are deterministic regardless of the missing http
+      #    profile) ───────────────────────────────────────────────────────────
+      - name: unknown_profile
+        category: adversarial
+        args:
+          profile_id: "bench.does-not-exist"
+          request: {path: "/get"}
+        approved: true
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_kind_profile_rejected
+        category: adversarial   # dev.redis exists but is kind=redis, not http/api
+        args:
+          profile_id: "dev.redis"
+          request: {path: "/get"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_profile_id
+        category: adversarial
+        args:
+          request: {path: "/get"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: empty_args_rejected
+        category: adversarial   # no profile_id and no request -> must reject, not run
+        args: {}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      # ── governance: approval gate + request.path arg_field policy (all fire
+      #    in StaticPolicy.Authorize, before the tool runs) ────────────────────
+      - name: requires_approval
+        category: governance
+        args:
+          profile_id: "bench.api"
+          request: {method: "GET", path: "/get"}
+          load: {mode: "constant_vus", duration_ms: 1000, vus: 2}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: path_absolute_http_url_ssrf_denied
+        category: governance   # denied_prefix http:// blocks SSRF to link-local metadata
+        args:
+          profile_id: "bench.api"
+          request: {path: "http://169.254.169.254/latest/meta-data/"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: path_absolute_https_url_denied
+        category: governance   # denied_prefix https:// blocks off-target absolute URLs
+        args:
+          profile_id: "bench.api"
+          request: {path: "https://evil.example/secret"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: path_crlf_injection_denied
+        category: governance   # deny_characters \n|\r blocks request/header smuggling
+        args:
+          profile_id: "bench.api"
+          request: {path: "/get\nHost: evil.example"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: path_missing_leading_slash_denied
+        category: governance   # allowed_prefix "/" requires a rooted relative path
+        args:
+          profile_id: "bench.api"
+          request: {path: "get"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: path_empty_string_denied
+        category: adversarial   # empty path value is rejected by the arg_field policy
+        args:
+          profile_id: "bench.api"
+          request: {path: ""}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}

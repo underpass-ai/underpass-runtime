@@ -1,0 +1,157 @@
+# Per-tool adversarial spec — c.* family (C compile/test toolchain).
+#
+# Handlers: internal/adapters/tools/language_tool_handlers.go (CBuildHandler / CTestHandler).
+# Behavior learned from the implementation:
+#   - `source` is the only path_field (workspace_relative) -> traversal => policy_denied.
+#   - When `source` is given it MUST end in ".c"; a non-.c source is rejected in the handler
+#     as ExecutionFailed ("cannot resolve c source: ..."). Existence is deferred to `cc`,
+#     so a missing-but-valid .c path fails at compile time (execution_failed).
+#   - `standard` must be one of c89/c99/c11/c17/c23 (default c11) -> bad value => invalid_argument.
+#   - `output_name` must be a plain file name <=120 chars, no "/" "\\" "..": violations => invalid_argument.
+#   - cc is invoked with -Wall -Wextra (NOT -Werror), so warnings do not fail the build.
+#   - A non-zero cc/exec exit returns a runner error -> toToolError => execution_failed.
+#   - Neither tool sets requires_approval, so there is no approval-gate case.
+#   - Output map always carries: exit_code, compiled_binary_path, coverage_percent (0 for C), diagnostics.
+# The fixture ships NO .c files, so every capability case writes its own .c via setup (fs.write_file
+# requires_approval=true => approved:true). Validation cases that fail before source-resolution omit
+# `source` to stay deterministic regardless of files left by sibling cases.
+tools:
+  - tool: c.build
+    cases:
+      - name: build_default_standard
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/hello.c", content: "int main(void) { return 0; }\n", create_parents: true}, approved: true}
+        args: {source: "e2e/hello.c"}
+        approved: true
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "c-app"}
+          output_present: [diagnostics, coverage_percent]
+
+      - name: build_c99_custom_output
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/hello99.c", content: "int main(void) { return 0; }\n", create_parents: true}, approved: true}
+        args: {source: "e2e/hello99.c", standard: "c99", output_name: "hello99"}
+        approved: true
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "hello99"}
+
+      - name: bad_standard_enum
+        category: adversarial   # unsupported -std value -> input validation
+        args: {standard: "c00"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: standard_wrong_type
+        category: adversarial   # number where a string enum is expected
+        args: {standard: 99}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: output_name_with_dotdot
+        category: adversarial   # plain-filename rule: ".." rejected before source resolution
+        args: {output_name: "../escape"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: output_name_with_slash
+        category: adversarial   # output_name must be a bare file name, no path separators
+        args: {output_name: "bin/app"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: source_not_a_c_file
+        category: adversarial   # existing file but wrong suffix; impl emits execution_failed
+        args: {source: "README.md"}
+        approved: true
+        expect: {status: failed, error_code_in: [invalid_argument, execution_failed]}
+
+      - name: compile_error_surfaces
+        category: adversarial   # syntactically broken C -> cc exits non-zero
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/broken.c", content: "int main(void) { return }\n", create_parents: true}, approved: true}
+        args: {source: "e2e/broken.c"}
+        approved: true
+        expect: {status: failed, error_code: execution_failed}
+
+      - name: missing_c_source_compiles_nothing
+        category: adversarial   # valid .c path that does not exist -> deferred to cc -> fails
+        args: {source: "e2e/does-not-exist.c"}
+        approved: true
+        expect: {status: failed, error_code: execution_failed}
+
+      - name: traversal_source_denied
+        category: governance    # path_field source escaping the workspace
+        args: {source: "../../../../tmp/evil.c"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+
+  - tool: c.test
+    cases:
+      - name: compile_and_run_passing
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/pass_test.c", content: "int main(void) { return (1+1==2) ? 0 : 1; }\n", create_parents: true}, approved: true}
+        args: {source: "e2e/pass_test.c", run: true}
+        approved: true
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "c-test"}
+          output_present: [diagnostics]
+
+      - name: compile_only_no_run
+        category: capability     # run:false stops after compile
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/only_test.c", content: "int main(void) { return 0; }\n", create_parents: true}, approved: true}
+        args: {source: "e2e/only_test.c", run: false}
+        approved: true
+        expect: {status: succeeded, output: {exit_code: 0}}
+
+      - name: custom_output_name
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/named_test.c", content: "int main(void) { return 0; }\n", create_parents: true}, approved: true}
+        args: {source: "e2e/named_test.c", output_name: "mytest", standard: "c17"}
+        approved: true
+        expect: {status: succeeded, output: {exit_code: 0, compiled_binary_path: "mytest"}}
+
+      - name: failing_test_exec_failed
+        category: adversarial    # compiles clean but the test binary exits non-zero
+        setup:
+          - {tool: fs.write_file, args: {path: "e2e/fail_test.c", content: "int main(void) { return 1; }\n", create_parents: true}, approved: true}
+        args: {source: "e2e/fail_test.c", run: true}
+        approved: true
+        expect: {status: failed, error_code: execution_failed}
+
+      - name: bad_standard_enum
+        category: adversarial
+        args: {standard: "c42"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: source_not_a_c_file
+        category: adversarial    # existing non-.c source
+        args: {source: "py/app.py"}
+        approved: true
+        expect: {status: failed, error_code_in: [invalid_argument, execution_failed]}
+
+      - name: output_name_too_long
+        category: adversarial    # >120 chars -> sanitizeOutputName rejects, before source resolution
+        args: {output_name: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: run_wrong_type
+        category: adversarial    # run must be boolean
+        args: {run: "yes"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+      - name: traversal_source_denied
+        category: governance     # path_field source escaping the workspace
+        args: {source: "../../../../tmp/evil.c"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}

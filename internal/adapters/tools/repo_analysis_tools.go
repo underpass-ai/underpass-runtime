@@ -519,13 +519,12 @@ func (h *RepoFindReferencesHandler) Invoke(ctx context.Context, session domain.S
 	request := struct {
 		Symbol              string `json:"symbol"`
 		Path                string `json:"path"`
-		MaxReferences       int    `json:"max_references"`
-		MaxResults          int    `json:"max_results"`
+		MaxReferences       *int   `json:"max_references"`
+		MaxResults          *int   `json:"max_results"`
 		CaseSensitive       bool   `json:"case_sensitive"`
 		IncludeDeclarations bool   `json:"include_declarations"`
 	}{
 		Path:                ".",
-		MaxReferences:       200,
 		CaseSensitive:       true,
 		IncludeDeclarations: true,
 	}
@@ -539,10 +538,18 @@ func (h *RepoFindReferencesHandler) Invoke(ctx context.Context, session domain.S
 		}
 	}
 
-	if request.MaxReferences <= 0 && request.MaxResults > 0 {
-		request.MaxReferences = request.MaxResults
+	// max_references is canonical; max_results is a legacy alias. Pointers let us
+	// honor the alias only when max_references was actually omitted — a value-type
+	// default of 200 made the old alias branch unreachable, so max_results was
+	// silently ignored.
+	limit := 200
+	switch {
+	case request.MaxReferences != nil:
+		limit = *request.MaxReferences
+	case request.MaxResults != nil:
+		limit = *request.MaxResults
 	}
-	maxReferences := clampInt(request.MaxReferences, 1, 2000, 200)
+	maxReferences := clampInt(limit, 1, 2000, 200)
 
 	symbol := strings.TrimSpace(request.Symbol)
 	if symbol == "" {

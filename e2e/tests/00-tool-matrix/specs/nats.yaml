@@ -1,0 +1,180 @@
+# Per-tool adversarial spec — nats.* family.
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (malformed / missing / boundary / conflicting input meant to break it), and
+# governance cases (must be denied). Matched by spec_runner: status + error_code +
+# output fields/presence; a divergence is a BUG.
+#
+# Environment: the dev.nats connection profile points at the live
+# e2e-runtime-nats:4222 server, is READ_ONLY, and allowlists the subject patterns
+# "sandbox.>" and "dev.>" (carried in the profile's `scopes.subjects`). The matrix
+# session is created with principal+repo only — it sets NO `allowed_profiles` and
+# NO `allowed_nats_subjects` metadata — so the policy layer's profile/subject
+# governance is in backward-compatible pass-through mode. Subject confinement is
+# therefore enforced by the HANDLER (subjectAllowedByProfile) against the profile
+# scope, and an out-of-scope subject is rejected with policy_denied BEFORE any
+# network dial (deterministic). Profile resolution: unknown id -> not_found, kind
+# mismatch -> invalid_argument, missing id/subject -> invalid_argument.
+#
+# Read vs write semantics differ across the three tools:
+#   * nats.publish is the only write — read_only makes a fully valid + approved
+#     publish correctly denied (policy_denied); without approval the approval gate
+#     fires first (approval_required). It can never reach the bus here.
+#   * nats.subscribe_pull is a read — it connects, drains for timeout_ms, and (with
+#     nothing publishable on a read_only bus) returns an empty bounded batch and
+#     SUCCEEDS. Live reads carry skip_if_error_code:[execution_failed] so an
+#     unreachable/transient backend is recorded as skip, never a false bug.
+#   * nats.request is an RPC query and is intentionally NOT read_only-gated; it
+#     reaches the bus, and because the fixture publishes no responder on sandbox.>
+#     the request times out / gets no-responders -> execution_failed, recorded as
+#     skip via skip_if_error_code. If a responder is present the output is
+#     validated instead.
+tools:
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: nats.request
+    cases:
+      # capability — request/reply with each payload encoding. No responder exists
+      # on sandbox.> in the fixture, so these reach the bus and skip on
+      # execution_failed; a real responder would have its reply validated.
+      - name: request_utf8
+        category: capability
+        args: {profile_id: "dev.nats", subject: "sandbox.echo", payload: "hello", payload_encoding: "utf8", timeout_ms: 2000}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.nats", subject: "sandbox.echo"}
+          output_present: [response_base64, response_bytes, truncated]
+          skip_if_error_code: [execution_failed]
+      - name: request_base64_payload
+        category: capability
+        args: {profile_id: "dev.nats", subject: "sandbox.echo", payload: "aGVsbG8=", payload_encoding: "base64", timeout_ms: 2000}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.nats", subject: "sandbox.echo"}
+          output_present: [response_base64, response_bytes, truncated]
+          skip_if_error_code: [execution_failed]
+      # adversarial — validations that run BEFORE the dial, so they are
+      # deterministic regardless of backend state.
+      - name: missing_subject
+        category: adversarial   # required field absent -> validation, status failed (not denied)
+        args: {profile_id: "dev.nats"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_profile_id
+        category: adversarial
+        args: {subject: "sandbox.echo"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: bad_base64_payload
+        category: adversarial   # payload_encoding=base64 but payload is not valid base64
+        args: {profile_id: "dev.nats", subject: "sandbox.echo", payload: "not_base64!!!", payload_encoding: "base64"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unsupported_payload_encoding
+        category: adversarial   # enum violation: only utf8|base64 are accepted
+        args: {profile_id: "dev.nats", subject: "sandbox.echo", payload: "hi", payload_encoding: "rot13"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", subject: "sandbox.echo"}
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.kafka is a kafka profile, not nats
+        args: {profile_id: "dev.kafka", subject: "sandbox.echo"}
+        expect: {status: failed, error_code: invalid_argument}
+      # governance — subject confinement to the profile's sandbox.>/dev.> scope.
+      - name: subject_outside_allowlist
+        category: governance
+        args: {profile_id: "dev.nats", subject: "prod.secrets"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: nats.publish
+    cases:
+      # The only writable-shaped path here is a denial: dev.nats is read_only, so a
+      # fully valid + approved publish is correctly blocked (policy_denied).
+      - name: publish_blocked_read_only
+        category: governance
+        args: {profile_id: "dev.nats", subject: "sandbox.events", payload: "hello", payload_encoding: "utf8", timeout_ms: 2000}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: publish_requires_approval
+        category: governance   # requires_approval=true; without approval the gate blocks before the handler
+        args: {profile_id: "dev.nats", subject: "sandbox.events", payload: "hi"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      # adversarial — validations that run BEFORE the read_only guard (subject
+      # presence and profile resolution), so they surface their true error code
+      # rather than being masked by policy_denied.
+      - name: missing_subject
+        category: adversarial
+        args: {profile_id: "dev.nats"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", subject: "sandbox.events", payload: "x"}
+        approved: true
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.redis is a redis profile, not nats
+        args: {profile_id: "dev.redis", subject: "sandbox.events", payload: "x"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: nats.subscribe_pull
+    cases:
+      # capability — one case per subscription input mode. With nothing publishable
+      # on the read_only bus each returns an empty bounded batch (succeeded);
+      # skip_if_error_code keeps an unreachable backend honest (skip, not bug).
+      - name: pull_sandbox_subject
+        category: capability
+        args: {profile_id: "dev.nats", subject: "sandbox.events", max_messages: 5, timeout_ms: 1000}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.nats", subject: "sandbox.events", truncated: false}
+          output_present: [messages, message_count, total_bytes]
+          skip_if_error_code: [execution_failed]
+      - name: pull_dev_subject
+        category: capability   # exercises the second allowlisted prefix (dev.>)
+        args: {profile_id: "dev.nats", subject: "dev.events", max_messages: 3, timeout_ms: 1000}
+        expect:
+          status: succeeded
+          output: {subject: "dev.events"}
+          output_present: [messages, message_count, total_bytes]
+          skip_if_error_code: [execution_failed]
+      - name: pull_wildcard_subject
+        category: capability   # a token-wildcard subscription subject is in scope (sandbox.> == scope)
+        args: {profile_id: "dev.nats", subject: "sandbox.>", max_messages: 10, timeout_ms: 1000}
+        expect:
+          status: succeeded
+          output: {subject: "sandbox.>"}
+          output_present: [messages, message_count, total_bytes]
+          skip_if_error_code: [execution_failed]
+      # adversarial — deterministic validations before the dial.
+      - name: missing_subject
+        category: adversarial
+        args: {profile_id: "dev.nats"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_profile_id
+        category: adversarial
+        args: {subject: "sandbox.events"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", subject: "sandbox.events"}
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.kafka is a kafka profile, not nats
+        args: {profile_id: "dev.kafka", subject: "sandbox.events"}
+        expect: {status: failed, error_code: invalid_argument}
+      # governance — subject confinement to the profile's sandbox.>/dev.> scope.
+      - name: subject_outside_allowlist
+        category: governance
+        args: {profile_id: "dev.nats", subject: "internal.audit"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: bare_parent_subject_token_overmatch
+        category: governance
+        # NATS `>` matches ONE OR MORE trailing tokens, so a profile scoped to
+        # "sandbox.>" must NOT authorize the bare parent subject "sandbox". The
+        # handler's matcher early-returns true on the `>` token, accepting it — a
+        # potential over-permissive-confinement bug this case is designed to surface.
+        args: {profile_id: "dev.nats", subject: "sandbox"}
+        expect: {status: denied, error_code: policy_denied}
