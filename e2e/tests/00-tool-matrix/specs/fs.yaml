@@ -30,10 +30,10 @@ tools:
         approved: true
         expect: {status: denied, error_code: policy_denied}
       - name: missing_required_content
-        category: adversarial
+        category: adversarial   # a missing required field is a validation failure
         args: {path: "e2e/no-content.txt"}
         approved: true
-        expect: {status: denied, error_code: invalid_argument}
+        expect: {status: failed, error_code: invalid_argument}
 
   - tool: fs.read_file
     cases:
