@@ -412,7 +412,7 @@ tools:
           status: succeeded
           output:
             source: provided_output
-            mode: working_tree
+            mode: provided_output   # both mirror the provided-input path
             changed_count: 2
             changed_files.0.path: foo.txt
             changed_files.0.untracked: true

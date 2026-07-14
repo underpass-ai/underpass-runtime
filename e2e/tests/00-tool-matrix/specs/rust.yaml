@@ -55,11 +55,13 @@ tools:
     cases:
       - name: missing_root_manifest
         category: adversarial
-        # Force the no-manifest state (fs.delete result is ignored if absent):
-        # bare cargo at the workspace root -> exit 101 -> execution_failed.
-        # Surfaces the root-cwd footgun: the tool cannot build rs/ as cloned.
+        # Force the no-manifest state by moving any seeded root manifest aside
+        # (fs.move of a missing source is a no-op for setup; fs.delete is NOT
+        # usable here — it is session-gated behind platform_admin): bare cargo
+        # at the workspace root -> exit 101 -> execution_failed. Surfaces the
+        # root-cwd footgun: the tool cannot build rs/ as cloned.
         setup:
-          - {tool: fs.delete, args: {path: "Cargo.toml"}, approved: true}
+          - {tool: fs.move, args: {source_path: "Cargo.toml", destination_path: ".e2e-attic/Cargo.toml", overwrite: true, create_parents: true}, approved: true}
         args: {}
         expect: {status: failed, error_code: execution_failed}
       - name: build_workspace_default

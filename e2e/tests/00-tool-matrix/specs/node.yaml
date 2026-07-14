@@ -68,9 +68,12 @@ tools:
         args: {}
         expect: {status: succeeded, output: {exit_code: 0}}
       - name: type_mismatch_target
-        category: adversarial  # number where target string is expected -> invalid_argument
+        category: adversarial
+        # target is a policy path_field; the policy layer fails CLOSED on a
+        # non-string value ("invalid path field payload") BEFORE the handler's
+        # json.Unmarshal would reject it -> denied, never invalid_argument.
         args: {target: 123}
-        expect: {status: failed, error_code: invalid_argument}
+        expect: {status: denied, error_code: policy_denied}
       - name: target_traversal_denied
         category: governance   # path_field escape must be denied by policy before npm runs
         args: {target: "../../../../etc/passwd"}
@@ -92,9 +95,10 @@ tools:
         args: {}
         expect: {status: failed, error_code: execution_failed}
       - name: type_mismatch_target_array
-        category: adversarial  # array where target string is expected -> invalid_argument
+        category: adversarial
+        # non-string path_field -> policy fail-closed (see type_mismatch_target).
         args: {target: ["a", "b"]}
-        expect: {status: failed, error_code: invalid_argument}
+        expect: {status: denied, error_code: policy_denied}
       - name: target_traversal_denied
         category: governance
         args: {target: "../../../../etc/passwd"}
@@ -136,9 +140,10 @@ tools:
         args: {}
         expect: {status: failed, error_code: execution_failed}
       - name: type_mismatch_target_bool
-        category: adversarial  # bool where target string is expected -> invalid_argument
+        category: adversarial
+        # non-string path_field -> policy fail-closed (see type_mismatch_target).
         args: {target: true}
-        expect: {status: failed, error_code: invalid_argument}
+        expect: {status: denied, error_code: policy_denied}
       - name: target_traversal_denied
         category: governance
         args: {target: "../../../../etc/passwd"}

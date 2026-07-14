@@ -152,9 +152,12 @@ tools:
         args: {target: "../../../../etc"}
         expect: {status: denied, error_code: policy_denied}
       - name: type_mismatch_target
-        category: adversarial   # number where a string is expected -> invalid_argument
+        category: adversarial
+        # target is a policy path_field; the policy layer inspects it BEFORE the
+        # handler and fails CLOSED on a non-string value ("invalid path field
+        # payload", static_policy.go) -> denied, never invalid_argument.
         args: {target: 123}
-        expect: {status: failed, error_code: invalid_argument}
+        expect: {status: denied, error_code: policy_denied}
 
   # ── python.test ── pytest -q --maxfail <n> [target] [-k pattern]
   - tool: python.test

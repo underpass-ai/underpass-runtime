@@ -17,9 +17,12 @@
 # WITH func main) and `src/main.go` (package main WITHOUT func main — it fails to
 # LINK) on top of the clone; repo.yaml's cases run earlier and depend on them.
 # Every case below that executes `./...` or the default "." target therefore
-# fs.delete's both files in setup to restore the clean-clone state all the
-# empirical claims in this file were verified against (fs.delete of an
-# already-deleted path is a no-op for setup, which ignores step results).
+# fs.move's both files into .e2e-attic/ (a dot-dir the go toolchain ignores) to
+# restore the clean-clone state all the empirical claims in this file were
+# verified against. fs.move, NOT fs.delete: fs.delete is RiskHigh and session-
+# gated behind platform_admin, so a generic developer/devops session gets its
+# setup deletes silently denied (found the hard way — run 2026-07-14). A move
+# of an already-moved source is a no-op for setup, which ignores step results.
 # Empirically verified against the real toolchain:
 #   go build ./...                       -> exit 0
 #   go build .            (default ".")   -> exit 1 "no Go files in <root>"
@@ -98,8 +101,8 @@ tools:
         category: capability
         # `go build ./...` compiles every package; no -o so no binary path reported.
         setup:
-          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
-          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
         args: {target: "./..."}
         expect:
           status: succeeded
@@ -133,8 +136,8 @@ tools:
         # .go files (only cmd/), so go exits 1. Surfaces the default-target footgun
         # (go.test defaults to ./..., go.build defaults to ".").
         setup:
-          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
-          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
         args: {}
         expect: {status: failed, error_code: execution_failed}
       - name: ldflags_inject_arbitrary_flag
@@ -164,8 +167,8 @@ tools:
       - name: test_all_packages
         category: capability
         setup:
-          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
-          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
         args: {package: "./..."}
         expect:
           status: succeeded
@@ -175,8 +178,8 @@ tools:
         category: capability
         # cmd/app coverage is deterministically 50.0% (Add covered, main not).
         setup:
-          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
-          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
         args: {package: "./...", coverage: true}
         expect:
           status: succeeded
@@ -192,8 +195,8 @@ tools:
         # a non-matching -run filter is NOT an error in go ("[no tests to run]", exit 0);
         # the tool must report succeeded, not invent a failure.
         setup:
-          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
-          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
+          - {tool: fs.move, args: {source_path: "main.go", destination_path: ".e2e-attic/main.go", overwrite: true, create_parents: true}, approved: true}
+          - {tool: fs.move, args: {source_path: "src/main.go", destination_path: ".e2e-attic/src-main.go", overwrite: true, create_parents: true}, approved: true}
         args: {package: "./...", run_pattern: "TestNothingMatchesXYZ"}
         expect:
           status: succeeded
