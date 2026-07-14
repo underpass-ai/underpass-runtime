@@ -1,0 +1,105 @@
+# Per-tool adversarial spec — web.* family.
+#
+# Two tools: web.fetch (HTTP GET, returns text) and web.search (DuckDuckGo lite
+# via curl). Both low risk, no approval, no path_fields. Pinned from
+# internal/adapters/tools/web_tools.go. The e2e-infra chart provisions httpbin at
+# host `e2e-httpbin:80` as the fetch target.
+#
+# SECURITY GAP (load-bearing — see report): web.fetch does NOT consult any host
+# allowlist. Unlike api.benchmark (whose request.path arg_field denies http(s)://
+# prefixes to stop SSRF), web.fetch runs a raw client.Get on any URL. The
+# governance case below therefore asserts the SECURE expectation (a link-local
+# metadata fetch must be denied); on the current runtime a successful fetch would
+# surface as a BUG (SSRF), while a network failure is guarded by
+# skip_if_error_code so it records `skip`, never a false bug.
+#
+# HANDLER CONTRACT (web.fetch):
+#   - required: url. Missing/empty -> invalid_argument (failed).
+#   - a scheme-less URL gets "https://" prepended; http:// is left as-is (NOT
+#     auto-upgraded, despite the catalog description).
+#   - an HTTP error status (404, 500, ...) is NOT a tool error: succeeded with the
+#     real output.status_code.
+#   - output: {url, status_code, content, content_type, truncated}.
+# HANDLER CONTRACT (web.search):
+#   - required: query. Missing/empty -> invalid_argument (failed).
+#   - max_results clamped 1..10 (default 5); output: {query, results, count}.
+#   - zero results (e.g. no egress) is still succeeded.
+tools:
+  - tool: web.fetch
+    cases:
+      # ---- capability ----
+      - name: fetch_httpbin_get
+        category: capability
+        # httpbin /get returns 200 + JSON; skip on network flake / no egress.
+        args: {url: "http://e2e-httpbin/get", timeout_seconds: 5}
+        expect:
+          status: succeeded
+          output: {status_code: 200}
+          output_present: [content, content_type]
+          skip_if_error_code: [execution_failed]
+
+      # ---- adversarial ----
+      - name: http_error_status_reported
+        category: adversarial
+        # A 404 is honest output, not a tool failure — status stays succeeded.
+        args: {url: "http://e2e-httpbin/status/404", timeout_seconds: 5}
+        expect:
+          status: succeeded
+          output: {status_code: 404}
+          skip_if_error_code: [execution_failed]
+      - name: missing_url
+        category: adversarial
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: empty_url
+        category: adversarial
+        args: {url: "   "}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: file_scheme_no_local_read
+        category: adversarial
+        # file:/// must NOT read local files. The handler prepends https:// to the
+        # non-http URL, producing an unresolvable host -> fetch fails. The load-
+        # bearing assertion is that it never succeeds in reading /etc/passwd.
+        args: {url: "file:///etc/passwd"}
+        expect: {status: failed, error_code_in: [execution_failed, invalid_argument]}
+
+      # ---- governance ----
+      - name: metadata_ssrf_must_be_denied
+        category: governance
+        # Cloud link-local metadata endpoint. A well-governed fetch tool denies
+        # this; a 200 here is an SSRF BUG. Network failures skip (no false bug).
+        args: {url: "http://169.254.169.254/latest/meta-data/", timeout_seconds: 3}
+        expect:
+          status: denied
+          error_code: policy_denied
+          skip_if_error_code: [execution_failed, timeout]
+
+  - tool: web.search
+    cases:
+      # ---- capability ----
+      - name: search_basic
+        category: capability
+        # DuckDuckGo egress may be blocked in-cluster -> zero results but still
+        # succeeded; runner failure skips.
+        args: {query: "golang context timeout best practices"}
+        expect:
+          status: succeeded
+          output_present: [query, results, count]
+          skip_if_error_code: [execution_failed]
+      - name: search_bounded_results
+        category: capability
+        args: {query: "python json parsing", max_results: 3}
+        expect:
+          status: succeeded
+          output_present: [results, count]
+          skip_if_error_code: [execution_failed]
+
+      # ---- adversarial ----
+      - name: missing_query
+        category: adversarial
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: whitespace_query
+        category: adversarial
+        args: {query: "   "}
+        expect: {status: failed, error_code: invalid_argument}

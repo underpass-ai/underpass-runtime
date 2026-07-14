@@ -1,0 +1,204 @@
+# Per-tool adversarial spec — rust.* family (cargo-backed language tools).
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (edge/malformed input, designed to surface bugs), and governance notes where
+# applicable. `setup` runs invocations first to establish state. `expect` is
+# matched by spec_runner: status + error_code + output fields/presence/regex.
+# A divergence is a BUG.
+#
+# IMPORTANT FIXTURE FACT: every rust.* handler shells out to `cargo` with
+# Cwd = session workspace ROOT (it never cd's into a subdir). The polyglot
+# fixture only carries a Cargo.toml under rs/ (package e2e_fixture, bin app),
+# NOT at the root, and cargo's upward manifest search finds nothing above the
+# workspace either — so a bare cargo invocation exits 101 ("could not find
+# Cargo.toml"). Therefore every toolchain case SEEDS a root VIRTUAL WORKSPACE
+# manifest ([workspace] members=["rs"]) via an fs.write_file setup step
+# (fs.write_file is approval-gated, so setup passes approved:true).
+#
+# Behavior learned from internal/adapters/tools/language_tool_handlers.go:
+# structured output is {exit_code, compiled_binary_path, coverage_percent,
+# diagnostics[]}; a non-zero cargo exit -> execution_failed (status failed); a
+# bad-typed arg fails json.Unmarshal -> invalid_argument (status failed).
+# `target` maps to `cargo --package <target>` — it is a PACKAGE NAME, not a
+# path (naming footgun: go.build's `target` is a package PATH). The handlers
+# never populate compiled_binary_path or coverage_percent — even though
+# `cargo build` really writes target/debug/app — so both are asserted at their
+# zero values as the current contract. Handler defaults differ from what the
+# schema suggests: clippy deny_warnings defaults TRUE, format check defaults
+# TRUE (safe-by-default; args must opt out).
+#
+# GOVERNANCE NOTE: no rust.* tool declares `requires_approval` or a
+# `policy.path_fields` block, so there are no approval-gate or path-traversal
+# (policy_denied) cases for this family. Its only input guard is sanitizeTarget,
+# which trims whitespace and SILENTLY DROPS a NUL-bearing target (the invocation
+# then runs against the whole workspace instead of being rejected) — the
+# whitespace variant of that silent-drop is pinned below.
+#
+# Empirically verified against the real toolchain (cargo 1.95 local ≈ 1.94 in
+# the fat runner, which ships clippy 0.1.94 + rustfmt 1.8.0):
+#   cargo build                          -> exit 0
+#   cargo build --package e2e_fixture    -> exit 0
+#   cargo build --release                -> exit 0
+#   cargo build --package bogus          -> exit 101 (no such package)
+#   cargo test                           -> exit 0 (1 test: test_add)
+#   cargo test --package bogus           -> exit 101
+#   cargo clippy --all-targets --all-features -- -D warnings -> exit 0 (clean)
+#   cargo fmt -- --check   (fixture src)  -> exit 1  (single-line fns are NOT
+#                                            rustfmt-clean)
+#   cargo fmt              (write mode)   -> exit 0, rewrites src/main.rs
+#   cargo fmt -- --check   (after write)  -> exit 0
+# The rust.format cases below are ORDER-DEPENDENT on purpose: write mode runs
+# first to normalize the fixture, then check mode passes deterministically.
+tools:
+  # ── rust.build ── cargo build [--package <target>] [--release]
+  - tool: rust.build
+    cases:
+      - name: missing_root_manifest
+        category: adversarial
+        # Force the no-manifest state (fs.delete result is ignored if absent):
+        # bare cargo at the workspace root -> exit 101 -> execution_failed.
+        # Surfaces the root-cwd footgun: the tool cannot build rs/ as cloned.
+        setup:
+          - {tool: fs.delete, args: {path: "Cargo.toml"}, approved: true}
+        args: {}
+        expect: {status: failed, error_code: execution_failed}
+      - name: build_workspace_default
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "", coverage_percent: 0}
+          output_present: [diagnostics]
+      - name: build_package_by_name
+        category: capability
+        # target -> `cargo build --package e2e_fixture` (name from rs/Cargo.toml).
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {target: "e2e_fixture"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: build_release_profile
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {release: true}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: package_not_found
+        category: adversarial   # `--package no-such-package` -> cargo exit 101
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {target: "no-such-package"}
+        expect: {status: failed, error_code: execution_failed}
+      - name: whitespace_target_silently_dropped
+        category: adversarial
+        # sanitizeTarget trims "   " to "" and the handler proceeds as if no
+        # target was given -> whole-workspace build SUCCEEDS. Pins the
+        # silent-drop semantics (reject would arguably be safer).
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {target: "   "}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: type_mismatch_target
+        category: adversarial   # number where a string is expected -> unmarshal fails
+        args: {target: 123}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: type_mismatch_release
+        category: adversarial   # string where a bool is expected -> invalid_argument
+        args: {release: "yes"}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ── rust.test ── cargo test [--package <target>]
+  - tool: rust.test
+    cases:
+      - name: test_workspace_default
+        category: capability   # runs the #[test] in rs/src/main.rs (test_add)
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "", coverage_percent: 0}
+          output_present: [diagnostics]
+      - name: test_package_by_name
+        category: capability
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {target: "e2e_fixture"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: package_not_found
+        category: adversarial   # `cargo test --package bogus` -> exit 101
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {target: "bogus"}
+        expect: {status: failed, error_code: execution_failed}
+      - name: type_mismatch_target
+        category: adversarial   # array where a string is expected -> invalid_argument
+        args: {target: ["e2e_fixture"]}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ── rust.clippy ── cargo clippy --all-targets --all-features [-- -D warnings]
+  - tool: rust.clippy
+    cases:
+      - name: clippy_deny_warnings_default
+        category: capability
+        # HANDLER default deny_warnings=true (strict-by-default even though the
+        # schema declares no default) -> `-- -D warnings`; fixture is clippy-clean.
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "", coverage_percent: 0}
+          output_present: [diagnostics]
+      - name: clippy_allow_warnings
+        category: capability   # deny_warnings:false drops the `-D warnings` tail
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {deny_warnings: false}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: type_mismatch_deny_warnings
+        category: adversarial   # string where a bool is expected -> invalid_argument
+        args: {deny_warnings: "strict"}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ── rust.format ── cargo fmt [-- --check]; handler default check=true
+  - tool: rust.format
+    cases:
+      - name: format_write_mode
+        category: capability
+        # check:false -> `cargo fmt` rewrites rs/src/main.rs (the fixture's
+        # single-line fns are not rustfmt-clean). Runs FIRST so the check-mode
+        # case below is deterministic. Reversible workspace mutation.
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {check: false}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "", coverage_percent: 0}
+          output_present: [diagnostics]
+      - name: format_check_default_after_write
+        category: capability
+        # empty args -> HANDLER default check=true -> `cargo fmt -- --check`;
+        # the write-mode case above already normalized the tree -> exit 0.
+        # (On the unformatted clone this would exit 1 / execution_failed.)
+        setup:
+          - {tool: fs.write_file, args: {path: "Cargo.toml", content: "[workspace]\nmembers = [\"rs\"]\nresolver = \"2\"\n"}, approved: true}
+        args: {}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: type_mismatch_check
+        category: adversarial   # number where a bool is expected -> invalid_argument
+        args: {check: 7}
+        expect: {status: failed, error_code: invalid_argument}

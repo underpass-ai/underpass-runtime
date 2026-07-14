@@ -1,0 +1,53 @@
+# Per-tool adversarial spec — tool.* family.
+#
+# One tool: tool.suggest — a pure, runtime-side recommender that ranks the
+# embedded capability catalog against a natural-language task. Pinned from
+# internal/adapters/tools/suggest_tools.go.
+#
+# NO GOVERNANCE DENIALS: tool.suggest is low risk, requires_approval=false, and
+# has no path_fields/arg policy, so it is NEVER denied and NEVER needs approval
+# (like policy.check). The only failure mode is malformed input to itself. Thus
+# there are no governance cases — expecting status:denied here would be a false
+# bug.
+#
+# HANDLER CONTRACT:
+#   - required: task. Missing/empty/whitespace task -> invalid_argument (failed).
+#   - output: {task, suggestions:[{name,score,description,risk_level,why}], count}.
+#   - top_k clamped to 1..20 (default 5); scope/family filter the catalog.
+#   - a task that matches nothing scores 0 for every tool -> empty suggestions,
+#     count:0, still succeeded (an empty result is valid, not an error).
+tools:
+  - tool: tool.suggest
+    cases:
+      # ---- capability ----
+      - name: suggest_ranks_tools
+        category: capability
+        args: {task: "edit a specific function in a Go file"}
+        expect:
+          status: succeeded
+          output_present: [task, suggestions, count]
+      - name: suggest_family_filter
+        category: capability
+        # family=fs restricts suggestions to fs.* tools; the top hit must be fs.*.
+        args: {task: "read and search files", family: "fs", top_k: 5}
+        expect:
+          status: succeeded
+          output_match: {suggestions.0.name: "^fs\\."}
+
+      # ---- adversarial ----
+      - name: missing_task
+        category: adversarial
+        args: {}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: whitespace_task
+        category: adversarial
+        # TrimSpace makes a whitespace-only task equivalent to empty.
+        args: {task: "   "}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: nonsense_task_zero_suggestions
+        category: adversarial
+        # Gibberish tokens match no tool name/description/family -> empty result.
+        args: {task: "zzqqxx vvbbnn wwjjkk"}
+        expect:
+          status: succeeded
+          output: {count: 0}

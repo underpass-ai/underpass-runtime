@@ -1,0 +1,223 @@
+# Per-tool adversarial spec — python.* family (venv/pip, compileall, pytest).
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (edge/malformed input, designed to surface bugs), and governance cases (must
+# be denied). `expect` is matched by spec_runner: status + error_code + output
+# fields/presence/regex. A divergence is a BUG.
+#
+# Behavior learned from internal/adapters/tools/language_tool_handlers.go:
+# structured output is {exit_code, compiled_binary_path, coverage_percent,
+# diagnostics[]}; every handler runs with Cwd = session workspace ROOT; a
+# non-zero toolchain exit -> execution_failed (status failed); a bad-typed arg
+# fails json.Unmarshal -> invalid_argument (status failed). The fat runner
+# carries a GLOBAL python3 + pytest 7.2.1, so no case needs a pip install to
+# execute. The polyglot fixture ships py/app.py, py/test_app.py (one passing
+# test) and py/requirements.txt — there is NO requirements.txt at the root.
+#
+# python.install_deps hard-requires use_venv=true (the default; false ->
+# invalid_argument) and, on EVERY invocation, first creates the venv
+# `.workspace-venv` in the runner workspace before resolving requirements.
+# With no resolvable requirements file it returns an EARLY SUCCESS
+# (exit_code 0, diagnostics ["no requirements file found; dependencies
+# skipped"]) — and a constraints_file passed without any requirements file is
+# silently ignored on that same early path (footgun pinned below).
+#
+# KNOWN LATENT BUGS this spec intentionally surfaces (the expectation encodes
+# the handler's own intended contract; the live divergence is the finding):
+#   1. Wrong-filesystem existence checks on the kubernetes workspace backend.
+#      resolvePipInstallArgs (language_tool_handlers.go) validates
+#      requirements_file/constraints_file with exists() = os.Stat on the
+#      RUNTIME pod's local filesystem (repo_tools.go:795), but with
+#      workspaceBackend:kubernetes the workspace lives in the RUNNER pod. An
+#      explicit requirements_file that really exists in the workspace
+#      ("py/requirements.txt") is therefore reported invalid_argument
+#      "requirements_file not found" — python.install_deps can NEVER install an
+#      explicit requirements file on the k8s backend. install_requirements_file
+#      below expects the intended succeeded/pip-install outcome, so on the k8s
+#      backend it records exactly this BUG (a genuine pip/network failure is
+#      recorded as skip via skip_if_error_code, never a false finding).
+#   2. Same wrong-fs check makes the venv-aware executable resolution inert:
+#      resolvePythonExecutable/resolvePytestExecutable stat
+#      .workspace-venv/bin/* on the runtime pod, always miss, and fall back to
+#      the global python3/pytest even right after install_deps created a venv.
+#      Documented only (not encodable from outputs: the global fallback also
+#      exits 0 on this fixture).
+#
+# Empirical toolchain contract encoded below (probed on python 3.13 / pytest;
+# both semantics are longstanding and version-stable):
+#   python3 -m compileall does-not-exist -> prints "Can't list" but EXITS 0
+#     (python.validate silently succeeds on a missing target — footgun pinned)
+#   python3 -m compileall . / py         -> exit 0 (venv site-packages included:
+#     a previously created .workspace-venv is walked too and compiles clean)
+#   pytest -q --maxfail 1 [py]           -> exit 0 (1 passed; pytest's default
+#     norecursedirs '.*' skips .workspace-venv at the root)
+#   pytest -k <no match>                 -> exit 5 -> execution_failed
+#     (ASYMMETRY: go.test exits 0 on a no-match -run pattern)
+#   pytest does-not-exist                -> exit 4 -> execution_failed
+#
+# GOVERNANCE NOTE: no python.* tool declares requires_approval, but all three
+# declare policy path_fields (install_deps: requirements_file+constraints_file;
+# validate/test: target) -> a traversal value is denied policy_denied by the
+# policy layer BEFORE the handler runs. The runtime has no JSON-schema
+# validation layer, so python.test's schema bounds (max_fail 1..20) are NOT
+# enforced on input: the handler silently CLAMPS out-of-range values instead of
+# rejecting them (clamp-not-reject pinned below).
+tools:
+  # ── python.install_deps ── python3 -m venv + pip install -r/-c
+  - tool: python.install_deps
+    cases:
+      - name: install_skipped_no_requirements
+        category: capability
+        # Default use_venv:true; venv is created, then the resolver finds no
+        # root requirements.txt -> early success with the "skipped" diagnostic.
+        args: {}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "", coverage_percent: 0}
+          output_match: {diagnostics.0: "no requirements file found"}
+      - name: install_requirements_file
+        category: capability
+        # INTENDED contract: pip install -r py/requirements.txt inside the venv
+        # -> exit 0. LIVE on the kubernetes backend this records KNOWN BUG #1
+        # (invalid_argument "requirements_file not found" from the wrong-fs
+        # stat). A real pip/network failure is a skip, never a false bug.
+        args: {requirements_file: "py/requirements.txt"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+          skip_if_error_code: [execution_failed]
+      - name: constraints_silently_ignored_without_requirements
+        category: adversarial
+        # constraints_file is only consulted AFTER a requirements file resolves;
+        # with none, the early-success path drops it without a word. Pins the
+        # silent-ignore footgun (a caller asking for constrained installs gets
+        # an unconstrained no-op instead of an error).
+        args: {constraints_file: "py/requirements.txt"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+          output_match: {diagnostics.0: "no requirements file found"}
+      - name: use_venv_false_rejected
+        category: adversarial   # the handler hard-requires venv isolation
+        args: {use_venv: false}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_requirements_file
+        category: adversarial
+        # A requirements_file that exists on NEITHER filesystem is rejected the
+        # same way on every backend -> deterministic invalid_argument.
+        args: {requirements_file: "no-such-file.txt"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: traversal_requirements_file
+        category: governance   # requirements_file is a workspace_relative path_field
+        args: {requirements_file: "../../../../etc/passwd"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: traversal_constraints_file
+        category: governance   # constraints_file is a workspace_relative path_field
+        args: {constraints_file: "../../../../etc/shadow"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: type_mismatch_use_venv
+        category: adversarial   # string where a bool is expected -> unmarshal fails
+        args: {use_venv: "yes"}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ── python.validate ── python3 -m compileall <target|.>
+  - tool: python.validate
+    cases:
+      - name: validate_default_workspace
+        category: capability
+        # target omitted -> compileall "." walks the whole workspace (including
+        # a leftover .workspace-venv, whose site-packages compile clean).
+        args: {}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "", coverage_percent: 0}
+          output_present: [diagnostics]
+      - name: validate_target_py
+        category: capability
+        args: {target: "py"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: missing_target_silently_succeeds
+        category: adversarial
+        # compileall prints "Can't list 'does-not-exist'" but exits 0, so the
+        # tool reports success for a target that was never validated. Pins the
+        # footgun: a typo'd target yields a green "validated" result.
+        args: {target: "does-not-exist"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: traversal_target
+        category: governance   # target is a workspace_relative path_field
+        args: {target: "../../../../etc"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: type_mismatch_target
+        category: adversarial   # number where a string is expected -> invalid_argument
+        args: {target: 123}
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ── python.test ── pytest -q --maxfail <n> [target] [-k pattern]
+  - tool: python.test
+    cases:
+      - name: test_collect_default
+        category: capability
+        # No target -> pytest collects from the root; only py/test_app.py has
+        # tests (.workspace-venv is skipped by the default '.*' norecursedirs,
+        # rust's target/ carries no .py) -> 1 passed, exit 0.
+        args: {}
+        expect:
+          status: succeeded
+          output: {exit_code: 0, compiled_binary_path: "", coverage_percent: 0}
+          output_present: [diagnostics]
+      - name: test_target_py
+        category: capability
+        args: {target: "py"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: test_pattern_filter
+        category: capability   # -k test_add selects the one test -> exit 0
+        args: {target: "py", run_pattern: "test_add"}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: pattern_no_match_exits_5
+        category: adversarial
+        # pytest exits 5 when -k deselects everything -> execution_failed.
+        # Pins the go/pytest ASYMMETRY: go.test reports success on a no-match
+        # -run pattern, python.test reports failure — callers cannot treat the
+        # two "no tests matched" outcomes uniformly.
+        args: {target: "py", run_pattern: "zzz_matches_nothing"}
+        expect: {status: failed, error_code: execution_failed}
+      - name: missing_target_usage_error
+        category: adversarial   # pytest exit 4 (file or directory not found)
+        args: {target: "does-not-exist"}
+        expect: {status: failed, error_code: execution_failed}
+      - name: maxfail_zero_clamped
+        category: adversarial
+        # Schema says minimum:1 but nothing enforces it; the handler clamps
+        # 0 -> 1 and runs. Pins clamp-not-reject for the lower bound.
+        args: {target: "py", max_fail: 0}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: maxfail_overflow_clamped
+        category: adversarial   # 999 -> clamped to 20; pins the upper bound
+        args: {target: "py", max_fail: 999}
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+      - name: run_pattern_oversized
+        category: adversarial
+        # run_pattern is capped at 256 bytes (go.test's cap is 512); 300 chars
+        # must be rejected BEFORE shelling out to pytest.
+        args: {target: "py", run_pattern: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: traversal_target
+        category: governance   # target is a workspace_relative path_field
+        args: {target: "../../../../etc"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: type_mismatch_max_fail
+        category: adversarial   # string where an integer is expected -> invalid_argument
+        args: {max_fail: "three"}
+        expect: {status: failed, error_code: invalid_argument}

@@ -1,0 +1,74 @@
+# Per-tool adversarial spec — shell.* family.
+#
+# One tool: shell.exec — run an arbitrary command via `sh -lc` in the session
+# workspace. High risk + requires_approval; the generic e2e session cannot see it
+# (high risk needs platform_admin / a tool_profile), so the runner records it
+# `gated` and SKIPS these cases. They are authored for a future profile-enabled
+# session. Behavior pinned from internal/adapters/tools/shell_tools.go +
+# catalog_defaults.yaml.
+#
+# GOVERNANCE SURFACE (what actually guards shell.exec):
+#   - requires_approval -> approval_required when approved:false (StaticPolicy).
+#   - cwd is a path_field (workspace_relative) -> traversal denied policy_denied.
+#   - command arg_field: max_length 4096 only. There is NO command allow/deny
+#     list — `rm -rf /`, `curl ...`, etc. are NOT blocked by policy (only by the
+#     approval gate + the caller's role). See the report note; we do not author a
+#     "denied dangerous command" case because the runtime would not deny it (and
+#     running `rm` against the fixture would be destructive).
+#
+# HANDLER CONTRACT:
+#   - empty/whitespace command OR >4096 chars -> invalid_argument (failed).
+#   - a non-zero exit code is NOT a tool error: status stays succeeded and the
+#     real code is surfaced in output.exit_code (only infra failures / timeouts
+#     produce a domain error).
+#   - output: {command, exit_code, stdout}.
+tools:
+  - tool: shell.exec
+    cases:
+      # ---- capability ----
+      - name: exec_echo
+        category: capability
+        args: {command: "echo hello"}
+        approved: true
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+          output_match: {stdout: "hello"}
+      - name: exec_stdin_piped
+        category: capability
+        # stdin is piped into the command; `cat` echoes it back on stdout.
+        args: {command: "cat", stdin: "piped-input"}
+        approved: true
+        expect:
+          status: succeeded
+          output: {exit_code: 0}
+          output_match: {stdout: "piped-input"}
+
+      # ---- adversarial ----
+      - name: missing_command
+        category: adversarial
+        args: {}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: nonzero_exit_not_an_error
+        category: adversarial
+        # A failing command is honest output, not a tool error: succeeded + exit_code.
+        args: {command: "exit 7"}
+        approved: true
+        expect:
+          status: succeeded
+          output: {exit_code: 7}
+
+      # ---- governance ----
+      - name: requires_approval
+        category: governance
+        args: {command: "echo hi"}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      - name: cwd_traversal_denied
+        category: governance
+        # cwd is a workspace-relative path_field — escaping the workspace is denied
+        # by policy before the command ever runs.
+        args: {command: "ls", cwd: "../../../../etc"}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}

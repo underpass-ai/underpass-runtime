@@ -12,6 +12,14 @@
 #   go.mod                (root; the root dir itself has NO .go files)
 #   cmd/app/main.go       (package main; func Add(a,b int) int + main())
 #   cmd/app/main_test.go  (TestAdd; coverage of cmd/app is exactly 50.0%)
+#
+# SHARED-SESSION CAVEAT: the matrix preamble seeds `main.go` (root, package main
+# WITH func main) and `src/main.go` (package main WITHOUT func main — it fails to
+# LINK) on top of the clone; repo.yaml's cases run earlier and depend on them.
+# Every case below that executes `./...` or the default "." target therefore
+# fs.delete's both files in setup to restore the clean-clone state all the
+# empirical claims in this file were verified against (fs.delete of an
+# already-deleted path is a no-op for setup, which ignores step results).
 # Empirically verified against the real toolchain:
 #   go build ./...                       -> exit 0
 #   go build .            (default ".")   -> exit 1 "no Go files in <root>"
@@ -89,6 +97,9 @@ tools:
       - name: build_all_packages
         category: capability
         # `go build ./...` compiles every package; no -o so no binary path reported.
+        setup:
+          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
+          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
         args: {target: "./..."}
         expect:
           status: succeeded
@@ -121,6 +132,9 @@ tools:
         # empty args -> target defaults to "." -> `go build .`; the repo root has no
         # .go files (only cmd/), so go exits 1. Surfaces the default-target footgun
         # (go.test defaults to ./..., go.build defaults to ".").
+        setup:
+          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
+          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
         args: {}
         expect: {status: failed, error_code: execution_failed}
       - name: ldflags_inject_arbitrary_flag
@@ -149,6 +163,9 @@ tools:
     cases:
       - name: test_all_packages
         category: capability
+        setup:
+          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
+          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
         args: {package: "./..."}
         expect:
           status: succeeded
@@ -157,6 +174,9 @@ tools:
       - name: test_with_coverage
         category: capability
         # cmd/app coverage is deterministically 50.0% (Add covered, main not).
+        setup:
+          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
+          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
         args: {package: "./...", coverage: true}
         expect:
           status: succeeded
@@ -171,6 +191,9 @@ tools:
         category: adversarial
         # a non-matching -run filter is NOT an error in go ("[no tests to run]", exit 0);
         # the tool must report succeeded, not invent a failure.
+        setup:
+          - {tool: fs.delete, args: {path: "main.go"}, approved: true}
+          - {tool: fs.delete, args: {path: "src/main.go"}, approved: true}
         args: {package: "./...", run_pattern: "TestNothingMatchesXYZ"}
         expect:
           status: succeeded

@@ -1,0 +1,363 @@
+# Per-tool adversarial spec — redis.* family.
+#
+# Each tool gets capability cases (exercise every input mode), adversarial cases
+# (edge/malformed/conflicting input, designed to surface bugs), and governance
+# cases (must be denied). Matched by spec_runner: status + error_code + output
+# fields/presence; a divergence is a BUG.
+#
+# Environment: the dev.redis connection profile points at the live e2e-redis:6379
+# backend, is READ_ONLY, and allowlists keys with the prefixes "sandbox:" and
+# "dev:" (colon-delimited — unlike the kafka profile's dot prefixes). Because the
+# profile is read_only, every redis.set / redis.del attempt is correctly denied
+# (policy_denied) even when approved; only get/mget/scan/ttl/exists can reach the
+# backend. Reads of nonexistent keys SUCCEED (found:false / found_count:0 /
+# exists_count:0), so capability cases use unique never-written key names and are
+# deterministic. Live reads carry skip_if_error_code:[execution_failed] so a
+# transient backend error is recorded as skip, never a false bug.
+#
+# Behavioural contract learned from internal/adapters/tools/redis_tools.go +
+# connection_tools.go:
+#   - handler-arg validation (key/keys/prefix/value/ttl/encoding) runs BEFORE
+#     profile resolution and BEFORE the read_only guard, so those cases surface
+#     their true invalid_argument code and never need a backend.
+#   - empty/whitespace key -> invalid_argument; keys []/missing/empty-entry/
+#     >200 entries -> invalid_argument (normalizeRedisKeys).
+#   - unknown profile -> not_found; wrong profile kind (e.g. dev.kafka) ->
+#     invalid_argument; missing profile_id -> invalid_argument.
+#   - key outside allowlist -> policy_denied. For set/del the read_only guard
+#     fires BEFORE the key-allowlist check, so on dev.redis both conditions
+#     collapse into the same policy_denied.
+#   - max_bytes/timeout_ms/max_keys/count_hint are clamped, never rejected.
+#
+# KNOWN LATENT BUGS this spec intentionally surfaces (expectation encodes the
+# handler's own intended contract; the live divergence is the finding):
+#   1. redis.ttl unit mismatch — go-redis v9 returns time.Duration(-2) (i.e. -2
+#      NANOSECONDS) for a missing key, but the handler compares against
+#      -2*time.Second (unit fakes in redis_tools_test.go return -2s, masking it).
+#      Live: missing key reports exists:true / status:"expiring" / ttl_seconds:0
+#      instead of exists:false / "missing" / -2 (same for -1 "no_expiry").
+#   2. redis.scan allowlist widening — prefixAllowedByProfile also accepts a
+#      prefix that is a proper prefix of an allowlisted one (HasPrefix(allowed,
+#      prefix)), so prefix "s" is admitted and can enumerate keys OUTSIDE the
+#      allowlist (e.g. "secret:*"), since result filtering only checks the
+#      user-supplied prefix.
+tools:
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: redis.get
+    cases:
+      # capability — reads really execute; a miss is a success with found:false.
+      - name: get_missing_key_sandbox_prefix
+        category: capability
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:matrix:never-written-4f9c"}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.redis", key: "sandbox:e2e:matrix:never-written-4f9c", found: false}
+          skip_if_error_code: [execution_failed]
+      - name: get_missing_key_dev_prefix
+        category: capability   # second allowlisted prefix ("dev:") must resolve too
+        args: {profile_id: "dev.redis", key: "dev:e2e:matrix:never-written-7a21", max_bytes: 4096, timeout_ms: 2000}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.redis", key: "dev:e2e:matrix:never-written-7a21", found: false}
+          skip_if_error_code: [execution_failed]
+      - name: missing_key
+        category: adversarial   # required field absent -> validation, status failed (not denied)
+        args: {profile_id: "dev.redis"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: whitespace_only_key
+        category: adversarial   # key is trimmed before validation -> empty -> rejected
+        args: {profile_id: "dev.redis", key: "   "}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_profile_id
+        category: adversarial
+        args: {key: "sandbox:e2e:x"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: key_wrong_type
+        category: adversarial   # number where string expected -> unmarshal rejects whole args
+        args: {profile_id: "dev.redis", key: 42}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", key: "sandbox:e2e:x"}
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.kafka is a kafka profile, not redis
+        args: {profile_id: "dev.kafka", key: "sandbox:e2e:x"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: key_outside_allowlist
+        category: governance
+        args: {profile_id: "dev.redis", key: "secret:api-token"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: redis.mget
+    cases:
+      - name: mget_mixed_allowlisted_prefixes
+        category: capability   # both allowlisted prefixes in one batch; misses still succeed
+        args: {profile_id: "dev.redis", keys: ["sandbox:e2e:matrix:absent-a", "dev:e2e:matrix:absent-b"]}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.redis", key_count: 2, entries.0.key: "sandbox:e2e:matrix:absent-a"}
+          output_present: [entries, found_count, total_bytes, truncated]
+          skip_if_error_code: [execution_failed]
+      - name: empty_keys_list
+        category: adversarial   # [] fails minItems/normalizeRedisKeys, never dials
+        args: {profile_id: "dev.redis", keys: []}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_keys
+        category: adversarial
+        args: {profile_id: "dev.redis"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: empty_string_entry
+        category: adversarial   # whitespace-only entry inside an otherwise valid batch
+        args: {profile_id: "dev.redis", keys: ["sandbox:e2e:ok", "  "]}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: keys_wrong_type
+        category: adversarial   # string where array expected -> unmarshal rejects
+        args: {profile_id: "dev.redis", keys: "sandbox:e2e:ok"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", keys: ["sandbox:e2e:x"]}
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.mongo is a mongo profile, not redis
+        args: {profile_id: "dev.mongo", keys: ["sandbox:e2e:x"]}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: one_key_outside_allowlist
+        category: governance   # a single stray key must deny the WHOLE batch
+        args: {profile_id: "dev.redis", keys: ["sandbox:e2e:ok", "prod:credentials"]}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: redis.scan
+    cases:
+      - name: scan_sandbox_prefix
+        category: capability
+        args: {profile_id: "dev.redis", prefix: "sandbox:", max_keys: 100}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.redis", prefix: "sandbox:"}
+          output_present: [keys, count, next_cursor, truncated]
+          skip_if_error_code: [execution_failed]
+      - name: scan_bounds_clamped
+        category: capability   # max_keys/count_hint above schema max are clamped to 1000, not rejected
+        args: {profile_id: "dev.redis", prefix: "dev:", max_keys: 99999, count_hint: 99999, timeout_ms: 3000}
+        expect:
+          status: succeeded
+          output: {prefix: "dev:"}
+          output_present: [keys, count, next_cursor]
+          skip_if_error_code: [execution_failed]
+      - name: missing_prefix
+        category: adversarial
+        args: {profile_id: "dev.redis"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: whitespace_only_prefix
+        category: adversarial
+        args: {profile_id: "dev.redis", prefix: "  "}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: negative_cursor
+        category: adversarial   # cursor is uint64; -1 fails unmarshal -> invalid args
+        args: {profile_id: "dev.redis", prefix: "sandbox:", cursor: -1}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: glob_metacharacters_in_prefix
+        category: adversarial   # "[" is a MATCH metachar; redis glob tolerates it, results are re-filtered literally
+        args: {profile_id: "dev.redis", prefix: "sandbox:[a-z", max_keys: 10}
+        expect:
+          status: succeeded
+          output_present: [keys, count]
+          skip_if_error_code: [execution_failed]
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", prefix: "sandbox:"}
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.rabbit is a rabbitmq profile, not redis
+        args: {profile_id: "dev.rabbit", prefix: "sandbox:"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: prefix_outside_allowlist
+        category: governance
+        args: {profile_id: "dev.redis", prefix: "secret:"}
+        expect: {status: denied, error_code: policy_denied}
+      - name: short_prefix_widening_denied
+        category: governance
+        # KNOWN LATENT BUG (#2 in header): prefixAllowedByProfile admits "s"
+        # because it is a proper prefix of "sandbox:", letting scan enumerate
+        # keys outside the allowlist (e.g. "secret:*"). Correct governed
+        # behavior is denial; the live succeeded result is the finding.
+        args: {profile_id: "dev.redis", prefix: "s", max_keys: 10}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: redis.ttl
+    cases:
+      - name: ttl_structural
+        category: capability   # structure-only assertion; deterministic whatever the key state
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:matrix:ttl-probe", timeout_ms: 2000}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.redis", key: "sandbox:e2e:matrix:ttl-probe"}
+          output_present: [exists, status, ttl_seconds]
+          skip_if_error_code: [execution_failed]
+      - name: ttl_missing_key_contract
+        category: adversarial
+        # KNOWN LATENT BUG (#1 in header): the handler's intended contract for a
+        # missing key is exists:false / status:"missing" / ttl_seconds:-2, but
+        # go-redis v9 returns -2 NANOSECONDS (not -2s), so live output is
+        # exists:true / "expiring" / 0. The divergence is the finding.
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:matrix:never-written-ttl-9d3e"}
+        expect:
+          status: succeeded
+          output: {exists: false, status: "missing", ttl_seconds: -2}
+          skip_if_error_code: [execution_failed]
+      - name: missing_key
+        category: adversarial
+        args: {profile_id: "dev.redis"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_profile_id
+        category: adversarial
+        args: {key: "sandbox:e2e:x"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", key: "sandbox:e2e:x"}
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial
+        args: {profile_id: "dev.kafka", key: "sandbox:e2e:x"}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: key_outside_allowlist
+        category: governance
+        args: {profile_id: "dev.redis", key: "prod:session:1"}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: redis.exists
+    cases:
+      - name: exists_two_allowlisted_keys
+        category: capability   # nonexistent keys still succeed (exists_count just stays low)
+        args: {profile_id: "dev.redis", keys: ["sandbox:e2e:matrix:probe-1", "dev:e2e:matrix:probe-2"]}
+        expect:
+          status: succeeded
+          output: {profile_id: "dev.redis", keys_checked: 2}
+          output_present: [exists_count]
+          skip_if_error_code: [execution_failed]
+      - name: empty_keys_list
+        category: adversarial
+        args: {profile_id: "dev.redis", keys: []}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: empty_string_entry
+        category: adversarial
+        args: {profile_id: "dev.redis", keys: ["sandbox:e2e:ok", ""]}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", keys: ["sandbox:e2e:x"]}
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.mongo is a mongo profile, not redis
+        args: {profile_id: "dev.mongo", keys: ["sandbox:e2e:x"]}
+        expect: {status: failed, error_code: invalid_argument}
+      - name: key_outside_allowlist
+        category: governance
+        args: {profile_id: "dev.redis", keys: ["internal:audit:log"]}
+        expect: {status: denied, error_code: policy_denied}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: redis.set
+    cases:
+      # The only writable-shaped path here is a denial: dev.redis is read_only,
+      # so a fully valid + approved set is correctly blocked (policy_denied).
+      # The read_only guard also fires before the key-allowlist check, so an
+      # out-of-allowlist key on this profile yields the same policy_denied.
+      - name: set_blocked_read_only
+        category: governance
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:matrix:write-probe", value: "hello", value_encoding: "utf8", ttl_seconds: 60}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: set_requires_approval
+        category: governance   # requires_approval=true; without approval the gate blocks before the handler
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:matrix:write-probe", value: "hello", ttl_seconds: 60}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      # adversarial — validations that run BEFORE profile resolution and the
+      # read_only guard, so they surface their true error code rather than
+      # being masked by policy_denied.
+      - name: missing_key
+        category: adversarial
+        args: {profile_id: "dev.redis", value: "hello", ttl_seconds: 60}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_value
+        category: adversarial   # value is a *string in the handler; absent (not just empty) is rejected
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:x", ttl_seconds: 60}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_ttl
+        category: adversarial   # ttl_seconds is mandatory (schema minimum 1; handler rejects <=0)
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:x", value: "hello"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: ttl_above_max
+        category: adversarial   # 604800 (7d) is the hard cap; 604801 must be rejected, not clamped
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:x", value: "hello", ttl_seconds: 604801}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: bad_value_encoding
+        category: adversarial   # enum violation (utf8|base64)
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:x", value: "deadbeef", value_encoding: "hex", ttl_seconds: 60}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: invalid_base64_value
+        category: adversarial
+        args: {profile_id: "dev.redis", key: "sandbox:e2e:x", value: "%%not-base64%%", value_encoding: "base64", ttl_seconds: 60}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", key: "sandbox:e2e:x", value: "hello", ttl_seconds: 60}
+        approved: true
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.rabbit is a rabbitmq profile, not redis
+        args: {profile_id: "dev.rabbit", key: "sandbox:e2e:x", value: "hello", ttl_seconds: 60}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - tool: redis.del
+    cases:
+      # As with redis.set: dev.redis is read_only, so a fully valid + approved
+      # delete is correctly blocked, and the read_only guard fires before the
+      # key-allowlist check.
+      - name: del_blocked_read_only
+        category: governance
+        args: {profile_id: "dev.redis", keys: ["sandbox:e2e:matrix:del-probe"]}
+        approved: true
+        expect: {status: denied, error_code: policy_denied}
+      - name: del_requires_approval
+        category: governance
+        args: {profile_id: "dev.redis", keys: ["sandbox:e2e:matrix:del-probe"]}
+        approved: false
+        expect: {status: denied, error_code: approval_required}
+      # adversarial — keys validation runs before the read_only guard.
+      - name: empty_keys_list
+        category: adversarial
+        args: {profile_id: "dev.redis", keys: []}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: missing_keys
+        category: adversarial
+        args: {profile_id: "dev.redis"}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}
+      - name: unknown_profile
+        category: adversarial
+        args: {profile_id: "dev.ghost", keys: ["sandbox:e2e:x"]}
+        approved: true
+        expect: {status: failed, error_code: not_found}
+      - name: wrong_profile_kind
+        category: adversarial   # dev.kafka is a kafka profile, not redis
+        args: {profile_id: "dev.kafka", keys: ["sandbox:e2e:x"]}
+        approved: true
+        expect: {status: failed, error_code: invalid_argument}

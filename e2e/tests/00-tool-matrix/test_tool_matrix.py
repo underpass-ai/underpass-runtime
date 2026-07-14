@@ -330,19 +330,34 @@ class ToolMatrixE2E(WorkspaceE2EBase):
 
 
 def dry_run() -> None:
+    """Print the plan the live run would execute: the authored adversarial spec
+    when one exists (the normal path — specs cover the whole catalog), or the
+    derived governance+happy-path fallback for tools without one."""
     tools = load_catalog(os.getenv("CATALOG_PATH", "internal/adapters/tools/catalog_defaults.yaml"))
+    specs = load_specs()
     total = 0
+    spec_tools = 0
     by_case: dict[str, int] = {}
     by_tier: dict[str, int] = {}
     for tool in tools:
-        cases = plan_cases(tool)
-        total += len(cases)
-        tier = "local" if family(tool["name"]) in WORKSPACE_LOCAL else "external"
+        name = tool["name"]
+        tier = "local" if family(name) in WORKSPACE_LOCAL else "external"
         by_tier[tier] = by_tier.get(tier, 0) + 1
-        for c in cases:
-            by_case[c] = by_case.get(c, 0) + 1
-        print(f"{tool['name']:32s} [{tier:8s}] -> {', '.join(cases)}")
-    print(f"\n{len(tools)} tools, {total} cases")
+        if name in specs:
+            spec_tools += 1
+            cases = specs[name]
+            total += len(cases)
+            for c in cases:
+                cat = c.get("category", "?")
+                by_case[cat] = by_case.get(cat, 0) + 1
+            print(f"{name:32s} [{tier:8s}] -> spec: {len(cases)} cases")
+        else:
+            cases = plan_cases(tool)
+            total += len(cases)
+            for c in cases:
+                by_case[c] = by_case.get(c, 0) + 1
+            print(f"{name:32s} [{tier:8s}] -> derived: {', '.join(cases)}")
+    print(f"\n{len(tools)} tools ({spec_tools} spec'd), {total} cases")
     print(f"  by case: {by_case}")
     print(f"  by tier: {by_tier}")
 
