@@ -80,4 +80,3 @@ func TestPrometheusQueryHandler_ZeroTimeoutReturnsImmediately(t *testing.T) {
 		t.Fatalf("unexpected zero-timeout output: %#v", out)
 	}
 }
-
