@@ -19,9 +19,15 @@ spec:
       labels:
         app: {{ .name }}
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: app
           image: {{ .image }}
+          resources:
+            limits:
+              memory: {{ .memoryLimit | default "256Mi" }}
+            requests:
+              memory: {{ .memoryRequest | default "64Mi" }}
           ports:
             - containerPort: 80
 ---
