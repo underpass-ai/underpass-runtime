@@ -127,14 +127,16 @@ func (h *CIRunPipelineHandler) Invoke(ctx context.Context, session domain.Sessio
 		}
 	}
 
-	return ps.finalize(detected.Name, qualityConfig)
+	return ps.finalize(detected.Name, qualityConfig, request.IncludeQualityGate)
 }
 
 // finalize produces the final pipeline result. The pipelineState knows its own
-// accumulated steps, failures, and quality metrics — SRP.
-func (ps *pipelineState) finalize(projectName string, qualityConfig qualityGateConfig) (app.ToolRunResult, *domain.Error) {
+// accumulated steps, failures, and quality metrics — SRP. The quality gate runs
+// only when includeQualityGate is set: disabling it must not let a threshold
+// fail an otherwise-green pipeline.
+func (ps *pipelineState) finalize(projectName string, qualityConfig qualityGateConfig, includeQualityGate bool) (app.ToolRunResult, *domain.Error) {
 	var qualityGateOutput map[string]any
-	if ps.failedStep == "" {
+	if includeQualityGate && ps.failedStep == "" {
 		qualityGateOutput = runPipelineQualityGateStep(ps, qualityConfig)
 	}
 

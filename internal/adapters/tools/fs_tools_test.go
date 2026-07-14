@@ -140,6 +140,29 @@ func TestFSWriteValidationAndTraversal(t *testing.T) {
 	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("expected content size error, got: %#v", err)
 	}
+
+	// content is required: an omitted content must be rejected, not silently
+	// written as an empty file.
+	_, err = write.Invoke(ctx, session, json.RawMessage(`{"path":"no-content.txt"}`))
+	if err == nil || err.Code != app.ErrorCodeInvalidArgument {
+		t.Fatalf("expected content-required error, got: %#v", err)
+	}
+
+	// but an explicit empty string is a legitimate empty-file write.
+	if _, err = write.Invoke(ctx, session, json.RawMessage(`{"path":"empty.txt","content":""}`)); err != nil {
+		t.Fatalf("expected explicit empty content to succeed, got: %#v", err)
+	}
+}
+
+func TestFSMoveHandler_MissingSourceIsNotFound(t *testing.T) {
+	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
+	_, err := (&FSMoveHandler{}).Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		"source_path":      "does-not-exist.txt",
+		"destination_path": "dst.txt",
+	}))
+	if err == nil || err.Code != app.ErrorCodeNotFound {
+		t.Fatalf("expected not_found for a missing move source, got: %#v", err)
+	}
 }
 
 func TestFSHandlers_KubernetesRuntimeUsesCommandRunner(t *testing.T) {

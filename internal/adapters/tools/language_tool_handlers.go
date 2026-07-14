@@ -373,7 +373,14 @@ func (h *PythonInstallDepsHandler) Invoke(ctx context.Context, session domain.Se
 		return result, toToolError(setupErr, setupResult.Output)
 	}
 
-	installArgs, earlyResult, resolveErr := resolvePipInstallArgs(session.WorkspacePath, request.RequirementsFile, request.ConstraintsFile)
+	fileExists := localFileExists(session.WorkspacePath)
+	if isKubernetesRuntime(session) {
+		// On the kubernetes backend the workspace lives in the RUNNER pod, not on
+		// the runtime pod's filesystem, so a local os.Stat always misses. Check
+		// existence on the runner where the files actually are.
+		fileExists = remoteFileExists(ctx, runner, session)
+	}
+	installArgs, earlyResult, resolveErr := resolvePipInstallArgs(fileExists, request.RequirementsFile, request.ConstraintsFile)
 	if resolveErr != nil {
 		return app.ToolRunResult{}, resolveErr
 	}
@@ -385,9 +392,27 @@ func (h *PythonInstallDepsHandler) Invoke(ctx context.Context, session domain.Se
 	return invokeStructuredToolCommand(ctx, runner, session, structuredToolParams{command: pythonExecutable, args: installArgs, artifactName: artifactPythonInstall})
 }
 
-func resolvePipInstallArgs(workspacePath, requirementsFile, constraintsFile string) ([]string, *app.ToolRunResult, *domain.Error) {
+// localFileExists reports existence on the runtime pod's own filesystem — the
+// correct check only for non-kubernetes backends where the workspace is local.
+func localFileExists(workspacePath string) func(string) bool {
+	return func(rel string) bool {
+		return exists(filepath.Join(workspacePath, filepath.FromSlash(rel)))
+	}
+}
+
+// remoteFileExists reports existence inside the RUNNER pod (kubernetes backend),
+// where the session workspace actually lives, via a `test -f` on the runner.
+func remoteFileExists(ctx context.Context, runner app.CommandRunner, session domain.Session) func(string) bool {
+	return func(rel string) bool {
+		full := filepath.Join(session.WorkspacePath, filepath.FromSlash(rel))
+		result, err := runShellCommand(ctx, runner, session, "test -f "+shellQuote(full)+" && printf yes", nil, 4096)
+		return err == nil && strings.TrimSpace(result.Output) == "yes"
+	}
+}
+
+func resolvePipInstallArgs(fileExists func(string) bool, requirementsFile, constraintsFile string) ([]string, *app.ToolRunResult, *domain.Error) {
 	requirementsPath := strings.TrimSpace(requirementsFile)
-	if requirementsPath == "" && exists(filepath.Join(workspacePath, "requirements.txt")) {
+	if requirementsPath == "" && fileExists("requirements.txt") {
 		requirementsPath = "requirements.txt"
 	}
 	if requirementsPath == "" {
@@ -401,11 +426,11 @@ func resolvePipInstallArgs(workspacePath, requirementsFile, constraintsFile stri
 	if reqErr != nil {
 		return nil, nil, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: reqErr.Error(), Retryable: false}
 	}
-	if !exists(filepath.Join(workspacePath, filepath.FromSlash(requirementsRelative))) {
+	if !fileExists(requirementsRelative) {
 		return nil, nil, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "requirements_file not found", Retryable: false}
 	}
 
-	constraintsRelative, constraintsErr := resolveConstraintsFile(workspacePath, constraintsFile)
+	constraintsRelative, constraintsErr := resolveConstraintsFile(fileExists, constraintsFile)
 	if constraintsErr != nil {
 		return nil, nil, constraintsErr
 	}
@@ -417,7 +442,7 @@ func resolvePipInstallArgs(workspacePath, requirementsFile, constraintsFile stri
 	return installArgs, nil, nil
 }
 
-func resolveConstraintsFile(workspacePath, constraintsFile string) (string, *domain.Error) {
+func resolveConstraintsFile(fileExists func(string) bool, constraintsFile string) (string, *domain.Error) {
 	if strings.TrimSpace(constraintsFile) == "" {
 		return "", nil
 	}
@@ -425,7 +450,7 @@ func resolveConstraintsFile(workspacePath, constraintsFile string) (string, *dom
 	if constraintsErr != nil {
 		return "", &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: constraintsErr.Error(), Retryable: false}
 	}
-	if !exists(filepath.Join(workspacePath, filepath.FromSlash(resolvedConstraints))) {
+	if !fileExists(resolvedConstraints) {
 		return "", &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "constraints_file not found", Retryable: false}
 	}
 	return resolvedConstraints, nil

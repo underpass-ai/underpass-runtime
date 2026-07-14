@@ -57,15 +57,19 @@ func (h *PrometheusQueryHandler) Invoke(_ context.Context, session domain.Sessio
 	queryURL := fmt.Sprintf("%s/api/v1/query?query=%s", strings.TrimRight(prometheusURL, "/"), url.QueryEscape(request.Query))
 	deadline := time.Now().Add(time.Duration(request.TimeoutSeconds) * time.Second)
 
+	var lastQueryErr error
+	queried := false
 	for time.Now().Before(deadline) {
 		value, err := h.queryPrometheus(queryURL)
 		if err != nil {
+			lastQueryErr = err
 			if request.TimeoutSeconds <= 0 {
 				return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: fmt.Sprintf("prometheus query failed: %v", err), Retryable: true}
 			}
-			time.Sleep(5 * time.Second)
+			sleepUntilDeadline(5*time.Second, deadline)
 			continue
 		}
+		queried = true
 
 		thresholdMet := true
 		if request.ExpectedBelow > 0 && value >= request.ExpectedBelow {
@@ -85,13 +89,34 @@ func (h *PrometheusQueryHandler) Invoke(_ context.Context, session domain.Sessio
 		if request.TimeoutSeconds <= 0 {
 			break
 		}
-		time.Sleep(10 * time.Second)
+		sleepUntilDeadline(10*time.Second, deadline)
+	}
+
+	// If not a single query ever succeeded, the endpoint is unreachable or not a
+	// Prometheus API — surface the real error instead of masking it as a benign
+	// threshold timeout (which reads as success with exit_code 1).
+	if !queried && lastQueryErr != nil {
+		return app.ToolRunResult{}, &domain.Error{
+			Code:      app.ErrorCodeExecutionFailed,
+			Message:   fmt.Sprintf("prometheus query failed: %v", lastQueryErr),
+			Retryable: true,
+		}
 	}
 
 	return app.ToolRunResult{
 		Output:   map[string]any{"threshold_met": false, "query": request.Query, "timeout": true},
 		ExitCode: 1,
 	}, nil
+}
+
+// sleepUntilDeadline waits for interval but never past the deadline, so a short
+// timeout budget is not overshot by a long retry backoff.
+func sleepUntilDeadline(interval time.Duration, deadline time.Time) {
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return
+	}
+	time.Sleep(min(interval, remaining))
 }
 
 func (h *PrometheusQueryHandler) queryPrometheus(queryURL string) (float64, error) {

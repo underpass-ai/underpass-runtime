@@ -448,14 +448,20 @@ func (h *RedisTTLHandler) Invoke(ctx context.Context, session domain.Session, ar
 		}
 	}
 
+	// go-redis v9 returns the TTL sentinels as RAW NANOSECONDS —
+	// time.Duration(-2) for a missing key and time.Duration(-1) for a key with
+	// no expiry — while a real TTL is scaled to seconds. Match both the raw
+	// nanosecond sentinels and the -N*time.Second form (defensive; also what the
+	// test fakes emit) so a missing key is never misreported as expiring.
 	status := "expiring"
 	exists := true
 	seconds := int64(ttl.Seconds())
-	if ttl == -2*time.Second || err == redis.Nil {
+	switch {
+	case err == redis.Nil || ttl == -2*time.Second || ttl == time.Duration(-2):
 		status = "missing"
 		exists = false
 		seconds = -2
-	} else if ttl == -1*time.Second {
+	case ttl == -1*time.Second || ttl == time.Duration(-1):
 		status = "no_expiry"
 		seconds = -1
 	}

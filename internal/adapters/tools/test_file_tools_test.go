@@ -32,6 +32,11 @@ func TestRepoTestFileHandler_Validation(t *testing.T) {
 func TestRepoTestFileHandler_GoTest(t *testing.T) {
 	runner := &fakeShellRunner{
 		run: func(_ context.Context, _ domain.Session, spec app.CommandSpec) (app.CommandResult, error) {
+			// Must run via a NON-login shell so the container's toolchain PATH
+			// survives (a login shell resets PATH via /etc/profile → go/cargo 127).
+			if spec.Command != "sh" || len(spec.Args) < 1 || spec.Args[0] != "-c" {
+				t.Fatalf("expected `sh -c`, got %s %v", spec.Command, spec.Args)
+			}
 			return app.CommandResult{ExitCode: 0, Output: "ok\tmy/pkg\t0.5s\n"}, nil
 		},
 	}

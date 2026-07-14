@@ -241,6 +241,40 @@ func TestRepoFindReferencesHandler_ExcludesDeclarations(t *testing.T) {
 	}
 }
 
+func TestRepoFindReferencesHandler_HonorsLegacyMaxResultsAlias(t *testing.T) {
+	runner := &fakeRepoAnalysisRunner{
+		result: app.CommandResult{
+			Output: strings.Join([]string{
+				"/workspace/repo/pkg/a.go:5:func Add() {}",
+				"/workspace/repo/pkg/b.go:9:Add()",
+				"/workspace/repo/pkg/c.go:9:Add()",
+				"/workspace/repo/pkg/d.go:9:Add()",
+			}, "\n"),
+			ExitCode: 0,
+		},
+	}
+	handler := NewRepoFindReferencesHandler(runner)
+	session := domain.Session{WorkspacePath: testWorkspaceRepoPath, AllowedPaths: []string{"."}}
+
+	// Only the legacy alias is provided (no max_references): it must cap the
+	// result set at 1 and report truncation, not be silently ignored.
+	result, err := handler.Invoke(
+		context.Background(),
+		session,
+		json.RawMessage(`{"symbol":"Add","max_results":1}`),
+	)
+	if err != nil {
+		t.Fatalf(testUnexpectedErrorGoFmt, err)
+	}
+	parsed := result.Output.(map[string]any)
+	if parsed["references_count"] != 1 {
+		t.Fatalf("expected references_count=1 from max_results alias, got %#v", parsed["references_count"])
+	}
+	if parsed["truncated"] != true {
+		t.Fatalf("expected truncated=true, got %#v", parsed["truncated"])
+	}
+}
+
 func TestRepoAnalysisHandlerNames(t *testing.T) {
 	if NewRepoTestFailuresSummaryHandler(nil).Name() != "repo.test_failures_summary" {
 		t.Fatal("unexpected repo.test_failures_summary name")

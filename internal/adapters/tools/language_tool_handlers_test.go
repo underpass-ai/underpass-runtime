@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/underpass-ai/underpass-runtime/internal/app"
@@ -373,6 +374,54 @@ func TestPythonInstallDepsHandler_ValidationAndInstallPaths(t *testing.T) {
 	}
 }
 
+func TestPythonInstallDepsHandler_KubernetesBackendChecksRunnerFilesystem(t *testing.T) {
+	// On the kubernetes backend the workspace lives in the runner pod, so the
+	// requirements existence check must probe the RUNNER (via `test -f`), not the
+	// runtime pod's local fs — otherwise a real requirements_file is rejected.
+	session := domain.Session{
+		WorkspacePath: "/workspace/repo",
+		AllowedPaths:  []string{"."},
+		Runtime:       domain.RuntimeRef{Kind: domain.RuntimeKindKubernetes},
+	}
+	probed := false
+	runner := &fakeLanguageCommandRunner{
+		run: func(_ int, spec app.CommandSpec) (app.CommandResult, error) {
+			if spec.Command == "sh" && len(spec.Args) >= 2 && strings.Contains(spec.Args[1], "test -f") {
+				if !strings.Contains(spec.Args[1], "py/requirements.txt") {
+					t.Fatalf("unexpected existence probe: %q", spec.Args[1])
+				}
+				probed = true
+				return app.CommandResult{ExitCode: 0, Output: "yes"}, nil
+			}
+			return app.CommandResult{ExitCode: 0, Output: "ok"}, nil
+		},
+	}
+	handler := NewPythonInstallDepsHandler(runner)
+
+	_, err := handler.Invoke(context.Background(), session, mustLanguageJSON(t, map[string]any{
+		"requirements_file": "py/requirements.txt",
+	}))
+	if err != nil {
+		t.Fatalf("expected k8s install to resolve the runner-side requirements file, got %#v", err)
+	}
+	if !probed {
+		t.Fatal("expected a runner-side `test -f` existence probe")
+	}
+	pipInstalled := false
+	for _, c := range runner.calls {
+		if strings.Contains(c.Command, "python") {
+			for _, a := range c.Args {
+				if a == "py/requirements.txt" {
+					pipInstalled = true
+				}
+			}
+		}
+	}
+	if !pipInstalled {
+		t.Fatalf("expected pip install -r py/requirements.txt, calls=%#v", runner.calls)
+	}
+}
+
 func TestPythonTestHandler_InvalidPattern(t *testing.T) {
 	handler := NewPythonTestHandler(&fakeLanguageCommandRunner{})
 	session := domain.Session{WorkspacePath: t.TempDir(), AllowedPaths: []string{"."}}
@@ -408,7 +457,7 @@ func TestResolvePythonExecutablesFromVenv(t *testing.T) {
 
 func TestResolveConstraintsFile(t *testing.T) {
 	t.Run("empty_string", func(t *testing.T) {
-		result, err := resolveConstraintsFile(t.TempDir(), "")
+		result, err := resolveConstraintsFile(localFileExists(t.TempDir()), "")
 		if err != nil {
 			t.Fatalf(testUnexpectedErrorFmt, err)
 		}
@@ -417,7 +466,7 @@ func TestResolveConstraintsFile(t *testing.T) {
 		}
 	})
 	t.Run("whitespace_only", func(t *testing.T) {
-		result, err := resolveConstraintsFile(t.TempDir(), "   ")
+		result, err := resolveConstraintsFile(localFileExists(t.TempDir()), "   ")
 		if err != nil {
 			t.Fatalf(testUnexpectedErrorFmt, err)
 		}
@@ -431,7 +480,7 @@ func TestResolveConstraintsFile(t *testing.T) {
 		if writeErr := os.WriteFile(constraintsPath, []byte("pytest>=8\n"), 0o644); writeErr != nil {
 			t.Fatalf("write constraints.txt: %v", writeErr)
 		}
-		result, err := resolveConstraintsFile(root, "constraints.txt")
+		result, err := resolveConstraintsFile(localFileExists(root), "constraints.txt")
 		if err != nil {
 			t.Fatalf(testUnexpectedErrorFmt, err)
 		}
@@ -440,7 +489,7 @@ func TestResolveConstraintsFile(t *testing.T) {
 		}
 	})
 	t.Run("file_not_found", func(t *testing.T) {
-		_, err := resolveConstraintsFile(t.TempDir(), "missing.txt")
+		_, err := resolveConstraintsFile(localFileExists(t.TempDir()), "missing.txt")
 		if err == nil {
 			t.Fatal("expected error for missing file")
 		}
@@ -449,7 +498,7 @@ func TestResolveConstraintsFile(t *testing.T) {
 		}
 	})
 	t.Run("path_traversal", func(t *testing.T) {
-		_, err := resolveConstraintsFile(t.TempDir(), "../../../etc/passwd")
+		_, err := resolveConstraintsFile(localFileExists(t.TempDir()), "../../../etc/passwd")
 		if err == nil {
 			t.Fatal("expected error for path traversal")
 		}
