@@ -861,7 +861,13 @@ func prefixAllowedByProfile(prefix string, profile connectionProfile) bool {
 		return false
 	}
 	for _, allowed := range prefixes {
-		if allowed == "*" || strings.HasPrefix(prefix, allowed) || strings.HasPrefix(allowed, prefix) {
+		// A scan prefix is only admissible when it is at least as specific as an
+		// allowlisted prefix, i.e. it STARTS WITH an allowed prefix. Admitting a
+		// prefix that is merely a parent of an allowed one (HasPrefix(allowed,
+		// prefix)) widens the scan: a profile scoped to "sandbox:" would then let
+		// prefix "s" enumerate every "s*" key — including "secret:*" — because the
+		// result filter (appendScanBatch) only re-checks the user-supplied prefix.
+		if allowed == "*" || strings.HasPrefix(prefix, allowed) {
 			return true
 		}
 	}

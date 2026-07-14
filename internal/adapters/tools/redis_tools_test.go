@@ -151,6 +151,27 @@ func TestRedisScanHandler_Success(t *testing.T) {
 	}
 }
 
+func TestRedisScanHandler_DeniesShortWideningPrefix(t *testing.T) {
+	// A prefix that is merely a parent of an allowlisted one ("s" for "sandbox:")
+	// must be denied: admitting it would let the scan enumerate every "s*" key,
+	// including keys outside the profile allowlist ("secret:*").
+	handler := NewRedisScanHandler(&fakeRedisClient{
+		scan: func(endpoint string, cursor uint64, match string, count int64) ([]string, uint64, error) {
+			t.Fatalf("scan must not run for a widening prefix (match=%s)", match)
+			return nil, 0, nil
+		},
+	})
+	session := domain.Session{Metadata: map[string]string{}}
+
+	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.redis","prefix":"s"}`))
+	if err == nil {
+		t.Fatal("expected redis.scan to deny a widening prefix")
+	}
+	if err.Code != app.ErrorCodePolicyDenied {
+		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
+	}
+}
+
 func TestRedisExistsHandler_MapsExecutionErrors(t *testing.T) {
 	handler := NewRedisExistsHandler(&fakeRedisClient{
 		exists: func(endpoint string, keys []string) (int64, error) {

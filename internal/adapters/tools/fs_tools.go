@@ -1325,6 +1325,13 @@ func (h *FSPatchHandler) Invoke(ctx context.Context, session domain.Session, arg
 
 	changedPaths, err := extractPatchPaths(request.UnifiedDiff)
 	if err != nil {
+		if errors.Is(err, errUnsafePatchPath) {
+			return app.ToolRunResult{}, &domain.Error{
+				Code:      app.ErrorCodePolicyDenied,
+				Message:   "patch touches paths outside allowed_paths",
+				Retryable: false,
+			}
+		}
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeInvalidArgument, Message: "invalid unified diff", Retryable: false}
 	}
 	for _, changedPath := range changedPaths {
@@ -1749,6 +1756,11 @@ func copyFileWithMode(source, destination string, mode os.FileMode) error {
 	return out.Close()
 }
 
+// errUnsafePatchPath marks a diff whose target path escapes the workspace
+// (traversal or absolute). The caller maps it to policy_denied, distinguishing
+// a governance violation from a merely malformed diff.
+var errUnsafePatchPath = errors.New("unsafe patch path")
+
 func extractPatchPaths(unifiedDiff string) ([]string, error) {
 	lines := strings.Split(unifiedDiff, "\n")
 	paths := []string{}
@@ -1765,8 +1777,14 @@ func extractPatchPaths(unifiedDiff string) ([]string, error) {
 		path = strings.TrimPrefix(path, "a/")
 		path = strings.TrimPrefix(path, "b/")
 		cleaned := filepath.Clean(path)
-		if cleaned == "." || strings.HasPrefix(cleaned, "..") || filepath.IsAbs(cleaned) {
-			return nil, fmt.Errorf("unsafe patch path: %s", path)
+		// A path that escapes the workspace (traversal or absolute) is a policy
+		// violation, not a malformed diff — surface it distinctly so the caller
+		// can deny it with policy_denied, consistent with every other fs tool.
+		if strings.HasPrefix(cleaned, "..") || filepath.IsAbs(cleaned) {
+			return nil, fmt.Errorf("%w: %s", errUnsafePatchPath, path)
+		}
+		if cleaned == "." {
+			return nil, fmt.Errorf("invalid patch path: %s", path)
 		}
 		if !seen[cleaned] {
 			paths = append(paths, cleaned)

@@ -552,6 +552,21 @@ func TestFSPatchHandler_ValidationAndExecution(t *testing.T) {
 	if err == nil || err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("expected patch path policy denial, got %#v", err)
 	}
+
+	// A traversal path in the diff is a governance violation, not a malformed
+	// diff: it must be denied with policy_denied, not invalid_argument.
+	_, err = handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeyUnifiedDiff: strings.Join([]string{
+			"diff --git a/../../../../etc/cron.d/evil b/../../../../etc/cron.d/evil",
+			"--- a/../../../../etc/cron.d/evil",
+			"+++ b/../../../../etc/cron.d/evil",
+			testFSDiffHunkHeader,
+			"+pwned",
+		}, "\n"),
+	}))
+	if err == nil || err.Code != app.ErrorCodePolicyDenied {
+		t.Fatalf("expected traversal patch to be policy denied, got %#v", err)
+	}
 }
 
 func TestFSPatchHandler_UsesRunnerAndStrategy(t *testing.T) {
