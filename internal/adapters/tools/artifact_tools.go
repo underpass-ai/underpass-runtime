@@ -340,7 +340,7 @@ func collectFlatArtifactEntries(workspacePath, resolved, pattern string, maxEntr
 func collectRecursiveArtifactEntries(entries *[]artifactListEntry, workspacePath, resolved, pattern string, maxEntries int) {
 	_ = filepath.Walk(resolved, func(path string, walkInfo os.FileInfo, walkErr error) error {
 		if walkErr != nil {
-			return nil
+			return nil //nolint:nilerr // skip unreadable entries and continue walking
 		}
 		if len(*entries) >= maxEntries {
 			return filepath.SkipDir

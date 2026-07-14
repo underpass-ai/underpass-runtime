@@ -43,8 +43,9 @@ type Catalog struct {
 
 func NewCatalog(capabilities []domain.Capability) *Catalog {
 	indexed := make(map[string]domain.Capability, len(capabilities))
-	for _, capability := range capabilities {
-		indexed[capability.Name] = capability
+	for i := range capabilities {
+		capability := &capabilities[i]
+		indexed[capability.Name] = *capability
 	}
 	return &Catalog{entries: indexed}
 }
@@ -56,8 +57,8 @@ func (c *Catalog) Get(name string) (domain.Capability, bool) {
 
 func (c *Catalog) List() []domain.Capability {
 	out := make([]domain.Capability, 0, len(c.entries))
-	for _, capability := range c.entries {
-		out = append(out, capability)
+	for name := range c.entries {
+		out = append(out, c.entries[name])
 	}
 	return out
 }

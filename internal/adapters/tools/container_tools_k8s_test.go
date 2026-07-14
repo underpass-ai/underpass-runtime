@@ -329,11 +329,15 @@ func TestNewContainerLogsHandlerWithKubernetes(t *testing.T) {
 	if h == nil {
 		t.Fatal("expected non-nil handler")
 	}
-	if h.defaultNamespace != "test-ns" {
-		t.Fatalf("expected defaultNamespace='test-ns', got %q", h.defaultNamespace)
-	}
 	if h.k8sOps == nil {
 		t.Fatal("expected k8s ops to be set")
+	}
+	adapter, ok := h.k8sOps.(*containerK8sAdapter)
+	if !ok {
+		t.Fatal("expected *containerK8sAdapter k8s ops")
+	}
+	if adapter.defaultNamespace != "test-ns" {
+		t.Fatalf("expected defaultNamespace='test-ns', got %q", adapter.defaultNamespace)
 	}
 }
 

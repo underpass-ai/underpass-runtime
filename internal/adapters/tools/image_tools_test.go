@@ -495,6 +495,7 @@ func TestImagePushHandler_StrictFailsWithoutBuilder(t *testing.T) {
 	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"image_ref":"ghcr.io/acme/demo:latest","strict":true}`))
 	if err == nil {
 		t.Fatalf("expected strict image.push to fail without builder")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("expected execution_failed code, got %s", err.Code)

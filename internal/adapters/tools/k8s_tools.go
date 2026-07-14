@@ -120,10 +120,12 @@ func (h *K8sGetPodsHandler) Invoke(ctx context.Context, session domain.Session, 
 	items, truncated := truncatePods(list.Items, maxPods)
 
 	pods := make([]map[string]any, 0, len(items))
-	for _, pod := range items {
+	for i := range items {
+		pod := &items[i]
 		restartCount := int32(0)
 		readyContainers := 0
-		for _, status := range pod.Status.ContainerStatuses {
+		for j := range pod.Status.ContainerStatuses {
+			status := &pod.Status.ContainerStatuses[j]
 			restartCount += status.RestartCount
 			if status.Ready {
 				readyContainers++
@@ -147,7 +149,7 @@ func (h *K8sGetPodsHandler) Invoke(ctx context.Context, session domain.Session, 
 			entry["labels"] = mapStringMap(pod.Labels)
 		}
 		if request.IncludeContainers {
-			entry["containers"] = buildPodContainerOutput(pod)
+			entry["containers"] = buildPodContainerOutput(*pod)
 		}
 		pods = append(pods, entry)
 	}
@@ -205,8 +207,9 @@ func (h *K8sGetServicesHandler) Invoke(ctx context.Context, session domain.Sessi
 	items, truncated := truncateServices(list.Items, maxServices)
 
 	services := make([]map[string]any, 0, len(items))
-	for _, service := range items {
-		entry := buildServiceEntry(service, request.IncludeLabels)
+	for i := range items {
+		service := &items[i]
+		entry := buildServiceEntry(*service, request.IncludeLabels)
 		services = append(services, entry)
 	}
 
@@ -319,7 +322,8 @@ func (h *K8sGetDeploymentsHandler) Invoke(ctx context.Context, session domain.Se
 	items, truncated := truncateDeployments(list.Items, maxDeployments)
 
 	deployments := make([]map[string]any, 0, len(items))
-	for _, deployment := range items {
+	for i := range items {
+		deployment := &items[i]
 		entry := map[string]any{
 			"name":                 deployment.Name,
 			"namespace":            deployment.Namespace,
@@ -336,7 +340,7 @@ func (h *K8sGetDeploymentsHandler) Invoke(ctx context.Context, session domain.Se
 			entry["labels"] = mapStringMap(deployment.Labels)
 		}
 		if request.IncludeContainers {
-			entry["containers"] = buildDeploymentContainerOutput(deployment)
+			entry["containers"] = buildDeploymentContainerOutput(*deployment)
 		}
 		deployments = append(deployments, entry)
 	}
@@ -437,11 +441,14 @@ type k8sImageUsage struct {
 
 func buildImageIndex(pods []corev1.Pod) map[string]*k8sImageUsage {
 	index := map[string]*k8sImageUsage{}
-	for _, pod := range pods {
-		for _, container := range pod.Spec.InitContainers {
+	for i := range pods {
+		pod := &pods[i]
+		for j := range pod.Spec.InitContainers {
+			container := &pod.Spec.InitContainers[j]
 			indexImageUsage(index, pod.Name, container.Name, container.Image)
 		}
-		for _, container := range pod.Spec.Containers {
+		for j := range pod.Spec.Containers {
+			container := &pod.Spec.Containers[j]
 			indexImageUsage(index, pod.Name, container.Name, container.Image)
 		}
 	}
@@ -545,10 +552,7 @@ func (h *K8sGetLogsHandler) Invoke(ctx context.Context, session domain.Session, 
 		}
 	}
 
-	truncated := false
-	if len(rawLogs) > maxBytes {
-		truncated = true
-	}
+	truncated := len(rawLogs) > maxBytes
 	trimmed := truncate(rawLogs, maxBytes)
 	logText := string(trimmed)
 	lineCount := 0
@@ -683,15 +687,17 @@ func k8sResult(output map[string]any, artifactName string) app.ToolRunResult {
 func buildPodContainerOutput(pod corev1.Pod) []map[string]any {
 	containerNames := make([]string, 0, len(pod.Spec.Containers))
 	containerImages := make(map[string]string, len(pod.Spec.Containers))
-	for _, container := range pod.Spec.Containers {
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
 		containerNames = append(containerNames, container.Name)
 		containerImages[container.Name] = container.Image
 	}
 	sort.Strings(containerNames)
 
 	statusByContainer := make(map[string]corev1.ContainerStatus, len(pod.Status.ContainerStatuses))
-	for _, status := range pod.Status.ContainerStatuses {
-		statusByContainer[status.Name] = status
+	for i := range pod.Status.ContainerStatuses {
+		status := &pod.Status.ContainerStatuses[i]
+		statusByContainer[status.Name] = *status
 	}
 
 	out := make([]map[string]any, 0, len(containerNames))
@@ -729,7 +735,8 @@ func buildPodContainerOutput(pod corev1.Pod) []map[string]any {
 
 func buildDeploymentContainerOutput(deployment appsv1.Deployment) []map[string]any {
 	out := make([]map[string]any, 0, len(deployment.Spec.Template.Spec.Containers))
-	for _, container := range deployment.Spec.Template.Spec.Containers {
+	for i := range deployment.Spec.Template.Spec.Containers {
+		container := &deployment.Spec.Template.Spec.Containers[i]
 		out = append(out, map[string]any{
 			"name":  container.Name,
 			"image": container.Image,

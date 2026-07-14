@@ -233,7 +233,7 @@ func TestCheckTokensAgainstAllowed_AllBranches(t *testing.T) {
 	}
 
 	// token not found, unknown=true
-	status, reason = checkTokensAgainstAllowed([]string{"GPL"}, map[string]struct{}{"MIT": {}}, true)
+	status, _ = checkTokensAgainstAllowed([]string{"GPL"}, map[string]struct{}{"MIT": {}}, true)
 	if status != testLicenseUnknown {
 		t.Fatalf("expected unknown, got %q", status)
 	}

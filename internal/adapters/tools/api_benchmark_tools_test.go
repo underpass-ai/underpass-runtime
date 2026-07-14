@@ -151,6 +151,7 @@ func TestAPIBenchmarkHandler_DeniesRouteOutsideProfileScopes(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected route policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("unexpected error code: %s", err.Code)
@@ -171,6 +172,7 @@ func TestAPIBenchmarkHandler_DeniesReadOnlyUnsafeMethod(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected read_only policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("unexpected error code: %s", err.Code)
@@ -190,6 +192,7 @@ func TestAPIBenchmarkHandler_RejectsConstraintsViolation(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected constraints violation")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("unexpected error code: %s", err.Code)
@@ -217,6 +220,7 @@ func TestAPIBenchmarkHandler_ExecutionError(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected execution error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("unexpected error code: %s", err.Code)
@@ -302,6 +306,7 @@ func TestNormalizeArrivalRateLoad_RPSTooLow(t *testing.T) {
 	_, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, 0, 0)
 	if err == nil {
 		t.Fatal("expected error for rps < 1")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
@@ -312,6 +317,7 @@ func TestNormalizeArrivalRateLoad_RPSTooHigh(t *testing.T) {
 	_, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, benchmarkMaxRPS+1, 0)
 	if err == nil {
 		t.Fatal("expected error for rps > max")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
@@ -325,6 +331,7 @@ func TestNormalizeArrivalRateLoad_VUSTooHigh(t *testing.T) {
 	_, err := normalizeArrivalRateLoad(testModeArrivalRate, 5000, 10, benchmarkMaxVUs+1)
 	if err == nil {
 		t.Fatal("expected error for vus > max")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
@@ -1144,6 +1151,7 @@ func TestResolveBenchmarkMethod(t *testing.T) {
 		_, err := resolveBenchmarkMethod("POST", connectionProfile{ReadOnly: true})
 		if err == nil {
 			t.Fatal("expected error for read_only POST")
+			return
 		}
 		if err.Code != app.ErrorCodePolicyDenied {
 			t.Fatalf("expected policy_denied, got %s", err.Code)

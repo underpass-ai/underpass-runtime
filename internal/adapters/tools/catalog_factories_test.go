@@ -165,7 +165,8 @@ func requireLangOutputSchema(t *testing.T, cap domain.Capability, name string) {
 // TestDefaultCapabilities_ShellDenyChars verifies that shared deny char lists
 // are correctly expanded from YAML anchors into relevant policies.
 func TestDefaultCapabilities_ShellDenyChars(t *testing.T) {
-	expectedDeny := []string{";", "|", "&", "`", "$(", ">", "<", "\n", "\r"}
+	expectedDeny := make([]string, 0, 10)
+	expectedDeny = append(expectedDeny, ";", "|", "&", "`", "$(", ">", "<", "\n", "\r")
 	capabilities := DefaultCapabilities()
 	capMap := make(map[string]domain.Capability)
 	for _, c := range capabilities {

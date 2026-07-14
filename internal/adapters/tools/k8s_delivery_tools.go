@@ -764,7 +764,7 @@ func waitForDeploymentRollout(
 	pollInterval time.Duration,
 ) (map[string]any, *domain.Error) {
 	deadline := time.Now().Add(timeout)
-	lastSnapshot := map[string]any{}
+	var lastSnapshot map[string]any
 
 	for {
 		deployment, err := client.AppsV1().Deployments(namespace).Get(ctx, deploymentName, metav1.GetOptions{})

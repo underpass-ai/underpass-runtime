@@ -110,6 +110,7 @@ func TestContainerRunHandler_StrictNoRuntimeFails(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"image_ref":"busybox:1.36","strict":true}`))
 	if err == nil {
 		t.Fatal("expected strict runtime failure")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testContainerFmtExecFailed, err.Code)
@@ -166,6 +167,7 @@ func TestContainerExecHandler_DeniesDisallowedCommand(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), domain.Session{}, json.RawMessage(`{"container_id":"sim-123456","command":["rm","-rf","/"]}`))
 	if err == nil {
 		t.Fatal("expected command denial")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
@@ -218,6 +220,7 @@ func TestContainerPSHandler_StrictByDefaultEnvFailsWithoutRuntime(t *testing.T) 
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"limit":25}`))
 	if err == nil {
 		t.Fatal("expected strict-by-default runtime failure")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testContainerFmtExecFailed, err.Code)
@@ -230,6 +233,7 @@ func TestContainerPSHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testing.
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"limit":25,"strict":false}`))
 	if err == nil {
 		t.Fatal("expected runtime failure when synthetic fallback disabled")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testContainerFmtExecFailed, err.Code)
@@ -242,6 +246,7 @@ func TestContainerLogsHandler_SyntheticFallbackDisabledEnvForcesStrict(t *testin
 	_, err := handler.Invoke(context.Background(), domain.Session{WorkspacePath: t.TempDir()}, json.RawMessage(`{"container_id":"sim-123456","strict":false}`))
 	if err == nil {
 		t.Fatal("expected runtime failure when synthetic fallback disabled")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testContainerFmtExecFailed, err.Code)
@@ -253,6 +258,7 @@ func TestContainerExecHandler_DeniesShellCommands(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), domain.Session{}, json.RawMessage(`{"container_id":"sim-123456","command":["sh","-c","echo hello"]}`))
 	if err == nil {
 		t.Fatal("expected shell command denial")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)

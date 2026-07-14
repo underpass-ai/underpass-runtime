@@ -8,11 +8,6 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
-type capabilityFamily struct {
-	Name  string
-	Tools []domain.Capability
-}
-
 // DefaultCapabilitiesMarkdown renders a deterministic markdown snapshot from DefaultCapabilities.
 func DefaultCapabilitiesMarkdown() string {
 	return CapabilitiesMarkdown(DefaultCapabilities())
@@ -21,21 +16,20 @@ func DefaultCapabilitiesMarkdown() string {
 // CapabilitiesMarkdown renders a deterministic markdown snapshot from capabilities.
 func CapabilitiesMarkdown(capabilities []domain.Capability) string {
 	cloned := make([]domain.Capability, 0, len(capabilities))
-	for _, capability := range capabilities {
-		cloned = append(cloned, capability)
-	}
+	cloned = append(cloned, capabilities...)
 	sort.Slice(cloned, func(i, j int) bool {
 		return cloned[i].Name < cloned[j].Name
 	})
 
 	families := map[string][]domain.Capability{}
 	order := make([]string, 0)
-	for _, capability := range cloned {
+	for i := range cloned {
+		capability := &cloned[i]
 		family := capabilityFamilyName(capability.Name)
 		if _, found := families[family]; !found {
 			order = append(order, family)
 		}
-		families[family] = append(families[family], capability)
+		families[family] = append(families[family], *capability)
 	}
 	sort.Strings(order)
 
@@ -43,27 +37,27 @@ func CapabilitiesMarkdown(capabilities []domain.Capability) string {
 	builder.WriteString("# Workspace Capability Catalog\n\n")
 	builder.WriteString("This file is generated from `internal/adapters/tools/DefaultCapabilities()`.\n")
 	builder.WriteString("Do not edit manually. Regenerate with `make catalog-docs`.\n\n")
-	builder.WriteString(fmt.Sprintf("- Total capabilities: `%d`\n", len(cloned)))
-	builder.WriteString(fmt.Sprintf("- Families: `%d`\n\n", len(order)))
+	fmt.Fprintf(&builder, "- Total capabilities: `%d`\n", len(cloned))
+	fmt.Fprintf(&builder, "- Families: `%d`\n\n", len(order))
 
 	for _, familyName := range order {
-		builder.WriteString(fmt.Sprintf("## %s\n\n", familyName))
+		fmt.Fprintf(&builder, "## %s\n\n", familyName)
 		builder.WriteString("| Tool | Scope | Risk | Approval | Side Effects | Idempotency |\n")
 		builder.WriteString("| --- | --- | --- | --- | --- | --- |\n")
-		for _, capability := range families[familyName] {
+		familyCaps := families[familyName]
+		for i := range familyCaps {
+			capability := &familyCaps[i]
 			approval := "no"
 			if capability.RequiresApproval {
 				approval = "yes"
 			}
-			builder.WriteString(fmt.Sprintf(
-				"| `%s` | `%s` | `%s` | `%s` | `%s` | `%s` |\n",
+			fmt.Fprintf(&builder, "| `%s` | `%s` | `%s` | `%s` | `%s` | `%s` |\n",
 				capability.Name,
 				capability.Scope,
 				capability.RiskLevel,
 				approval,
 				capability.SideEffects,
-				capability.Idempotency,
-			))
+				capability.Idempotency)
 		}
 		builder.WriteString("\n")
 	}

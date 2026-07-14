@@ -76,7 +76,8 @@ func loadCatalog(data []byte) ([]domain.Capability, error) {
 	}
 
 	caps := make([]domain.Capability, 0, len(cat.Capabilities))
-	for i, yc := range cat.Capabilities {
+	for i := range cat.Capabilities {
+		yc := &cat.Capabilities[i]
 		if yc.Name == "" {
 			return nil, fmt.Errorf("catalog_defaults.yaml[%d]: missing name", i)
 		}

@@ -332,6 +332,7 @@ func TestDetectProjectTypeOrError_NonErrNotExist(t *testing.T) {
 	_, domErr := detectProjectTypeOrError(context.Background(), runner, session, "no toolchain")
 	if domErr == nil {
 		t.Fatal("expected domain error")
+		return
 	}
 	if domErr.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("expected ErrorCodeExecutionFailed, got %s", domErr.Code)
@@ -359,6 +360,7 @@ func TestDetectProjectTypeOrError_ErrNotExist(t *testing.T) {
 	_, domErr := detectProjectTypeOrError(context.Background(), runner, session, "no toolchain found")
 	if domErr == nil {
 		t.Fatal("expected domain error for unknown project type")
+		return
 	}
 	if domErr.Message != "no toolchain found" {
 		t.Fatalf("expected notFoundMsg, got %q", domErr.Message)

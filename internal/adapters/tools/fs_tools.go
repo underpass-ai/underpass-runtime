@@ -206,14 +206,15 @@ func (h *FSListHandler) invokeLocal(session domain.Session, request struct {
 		})
 	}
 
-	if !stat.IsDir() {
+	switch {
+	case !stat.IsDir():
 		appendEntry(resolved, stat)
-	} else if request.Recursive {
+	case request.Recursive:
 		isFull := func() bool { return len(entries) >= request.MaxEntries }
 		if walkErr := fsListWalkRecursive(resolved, isFull, appendEntry); walkErr != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: walkErr.Error(), Retryable: false}
 		}
-	} else {
+	default:
 		isFull := func() bool { return len(entries) >= request.MaxEntries }
 		if readErr := fsListReadFlat(resolved, isFull, appendEntry); readErr != nil {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: readErr.Error(), Retryable: false}
@@ -755,8 +756,8 @@ func (h *FSMoveHandler) invokeLocal(p fsMoveParams) (app.ToolRunResult, *domain.
 		if !p.overwrite {
 			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: "destination already exists", Retryable: false}
 		}
-		if err := os.RemoveAll(p.dstResolved); err != nil {
-			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: err.Error(), Retryable: false}
+		if rmErr := os.RemoveAll(p.dstResolved); rmErr != nil {
+			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: rmErr.Error(), Retryable: false}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeExecutionFailed, Message: err.Error(), Retryable: false}
@@ -1565,7 +1566,7 @@ func fsSearchScanFile(path, workspacePath string, re *regexp.Regexp) []fsSearchM
 	if openErr != nil {
 		return nil
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	buffer := make([]byte, 0, 64*1024)
@@ -1775,10 +1776,10 @@ func copyFileWithMode(source, destination string, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
-	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
-		return err
+	if mkErr := os.MkdirAll(filepath.Dir(destination), 0o755); mkErr != nil {
+		return mkErr
 	}
 	out, err := os.OpenFile(destination, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode.Perm())
 	if err != nil {

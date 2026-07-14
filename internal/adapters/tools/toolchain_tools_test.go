@@ -112,6 +112,7 @@ func TestGoBuildRejectsUnsupportedLdflags(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected invalid argument error for unsupported ldflags")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf(testExpectedInvalidArgCodeGoFmt, err)
@@ -178,6 +179,7 @@ func TestPythonInstallDepsRejectsUseVenvFalse(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"use_venv":false}`))
 	if err == nil {
 		t.Fatal("expected invalid argument for use_venv=false")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf(testExpectedInvalidArgCodeGoFmt, err)
@@ -196,6 +198,7 @@ func TestCBuildRejectsInvalidStandard(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"standard":"gnu17"}`))
 	if err == nil {
 		t.Fatal("expected invalid argument for unsupported standard")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf(testExpectedInvalidArgCodeGoFmt, err)

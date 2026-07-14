@@ -880,7 +880,7 @@ func imageInspectResult(report imageInspectReport, rawOutput string, command []s
 		summary = "dockerfile inspect completed"
 	}
 	if issuesCount > 0 {
-		summary = summary + " with issues"
+		summary += " with issues"
 	}
 
 	output := map[string]any{

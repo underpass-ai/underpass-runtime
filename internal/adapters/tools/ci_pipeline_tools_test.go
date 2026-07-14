@@ -64,6 +64,7 @@ func TestCIRunPipelineHandler_FailFast(t *testing.T) {
 	}))
 	if err == nil {
 		t.Fatal("expected ci.run_pipeline to fail")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("unexpected error code: %s", err.Code)
@@ -114,6 +115,7 @@ func TestCIRunPipelineHandler_QualityGateFailure(t *testing.T) {
 	}))
 	if err == nil {
 		t.Fatal("expected ci.run_pipeline quality gate error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("unexpected error code: %s", err.Code)
@@ -522,6 +524,7 @@ func TestCIRunPipelineHandler_BuildCommandResolutionError(t *testing.T) {
 	// Should fail because validate or build can't resolve a C source file.
 	if err == nil {
 		t.Fatal("expected error for C project without source files")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("expected ErrorCodeExecutionFailed, got %s", err.Code)

@@ -80,7 +80,8 @@ func combineOutput(stdout, stderr []byte) []byte {
 }
 
 func buildShellCommand(cwd, command string, args []string) string {
-	parts := []string{"exec", shellQuote(command)}
+	parts := make([]string, 0, 2+len(args))
+	parts = append(parts, "exec", shellQuote(command))
 	for _, arg := range args {
 		parts = append(parts, shellQuote(arg))
 	}

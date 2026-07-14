@@ -397,7 +397,8 @@ func parseTrivyFindings(output, threshold string, maxFindings int) ([]map[string
 }
 
 func appendTrivyResultFindings(findings []map[string]any, result trivyResult, target, threshold string) []map[string]any {
-	for _, vulnerability := range result.Vulnerabilities {
+	for i := range result.Vulnerabilities {
+		vulnerability := &result.Vulnerabilities[i]
 		severity := normalizeFindingSeverity(vulnerability.Severity)
 		if !severityAtOrAbove(severity, threshold) {
 			continue
@@ -417,7 +418,8 @@ func appendTrivyResultFindings(findings []map[string]any, result trivyResult, ta
 		})
 	}
 
-	for _, misconfiguration := range result.Misconfigurations {
+	for i := range result.Misconfigurations {
+		misconfiguration := &result.Misconfigurations[i]
 		severity := normalizeFindingSeverity(misconfiguration.Severity)
 		if !severityAtOrAbove(severity, threshold) {
 			continue
@@ -582,7 +584,7 @@ func countSecurityFindingsBySeverity(findings []map[string]any) map[string]int {
 	}
 	for _, finding := range findings {
 		severity := normalizeFindingSeverity(asString(finding["severity"]))
-		counts[severity] = counts[severity] + 1
+		counts[severity]++
 	}
 	return counts
 }

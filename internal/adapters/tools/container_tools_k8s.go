@@ -543,32 +543,32 @@ func firstTerminatedContainerStatus(status corev1.PodStatus) (corev1.ContainerSt
 
 func NewContainerPSHandlerWithKubernetes(runner app.CommandRunner, client kubernetes.Interface, namespace string) *ContainerPSHandler {
 	return &ContainerPSHandler{
-		runner:           runner,
-		k8sOps:           &containerK8sAdapter{client: client, defaultNamespace: strings.TrimSpace(namespace), runner: runner},
-		defaultNamespace: strings.TrimSpace(namespace),
+		runner: runner,
+		k8sOps: &containerK8sAdapter{client: client, defaultNamespace: strings.TrimSpace(namespace), runner: runner},
 	}
 }
 
 func NewContainerLogsHandlerWithKubernetes(runner app.CommandRunner, client kubernetes.Interface, namespace string) *ContainerLogsHandler {
 	return &ContainerLogsHandler{
-		runner:           runner,
-		k8sOps:           &containerK8sAdapter{client: client, defaultNamespace: strings.TrimSpace(namespace), runner: runner},
-		defaultNamespace: strings.TrimSpace(namespace),
+		runner: runner,
+		k8sOps: &containerK8sAdapter{client: client, defaultNamespace: strings.TrimSpace(namespace), runner: runner},
 	}
 }
 
 func NewContainerRunHandlerWithKubernetes(runner app.CommandRunner, client kubernetes.Interface, namespace string) *ContainerRunHandler {
 	return &ContainerRunHandler{
-		runner:           runner,
-		k8sOps:           &containerK8sAdapter{client: client, defaultNamespace: strings.TrimSpace(namespace), runner: runner},
-		defaultNamespace: strings.TrimSpace(namespace),
+		runner: runner,
+		k8sOps: &containerK8sAdapter{client: client, defaultNamespace: strings.TrimSpace(namespace), runner: runner},
 	}
 }
 
 func NewContainerExecHandlerWithKubernetes(runner app.CommandRunner, client kubernetes.Interface, namespace string) *ContainerExecHandler {
 	return &ContainerExecHandler{
-		runner:           runner,
-		k8sOps:           &containerK8sAdapter{client: client, defaultNamespace: strings.TrimSpace(namespace), runner: runner},
-		defaultNamespace: strings.TrimSpace(namespace),
+		runner: runner,
+		k8sOps: &containerK8sAdapter{client: client, defaultNamespace: strings.TrimSpace(namespace), runner: runner},
 	}
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

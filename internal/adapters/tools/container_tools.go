@@ -36,15 +36,15 @@ type k8sRunParams struct {
 }
 
 const (
-	containerPSDefaultLimit       = 50
-	containerPSMaxLimit           = 500
-	containerMaxOutputBytes       = 2 * 1024 * 1024
-	containerDefaultTailLines     = 200
-	containerMaxTailLines         = 10000
-	containerDefaultMaxLogBytes   = 256 * 1024
-	containerDefaultTimeoutSec    = 30
-	containerMaxTimeoutSec        = 600
-	containerDefaultMaxExecBytes  = 512 * 1024
+	containerPSDefaultLimit      = 50
+	containerPSMaxLimit          = 500
+	containerMaxOutputBytes      = 2 * 1024 * 1024
+	containerDefaultTailLines    = 200
+	containerMaxTailLines        = 10000
+	containerDefaultMaxLogBytes  = 256 * 1024
+	containerDefaultTimeoutSec   = 30
+	containerMaxTimeoutSec       = 600
+	containerDefaultMaxExecBytes = 512 * 1024
 	containerMaxRunCommandArgs   = 32
 	containerMaxExecCommandArgs  = 16
 	containerMaxCommandArgLength = 256
@@ -148,31 +148,27 @@ type containerDockerOps interface {
 }
 
 type ContainerPSHandler struct {
-	runner           app.CommandRunner
-	k8sOps           containerK8sOps
-	dockerOps        containerDockerOps
-	defaultNamespace string
+	runner    app.CommandRunner
+	k8sOps    containerK8sOps
+	dockerOps containerDockerOps
 }
 
 type ContainerLogsHandler struct {
-	runner           app.CommandRunner
-	k8sOps           containerK8sOps
-	dockerOps        containerDockerOps
-	defaultNamespace string
+	runner    app.CommandRunner
+	k8sOps    containerK8sOps
+	dockerOps containerDockerOps
 }
 
 type ContainerRunHandler struct {
-	runner           app.CommandRunner
-	k8sOps           containerK8sOps
-	dockerOps        containerDockerOps
-	defaultNamespace string
+	runner    app.CommandRunner
+	k8sOps    containerK8sOps
+	dockerOps containerDockerOps
 }
 
 type ContainerExecHandler struct {
-	runner           app.CommandRunner
-	k8sOps           containerK8sOps
-	dockerOps        containerDockerOps
-	defaultNamespace string
+	runner    app.CommandRunner
+	k8sOps    containerK8sOps
+	dockerOps containerDockerOps
 }
 
 func NewContainerPSHandler(runner app.CommandRunner) *ContainerPSHandler {
@@ -842,7 +838,8 @@ func buildContainerLogsCommand(runtime string, containerID string, tailLines int
 }
 
 func buildContainerExecCommand(runtime string, containerID string, command []string) []string {
-	out := []string{runtime, "exec", containerID}
+	out := make([]string, 0, 3+len(command))
+	out = append(out, runtime, "exec", containerID)
 	out = append(out, command...)
 	return out
 }
@@ -1123,10 +1120,6 @@ func shouldFallbackToContainerSimulation(output string) bool {
 		}
 	}
 	return false
-}
-
-func boolPtr(value bool) *bool {
-	return &value
 }
 
 func sanitizeContainerLabelValue(raw string) string {

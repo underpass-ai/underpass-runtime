@@ -60,7 +60,7 @@ func (h *RepoCoverageReportHandler) Invoke(ctx context.Context, session domain.S
 
 	coverageSupported := detected.Name == sweEcosystemGo
 	coveragePercent := 0.0
-	command := []string{}
+	var command []string
 	output := ""
 	exitCode := 0
 

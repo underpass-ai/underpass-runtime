@@ -760,7 +760,7 @@ func (c *liveRedisClient) Get(ctx context.Context, endpoint, key string) (string
 	if err != nil {
 		return "", err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	return client.Get(ctx, key).Result()
 }
 
@@ -769,7 +769,7 @@ func (c *liveRedisClient) MGet(ctx context.Context, endpoint string, keys []stri
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	return client.MGet(ctx, keys...).Result()
 }
 
@@ -778,7 +778,7 @@ func (c *liveRedisClient) Scan(ctx context.Context, endpoint string, cursor uint
 	if err != nil {
 		return nil, 0, err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	return client.Scan(ctx, cursor, match, count).Result()
 }
 
@@ -787,7 +787,7 @@ func (c *liveRedisClient) TTL(ctx context.Context, endpoint, key string) (time.D
 	if err != nil {
 		return 0, err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	return client.TTL(ctx, key).Result()
 }
 
@@ -796,7 +796,7 @@ func (c *liveRedisClient) Exists(ctx context.Context, endpoint string, keys []st
 	if err != nil {
 		return 0, err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	return client.Exists(ctx, keys...).Result()
 }
 
@@ -805,7 +805,7 @@ func (c *liveRedisClient) Set(ctx context.Context, endpoint, key string, value [
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	return client.Set(ctx, key, value, ttl).Err()
 }
 
@@ -814,7 +814,7 @@ func (c *liveRedisClient) Del(ctx context.Context, endpoint string, keys []strin
 	if err != nil {
 		return 0, err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	return client.Del(ctx, keys...).Result()
 }
 

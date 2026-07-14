@@ -231,8 +231,7 @@ func staticAnalysisCommandForProject(workspacePath string, detected projectType,
 func packageCommandForProject(workspacePath string, detected projectType, target string) (string, []string, string, bool, error) {
 	switch detected.Name {
 	case sweEcosystemGo:
-		args := []string{"build", "-o", sweWorkspaceDist + "/app"}
-		args = append(args, targetOrDefault(target, "."))
+		args := []string{"build", "-o", sweWorkspaceDist + "/app", targetOrDefault(target, ".")}
 		return "go", args, sweWorkspaceDist + "/app", true, nil
 	case sweEcosystemRust:
 		args := []string{"build", "--release"}

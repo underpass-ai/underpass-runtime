@@ -96,6 +96,7 @@ func TestNATSRequestHandler_DeniesSubjectOutsideProfileScope(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.nats","subject":"prod.secret"}`))
 	if err == nil {
 		t.Fatal("expected policy error")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -138,6 +139,7 @@ func TestNATSPublishHandler_DeniesReadOnlyProfile(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.nats","subject":"sandbox.events","payload":"hello","timeout_ms":500}`))
 	if err == nil {
 		t.Fatal("expected read_only policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -157,6 +159,7 @@ func TestNATSPublishHandler_ExecutionError(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), writableNATSSession(), json.RawMessage(`{"profile_id":"dev.nats","subject":"sandbox.events","payload":"hello","timeout_ms":500}`))
 	if err == nil {
 		t.Fatal("expected execution error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -204,6 +207,7 @@ func TestNATSSubscribePullHandler_ExecutionError(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.nats","subject":"sandbox.jobs"}`))
 	if err == nil {
 		t.Fatal("expected execution error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)

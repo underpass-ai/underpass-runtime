@@ -33,8 +33,8 @@ func TestDetectTestCommand(t *testing.T) {
 	}
 
 	rootPy := t.TempDir()
-	if err := os.WriteFile(filepath.Join(rootPy, "pyproject.toml"), []byte("[project]\nname='x'\n"), 0o644); err != nil {
-		t.Fatalf("write pyproject failed: %v", err)
+	if writeErr := os.WriteFile(filepath.Join(rootPy, "pyproject.toml"), []byte("[project]\nname='x'\n"), 0o644); writeErr != nil {
+		t.Fatalf("write pyproject failed: %v", writeErr)
 	}
 	cmd, args, err = detectTestCommand(rootPy, "tests/unit", []string{"-k", "abc"})
 	if err != nil {
@@ -45,8 +45,8 @@ func TestDetectTestCommand(t *testing.T) {
 	}
 
 	rootNpm := t.TempDir()
-	if err := os.WriteFile(filepath.Join(rootNpm, "package.json"), []byte("{}"), 0o644); err != nil {
-		t.Fatalf("write package failed: %v", err)
+	if writeErr := os.WriteFile(filepath.Join(rootNpm, "package.json"), []byte("{}"), 0o644); writeErr != nil {
+		t.Fatalf("write package failed: %v", writeErr)
 	}
 	cmd, args, err = detectTestCommand(rootNpm, "--grep demo", nil)
 	if err != nil {
@@ -164,8 +164,8 @@ func TestDetectBuildCommand_RustAndC(t *testing.T) {
 	}
 
 	rootC := t.TempDir()
-	if err := os.WriteFile(filepath.Join(rootC, "main.c"), []byte("int main(){return 0;}"), 0o644); err != nil {
-		t.Fatalf("write main.c failed: %v", err)
+	if writeErr := os.WriteFile(filepath.Join(rootC, "main.c"), []byte("int main(){return 0;}"), 0o644); writeErr != nil {
+		t.Fatalf("write main.c failed: %v", writeErr)
 	}
 	cmd, args, err = detectBuildCommand(rootC, "", nil)
 	if err != nil {
@@ -233,6 +233,7 @@ func TestRepoBuildInvoke_DeniesDisallowedExtraArgs(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"extra_args":["-exec=cat"]}`))
 	if err == nil {
 		t.Fatal("expected invalid argument error")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("unexpected error code: %s", err.Code)
