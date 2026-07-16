@@ -287,6 +287,47 @@ func TestGitHubCheckPRStatusHandler_Failed(t *testing.T) {
 	}
 }
 
+func TestGitHubCheckPRStatusHandler_ContextCancelled(t *testing.T) {
+	cases := []struct {
+		name string
+		run  func(ctx context.Context, session domain.Session, spec app.CommandSpec) (app.CommandResult, error)
+	}{
+		{
+			name: "runner error",
+			run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+				return app.CommandResult{}, fmt.Errorf("gh unavailable")
+			},
+		},
+		{
+			name: "invalid json output",
+			run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+				return app.CommandResult{Output: "{not json", ExitCode: 0}, nil
+			},
+		},
+		{
+			name: "checks still pending",
+			run: func(_ context.Context, _ domain.Session, _ app.CommandSpec) (app.CommandResult, error) {
+				return app.CommandResult{Output: `[{"name":"Lint","state":"IN_PROGRESS"}]`, ExitCode: 0}, nil
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := NewGitHubCheckPRStatusHandler(&fakeGHRunner{run: tc.run})
+			session := domain.Session{WorkspacePath: t.TempDir()}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			_, err := handler.Invoke(ctx, session, ghJSON(t, map[string]any{
+				"branch": "feat/x", "timeout_seconds": 30,
+			}))
+			if err == nil || err.Code != app.ErrorCodeTimeout {
+				t.Fatalf("expected timeout error on canceled context, got %#v", err)
+			}
+		})
+	}
+}
+
 func TestGitHubHandlerNames(t *testing.T) {
 	runner := &fakeGHRunner{}
 	tests := []struct {

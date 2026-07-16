@@ -368,3 +368,53 @@ func TestK8sGetLogsHandler_RequiresPodName(t *testing.T) {
 		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
 	}
 }
+
+func TestK8sGetImagesHandler_IncludesInitContainers(t *testing.T) {
+	client := k8sfake.NewSimpleClientset(
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "pod-init", Namespace: testK8sNsSandbox},
+			Spec: corev1.PodSpec{
+				InitContainers: []corev1.Container{
+					{Name: "migrate", Image: "ghcr.io/acme/migrate:1"},
+				},
+				Containers: []corev1.Container{
+					{Name: "api", Image: testK8sImageAPI1},
+				},
+			},
+		},
+	)
+	handler := NewK8sGetImagesHandler(client, testK8sNsDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox"}`))
+	if err != nil {
+		t.Fatalf("unexpected k8s.get_images error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["count"] != 2 {
+		t.Fatalf("expected init container image to be indexed, got count=%#v", output["count"])
+	}
+}
+
+func TestK8sGetLogsHandler_ReturnsLogs(t *testing.T) {
+	client := k8sfake.NewSimpleClientset(
+		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "api-pod", Namespace: testK8sNsSandbox}},
+	)
+	handler := NewK8sGetLogsHandler(client, testK8sNsDefault)
+	session := domain.Session{Principal: domain.Principal{Roles: []string{testK8sRoleDevops}}}
+
+	result, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"namespace":"sandbox","pod_name":"api-pod","tail_lines":50}`))
+	if err != nil {
+		t.Fatalf("unexpected k8s.get_logs error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output["pod_name"] != "api-pod" {
+		t.Fatalf("expected pod_name=api-pod, got %#v", output["pod_name"])
+	}
+	if output["truncated"] != false {
+		t.Fatalf("expected truncated=false for fake logs, got %#v", output["truncated"])
+	}
+	if output["logs"] == "" {
+		t.Fatal("expected non-empty logs from fake client")
+	}
+}

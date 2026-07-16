@@ -336,3 +336,14 @@ func TestCollectFlatArtifactEntries_NonExistentDirectory(t *testing.T) {
 		t.Fatalf("expected execution_failed, got %s", err.Code)
 	}
 }
+
+func TestCollectRecursiveArtifactEntries_WalkErrorIsSkipped(t *testing.T) {
+	workspace := t.TempDir()
+	nonExistent := filepath.Join(workspace, "does-not-exist")
+
+	entries := make([]artifactListEntry, 0, 4)
+	collectRecursiveArtifactEntries(&entries, workspace, nonExistent, "", 10)
+	if len(entries) != 0 {
+		t.Fatalf("expected no entries when walk root is unreadable, got %d", len(entries))
+	}
+}

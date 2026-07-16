@@ -1,10 +1,15 @@
 package tools
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -397,5 +402,123 @@ func TestResolveProfileEndpoint_AllowlistAllowsWildcardAndCIDR(t *testing.T) {
 	redisEndpoint := resolveProfileEndpoint(map[string]string{}, "dev.redis")
 	if redisEndpoint == "" {
 		t.Fatal("expected cidr rule to allow redis endpoint")
+	}
+}
+
+// startFakeNATSServer runs a minimal in-process NATS server speaking just
+// enough of the wire protocol for liveNATSClient: INFO on connect, PONG for
+// PING, request echo for PUB with a reply subject, and one canned message
+// delivered on every non-inbox SUB.
+func startFakeNATSServer(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen failed: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	go func() {
+		for {
+			conn, acceptErr := listener.Accept()
+			if acceptErr != nil {
+				return
+			}
+			go serveFakeNATSConn(conn)
+		}
+	}()
+	return "nats://" + listener.Addr().String()
+}
+
+func serveFakeNATSConn(conn net.Conn) {
+	defer func() { _ = conn.Close() }()
+	if _, err := fmt.Fprintf(conn, "INFO {\"server_id\":\"fake\",\"version\":\"2.10.0\",\"proto\":1,\"max_payload\":1048576}\r\n"); err != nil {
+		return
+	}
+
+	reader := bufio.NewReader(conn)
+	subs := map[string]string{}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		switch strings.ToUpper(fields[0]) {
+		case "PING":
+			_, _ = conn.Write([]byte("PONG\r\n"))
+		case "SUB": // SUB <subject> <sid>
+			if len(fields) < 3 {
+				continue
+			}
+			subs[fields[1]] = fields[2]
+			if !strings.HasPrefix(fields[1], "_INBOX.") {
+				_, _ = fmt.Fprintf(conn, "MSG %s %s 5\r\nhello\r\n", fields[1], fields[2])
+			}
+		case "PUB": // PUB <subject> [reply] <bytes>
+			payload, ok := readFakeNATSPayload(reader, fields)
+			if !ok {
+				return
+			}
+			if len(fields) != 4 {
+				continue
+			}
+			reply := fields[2]
+			if sid, found := matchFakeNATSSub(subs, reply); found {
+				_, _ = fmt.Fprintf(conn, "MSG %s %s %d\r\n%s\r\n", reply, sid, len(payload), payload)
+			}
+		}
+	}
+}
+
+func readFakeNATSPayload(reader *bufio.Reader, fields []string) ([]byte, bool) {
+	size := 0
+	if _, err := fmt.Sscanf(fields[len(fields)-1], "%d", &size); err != nil || size < 0 {
+		return nil, false
+	}
+	buf := make([]byte, size+2) // payload + trailing CRLF
+	if _, err := io.ReadFull(reader, buf); err != nil {
+		return nil, false
+	}
+	return buf[:size], true
+}
+
+func matchFakeNATSSub(subs map[string]string, subject string) (string, bool) {
+	for pattern, sid := range subs {
+		if pattern == subject {
+			return sid, true
+		}
+		if prefix, wildcard := strings.CutSuffix(pattern, ".*"); wildcard && strings.HasPrefix(subject, prefix+".") {
+			return sid, true
+		}
+	}
+	return "", false
+}
+
+func TestLiveNATSClient_AgainstFakeServer(t *testing.T) {
+	serverURL := startFakeNATSServer(t)
+	client := &liveNATSClient{}
+	ctx := context.Background()
+
+	reply, err := client.Request(ctx, serverURL, testNATSSubjectEcho, []byte("ping-me"), time.Second)
+	if err != nil {
+		t.Fatalf("live request failed: %v", err)
+	}
+	if string(reply) != "ping-me" {
+		t.Fatalf("expected echoed request payload, got %q", string(reply))
+	}
+
+	if pubErr := client.Publish(ctx, serverURL, testNATSSubjectEcho, []byte("event"), time.Second); pubErr != nil {
+		t.Fatalf("live publish failed: %v", pubErr)
+	}
+
+	messages, err := client.SubscribePull(ctx, serverURL, testNATSSubjectEcho, time.Second, 1)
+	if err != nil {
+		t.Fatalf("live subscribe failed: %v", err)
+	}
+	if len(messages) != 1 || string(messages[0].Data) != "hello" {
+		t.Fatalf("expected one delivered message, got %#v", messages)
 	}
 }

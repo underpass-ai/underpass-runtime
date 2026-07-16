@@ -540,3 +540,34 @@ func TestRedisHelpers_ProfileResolutionAndValueCoercion(t *testing.T) {
 		t.Fatal("unexpected redis numeric coercion")
 	}
 }
+
+func TestLiveRedisClientMethods_UnreachableEndpoint(t *testing.T) {
+	client := &liveRedisClient{}
+	// Port 1 is never bound; go-redis dials lazily, so each call opens the
+	// client, registers cleanup, and surfaces the dial error from the command.
+	endpoint := "127.0.0.1:1"
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	if _, err := client.Get(ctx, endpoint, "k"); err == nil {
+		t.Fatal("expected get dial error")
+	}
+	if _, err := client.MGet(ctx, endpoint, []string{"k"}); err == nil {
+		t.Fatal("expected mget dial error")
+	}
+	if _, _, err := client.Scan(ctx, endpoint, 0, "sandbox:*", 10); err == nil {
+		t.Fatal("expected scan dial error")
+	}
+	if _, err := client.TTL(ctx, endpoint, "k"); err == nil {
+		t.Fatal("expected ttl dial error")
+	}
+	if _, err := client.Exists(ctx, endpoint, []string{"k"}); err == nil {
+		t.Fatal("expected exists dial error")
+	}
+	if client.Set(ctx, endpoint, "k", []byte("v"), time.Second) == nil {
+		t.Fatal("expected set dial error")
+	}
+	if _, err := client.Del(ctx, endpoint, []string{"k"}); err == nil {
+		t.Fatal("expected del dial error")
+	}
+}

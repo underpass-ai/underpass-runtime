@@ -896,3 +896,92 @@ func mustJSON(t *testing.T, payload any) json.RawMessage {
 	}
 	return data
 }
+
+func TestFSMoveHandler_OverwriteRemoveFailure(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("permission-based failure injection does not work as root")
+	}
+	root := t.TempDir()
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+
+	if err := os.WriteFile(filepath.Join(root, "src.txt"), []byte("new"), 0o644); err != nil {
+		t.Fatalf("write src failed: %v", err)
+	}
+	lockedDir := filepath.Join(root, "locked")
+	if err := os.MkdirAll(lockedDir, 0o755); err != nil {
+		t.Fatalf("mkdir locked failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lockedDir, "dst.txt"), []byte("old"), 0o644); err != nil {
+		t.Fatalf("write dst failed: %v", err)
+	}
+	if err := os.Chmod(lockedDir, 0o555); err != nil {
+		t.Fatalf("chmod locked failed: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(lockedDir, 0o755) })
+
+	_, err := NewFSMoveHandler(nil).Invoke(context.Background(), session, mustJSON(t, map[string]any{
+		testFSKeySrcPath:   "src.txt",
+		testFSKeyDstPath:   "locked/dst.txt",
+		testFSKeyOverwrite: true,
+	}))
+	if err == nil || err.Code != app.ErrorCodeExecutionFailed {
+		t.Fatalf("expected execution_failed when destination cannot be removed, got %#v", err)
+	}
+}
+
+func TestCopyFileWithMode_MkdirFailure(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "src.txt")
+	if err := os.WriteFile(source, []byte("data"), 0o644); err != nil {
+		t.Fatalf("write src failed: %v", err)
+	}
+	blocker := filepath.Join(root, "blocker")
+	if err := os.WriteFile(blocker, []byte("file, not dir"), 0o644); err != nil {
+		t.Fatalf("write blocker failed: %v", err)
+	}
+
+	destination := filepath.Join(blocker, "sub", "out.txt")
+	if err := copyFileWithMode(source, destination, 0o644); err == nil {
+		t.Fatal("expected mkdir failure when parent path is a regular file")
+	}
+}
+
+func TestFSListHandler_FlatListingAndSingleFile(t *testing.T) {
+	root := t.TempDir()
+	session := domain.Session{WorkspacePath: root, AllowedPaths: []string{"."}}
+	handler := &FSListHandler{}
+
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("a"), 0o644); err != nil {
+		t.Fatalf("write a.txt failed: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "nested"), 0o755); err != nil {
+		t.Fatalf("mkdir nested failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "nested", "b.txt"), []byte("b"), 0o644); err != nil {
+		t.Fatalf("write b.txt failed: %v", err)
+	}
+
+	// Non-recursive listing must not descend into nested directories.
+	result, err := handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{testFSKeyPath: "."}))
+	if err != nil {
+		t.Fatalf("unexpected fs.list error: %#v", err)
+	}
+	output := result.Output.(map[string]any)
+	if output[testFSKeyCount] != 2 {
+		t.Fatalf("expected 2 flat entries, got %#v", output[testFSKeyCount])
+	}
+
+	// Listing a file path returns just that file.
+	result, err = handler.Invoke(context.Background(), session, mustJSON(t, map[string]any{testFSKeyPath: "a.txt"}))
+	if err != nil {
+		t.Fatalf("unexpected fs.list file error: %#v", err)
+	}
+	output = result.Output.(map[string]any)
+	if output[testFSKeyCount] != 1 {
+		t.Fatalf("expected single file entry, got %#v", output[testFSKeyCount])
+	}
+	entries := output["entries"].([]fsListEntry)
+	if entries[0].Path != "a.txt" || entries[0].Type != "file" {
+		t.Fatalf("unexpected single-file entry: %#v", entries[0])
+	}
+}
