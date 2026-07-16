@@ -494,7 +494,7 @@ func (c *liveKafkaClient) Consume(ctx context.Context, req kafkaConsumeRequest) 
 		MinBytes:  1,
 		MaxBytes:  1 << 20,
 	})
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	setOffsetCtx, cancelSetOffset := context.WithTimeout(ctx, req.Timeout)
 	defer cancelSetOffset()
@@ -553,7 +553,7 @@ func (c *liveKafkaClient) Produce(ctx context.Context, req kafkaProduceRequest) 
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if req.Timeout > 0 {
 		_ = conn.SetWriteDeadline(time.Now().Add(req.Timeout))
 	}
@@ -570,7 +570,7 @@ func (c *liveKafkaClient) TopicMetadata(ctx context.Context, req kafkaTopicMetad
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	partitions, err := conn.ReadPartitions(req.Topic)
 	if err != nil {
@@ -578,7 +578,8 @@ func (c *liveKafkaClient) TopicMetadata(ctx context.Context, req kafkaTopicMetad
 	}
 
 	out := make([]kafkaTopicPartitionMetadata, 0, len(partitions))
-	for _, partition := range partitions {
+	for i := range partitions {
+		partition := &partitions[i]
 		if partition.Topic != req.Topic {
 			continue
 		}
@@ -764,18 +765,18 @@ func parseKafkaOffsetInput(rawOffset any) (legacyMode string, absoluteOffset *in
 		default:
 			parsed, parseErr := strconv.ParseInt(value, 10, 64)
 			if parseErr != nil || parsed < 0 {
-				return "", nil, true, fmt.Errorf(errKafkaOffsetInvalid)
+				return "", nil, true, errors.New(errKafkaOffsetInvalid)
 			}
 			return "", &parsed, true, nil
 		}
 	case float64:
 		if math.IsNaN(typed) || math.IsInf(typed, 0) || typed < 0 || math.Trunc(typed) != typed || typed > float64(math.MaxInt64) {
-			return "", nil, true, fmt.Errorf(errKafkaOffsetInvalid)
+			return "", nil, true, errors.New(errKafkaOffsetInvalid)
 		}
 		parsed := int64(typed)
 		return "", &parsed, true, nil
 	default:
-		return "", nil, true, fmt.Errorf(errKafkaOffsetInvalid)
+		return "", nil, true, errors.New(errKafkaOffsetInvalid)
 	}
 }
 

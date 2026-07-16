@@ -400,7 +400,8 @@ func buildCommandForProject(workspacePath string, detected projectType, target s
 		if sourceErr != nil {
 			return "", nil, sourceErr
 		}
-		args := []string{"-std=c11", "-O2", "-Wall", "-Wextra", "-o", ".workspace-c-build", source}
+		args := make([]string, 0, 7+len(sanitizedExtraArgs))
+		args = append(args, "-std=c11", "-O2", "-Wall", "-Wextra", "-o", ".workspace-c-build", source)
 		args = append(args, sanitizedExtraArgs...)
 		return "cc", args, nil
 	default:
@@ -444,11 +445,13 @@ func buildPythonBuildCommand(target string, extraArgs []string) (string, []strin
 
 func buildJavaBuildCommand(flavor string, extraArgs []string) (string, []string, error) {
 	if flavor == repoBuildMaven {
-		args := []string{"-q", "-DskipTests", "package"}
+		args := make([]string, 0, 3+len(extraArgs))
+		args = append(args, "-q", "-DskipTests", "package")
 		args = append(args, extraArgs...)
 		return "mvn", args, nil
 	}
-	args := []string{repoKeyBuild, "-x", "test"}
+	args := make([]string, 0, 3+len(extraArgs))
+	args = append(args, repoKeyBuild, "-x", "test")
 	args = append(args, extraArgs...)
 	return repoBuildGradle, args, nil
 }
@@ -490,7 +493,8 @@ func testCommandForProject(workspacePath string, detected projectType, target st
 		if sourceErr != nil {
 			return "", nil, sourceErr
 		}
-		args := []string{"-std=c11", "-O0", "-g", "-Wall", "-Wextra", "-o", ".workspace-c-test", source}
+		args := make([]string, 0, 8+len(sanitizedExtraArgs))
+		args = append(args, "-std=c11", "-O0", "-g", "-Wall", "-Wextra", "-o", ".workspace-c-test", source)
 		args = append(args, sanitizedExtraArgs...)
 		return "cc", args, nil
 	default:
@@ -863,7 +867,7 @@ func findCSourceFiles(workspacePath string, includeTests bool) []string {
 
 func walkCSourceEntry(workspacePath, path string, entry fs.DirEntry, err error, includeTests bool, out *[]string) error {
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // skip unreadable entries and continue walking
 	}
 	if entry.IsDir() {
 		return walkCSourceDir(workspacePath, path, entry)
@@ -876,7 +880,7 @@ func walkCSourceEntry(workspacePath, path string, entry fs.DirEntry, err error, 
 	}
 	rel, relErr := filepath.Rel(workspacePath, path)
 	if relErr != nil {
-		return nil
+		return nil //nolint:nilerr // skip unreadable entries and continue walking
 	}
 	clean := filepath.ToSlash(filepath.Clean(rel))
 	if clean == "." || strings.HasPrefix(clean, "../") {
@@ -889,7 +893,7 @@ func walkCSourceEntry(workspacePath, path string, entry fs.DirEntry, err error, 
 func walkCSourceDir(workspacePath, path string, entry fs.DirEntry) error {
 	rel, relErr := filepath.Rel(workspacePath, path)
 	if relErr != nil {
-		return nil
+		return nil //nolint:nilerr // skip unreadable entries and continue walking
 	}
 	if rel != "." && strings.Count(rel, string(filepath.Separator)) >= 3 {
 		return filepath.SkipDir

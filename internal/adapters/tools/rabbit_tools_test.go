@@ -90,6 +90,7 @@ func TestRabbitConsumeHandler_DeniesQueueOutsideProfileScopes(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.rabbit","queue":"prod.jobs"}`))
 	if err == nil {
 		t.Fatal("expected queue policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -135,6 +136,7 @@ func TestRabbitPublishHandler_DeniesReadOnlyProfile(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.rabbit","queue":"sandbox.jobs","payload":"hello"}`))
 	if err == nil {
 		t.Fatal("expected read_only policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -154,6 +156,7 @@ func TestRabbitPublishHandler_ExecutionError(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), writableRabbitSession(), json.RawMessage(`{"profile_id":"dev.rabbit","queue":"sandbox.jobs","payload":"hello"}`))
 	if err == nil {
 		t.Fatal("expected execution error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -200,6 +203,7 @@ func TestRabbitQueueInfoHandler_MapsExecutionErrors(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.rabbit","queue":"sandbox.jobs"}`))
 	if err == nil {
 		t.Fatal("expected execution error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)

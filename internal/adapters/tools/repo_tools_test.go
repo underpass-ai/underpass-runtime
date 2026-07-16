@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -33,8 +35,8 @@ func TestDetectTestCommand(t *testing.T) {
 	}
 
 	rootPy := t.TempDir()
-	if err := os.WriteFile(filepath.Join(rootPy, "pyproject.toml"), []byte("[project]\nname='x'\n"), 0o644); err != nil {
-		t.Fatalf("write pyproject failed: %v", err)
+	if writeErr := os.WriteFile(filepath.Join(rootPy, "pyproject.toml"), []byte("[project]\nname='x'\n"), 0o644); writeErr != nil {
+		t.Fatalf("write pyproject failed: %v", writeErr)
 	}
 	cmd, args, err = detectTestCommand(rootPy, "tests/unit", []string{"-k", "abc"})
 	if err != nil {
@@ -45,8 +47,8 @@ func TestDetectTestCommand(t *testing.T) {
 	}
 
 	rootNpm := t.TempDir()
-	if err := os.WriteFile(filepath.Join(rootNpm, "package.json"), []byte("{}"), 0o644); err != nil {
-		t.Fatalf("write package failed: %v", err)
+	if writeErr := os.WriteFile(filepath.Join(rootNpm, "package.json"), []byte("{}"), 0o644); writeErr != nil {
+		t.Fatalf("write package failed: %v", writeErr)
 	}
 	cmd, args, err = detectTestCommand(rootNpm, "--grep demo", nil)
 	if err != nil {
@@ -164,8 +166,8 @@ func TestDetectBuildCommand_RustAndC(t *testing.T) {
 	}
 
 	rootC := t.TempDir()
-	if err := os.WriteFile(filepath.Join(rootC, "main.c"), []byte("int main(){return 0;}"), 0o644); err != nil {
-		t.Fatalf("write main.c failed: %v", err)
+	if writeErr := os.WriteFile(filepath.Join(rootC, "main.c"), []byte("int main(){return 0;}"), 0o644); writeErr != nil {
+		t.Fatalf("write main.c failed: %v", writeErr)
 	}
 	cmd, args, err = detectBuildCommand(rootC, "", nil)
 	if err != nil {
@@ -233,6 +235,7 @@ func TestRepoBuildInvoke_DeniesDisallowedExtraArgs(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"extra_args":["-exec=cat"]}`))
 	if err == nil {
 		t.Fatal("expected invalid argument error")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("unexpected error code: %s", err.Code)
@@ -362,5 +365,45 @@ func TestRepoExtraArgAllowlists(t *testing.T) {
 	}
 	if hasDangerousArgSyntax("safe;rm -rf /") == false {
 		t.Fatal("expected dangerous arg syntax to be detected")
+	}
+}
+
+type fakeCSourceDirEntry struct {
+	name string
+	dir  bool
+}
+
+func (f fakeCSourceDirEntry) Name() string { return f.name }
+func (f fakeCSourceDirEntry) IsDir() bool  { return f.dir }
+func (f fakeCSourceDirEntry) Type() fs.FileMode {
+	if f.dir {
+		return fs.ModeDir
+	}
+	return 0
+}
+func (f fakeCSourceDirEntry) Info() (fs.FileInfo, error) { return nil, fs.ErrInvalid }
+
+func TestWalkCSourceEntry_SkipsUnreadableAndUnrelatablePaths(t *testing.T) {
+	out := make([]string, 0, 2)
+
+	// Walk callback errors are swallowed so the scan continues.
+	if err := walkCSourceEntry("ws", "ws/broken", nil, errors.New("permission denied"), true, &out); err != nil {
+		t.Fatalf("expected walk error to be skipped, got %v", err)
+	}
+
+	// A .c file that cannot be made workspace-relative is skipped.
+	entry := fakeCSourceDirEntry{name: "orphan.c"}
+	if err := walkCSourceEntry("relative-ws", "/absolute/orphan.c", entry, nil, true, &out); err != nil {
+		t.Fatalf("expected unrelatable file to be skipped, got %v", err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("expected no collected sources, got %#v", out)
+	}
+}
+
+func TestWalkCSourceDir_SkipsUnrelatableDirectory(t *testing.T) {
+	entry := fakeCSourceDirEntry{name: "orphan", dir: true}
+	if err := walkCSourceDir("relative-ws", "/absolute/orphan", entry); err != nil {
+		t.Fatalf("expected unrelatable directory to be skipped, got %v", err)
 	}
 }

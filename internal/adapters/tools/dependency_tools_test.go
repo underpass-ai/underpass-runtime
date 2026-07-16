@@ -119,6 +119,7 @@ func TestSBOMGenerateHandler_RejectsUnsupportedFormat(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"format":"spdx-json"}`))
 	if err == nil {
 		t.Fatal("expected invalid format error")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf("unexpected error code: %s", err.Code)

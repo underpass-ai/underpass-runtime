@@ -39,6 +39,7 @@ func TestEngineInvokeAndNotFound(t *testing.T) {
 	_, err = engine.Invoke(context.Background(), session, domain.Capability{Name: "missing.tool"}, json.RawMessage(`{}`))
 	if err == nil {
 		t.Fatal("expected not found error")
+		return
 	}
 	if err.Code != app.ErrorCodeNotFound {
 		t.Fatalf("unexpected code: %s", err.Code)

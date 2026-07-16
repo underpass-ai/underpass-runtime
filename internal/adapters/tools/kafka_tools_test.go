@@ -88,6 +88,7 @@ func TestKafkaConsumeHandler_DeniesTopicOutsideProfileScopes(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.kafka","topic":"prod.events"}`))
 	if err == nil {
 		t.Fatal("expected topic policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -133,6 +134,7 @@ func TestKafkaProduceHandler_DeniesReadOnlyProfile(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.kafka","topic":"sandbox.events","value":"hello"}`))
 	if err == nil {
 		t.Fatal("expected read_only policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -152,6 +154,7 @@ func TestKafkaProduceHandler_ExecutionError(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), writableKafkaSession(), json.RawMessage(`{"profile_id":"dev.kafka","topic":"sandbox.events","value":"hello"}`))
 	if err == nil {
 		t.Fatal("expected execution error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -200,6 +203,7 @@ func TestKafkaConsumeHandler_MapsExecutionErrors(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.kafka","topic":"sandbox.events"}`))
 	if err == nil {
 		t.Fatal("expected execution error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)

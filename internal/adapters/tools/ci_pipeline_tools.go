@@ -309,9 +309,10 @@ func annotatePipelineStepError(err *domain.Error, stepName string) *domain.Error
 	if err == nil {
 		return nil
 	}
-	if err.Code == app.ErrorCodeTimeout {
+	switch err.Code {
+	case app.ErrorCodeTimeout:
 		err.Message = "pipeline step timed out: " + stepName
-	} else if err.Code == app.ErrorCodeExecutionFailed {
+	case app.ErrorCodeExecutionFailed:
 		err.Message = "pipeline step failed: " + stepName
 	}
 	return err

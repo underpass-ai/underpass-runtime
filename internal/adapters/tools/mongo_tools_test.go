@@ -68,6 +68,7 @@ func TestMongoFindHandler_DeniesDatabaseOutsideProfileScopes(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.mongo","database":"prod","collection":"todos"}`))
 	if err == nil {
 		t.Fatal("expected database policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf("unexpected error code: %s", err.Code)
@@ -115,6 +116,7 @@ func TestMongoAggregateHandler_MapsExecutionErrors(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.mongo","database":"sandbox","collection":"todos","pipeline":[]}`))
 	if err == nil {
 		t.Fatal("expected execution error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("unexpected error code: %s", err.Code)

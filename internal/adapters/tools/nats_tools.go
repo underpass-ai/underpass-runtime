@@ -364,7 +364,7 @@ func (c *liveNATSClient) Request(ctx context.Context, serverURL, subject string,
 	if err != nil {
 		return nil, err
 	}
-	defer nc.Drain()
+	defer func() { _ = nc.Drain() }()
 
 	requestCtx := ctx
 	cancel := func() { /* no-op; replaced below if timeout is set */ }
@@ -385,7 +385,7 @@ func (c *liveNATSClient) Publish(ctx context.Context, serverURL, subject string,
 	if err != nil {
 		return err
 	}
-	defer nc.Drain()
+	defer func() { _ = nc.Drain() }()
 
 	if err := nc.Publish(subject, payload); err != nil {
 		return err
@@ -405,7 +405,7 @@ func (c *liveNATSClient) SubscribePull(ctx context.Context, serverURL, subject s
 	if err != nil {
 		return nil, err
 	}
-	defer nc.Drain()
+	defer func() { _ = nc.Drain() }()
 
 	sub, err := nc.SubscribeSync(subject)
 	if err != nil {

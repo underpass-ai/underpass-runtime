@@ -396,7 +396,7 @@ func (c *liveRabbitClient) QueueInfo(ctx context.Context, req rabbitQueueInfoReq
 	defer closeFn()
 	_ = conn
 
-	queue, err := ch.QueueInspect(req.Queue)
+	queue, err := ch.QueueDeclarePassive(req.Queue, false, false, false, false, nil)
 	if err != nil {
 		return rabbitQueueInfo{}, err
 	}

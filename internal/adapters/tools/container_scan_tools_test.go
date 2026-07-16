@@ -415,6 +415,7 @@ func TestApplyHeuristicFallback_ScanHeuristicsError(t *testing.T) {
 	)
 	if domErr == nil {
 		t.Fatal("expected domain error when scanContainerHeuristics fails")
+		return
 	}
 	if domErr.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("expected ErrorCodeExecutionFailed, got %s", domErr.Code)

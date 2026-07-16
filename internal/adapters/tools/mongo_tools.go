@@ -284,7 +284,7 @@ func (c *liveMongoClient) Find(ctx context.Context, req mongoFindRequest) ([]map
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	out := make([]map[string]any, 0, req.Limit)
 	for cursor.Next(ctx) {
@@ -322,7 +322,7 @@ func (c *liveMongoClient) Aggregate(ctx context.Context, req mongoAggregateReque
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	out := make([]map[string]any, 0, req.Limit)
 	for cursor.Next(ctx) {

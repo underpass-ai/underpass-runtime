@@ -97,7 +97,7 @@ func (h *GitHubCheckPRStatusHandler) Invoke(ctx context.Context, session domain.
 		if err != nil {
 			select {
 			case <-ctx.Done():
-				return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeTimeout, Message: "context cancelled while waiting for checks", Retryable: false}
+				return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeTimeout, Message: "context canceled while waiting for checks", Retryable: false}
 			case <-time.After(10 * time.Second):
 				continue
 			}
@@ -111,7 +111,7 @@ func (h *GitHubCheckPRStatusHandler) Invoke(ctx context.Context, session domain.
 		if err := json.Unmarshal([]byte(result.Output), &checks); err != nil {
 			select {
 			case <-ctx.Done():
-				return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeTimeout, Message: "context cancelled while waiting for checks", Retryable: false}
+				return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeTimeout, Message: "context canceled while waiting for checks", Retryable: false}
 			case <-time.After(10 * time.Second):
 				continue
 			}
@@ -124,7 +124,9 @@ func (h *GitHubCheckPRStatusHandler) Invoke(ctx context.Context, session domain.
 				allPassed = false
 				continue
 			}
-			if check.Conclusion == "FAILURE" || check.Conclusion == "CANCELLED" {
+			// The GitHub CheckConclusionState enum uses the British two-L spelling;
+			// keep the literal verbatim so a canceled run still matches.
+			if check.Conclusion == "FAILURE" || check.Conclusion == "CANCELLED" { //nolint:misspell // GitHub API enum value
 				anyFailed = true
 			}
 		}
@@ -138,7 +140,7 @@ func (h *GitHubCheckPRStatusHandler) Invoke(ctx context.Context, session domain.
 
 		select {
 		case <-ctx.Done():
-			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeTimeout, Message: "context cancelled while waiting for checks", Retryable: false}
+			return app.ToolRunResult{}, &domain.Error{Code: app.ErrorCodeTimeout, Message: "context canceled while waiting for checks", Retryable: false}
 		case <-time.After(10 * time.Second):
 		}
 	}

@@ -492,6 +492,7 @@ func TestResolveConstraintsFile(t *testing.T) {
 		_, err := resolveConstraintsFile(localFileExists(t.TempDir()), "missing.txt")
 		if err == nil {
 			t.Fatal("expected error for missing file")
+			return
 		}
 		if err.Code != app.ErrorCodeInvalidArgument {
 			t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
@@ -501,6 +502,7 @@ func TestResolveConstraintsFile(t *testing.T) {
 		_, err := resolveConstraintsFile(localFileExists(t.TempDir()), "../../../etc/passwd")
 		if err == nil {
 			t.Fatal("expected error for path traversal")
+			return
 		}
 		if err.Code != app.ErrorCodeInvalidArgument {
 			t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)

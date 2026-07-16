@@ -157,6 +157,7 @@ func TestContainerDockerAdapter_PS_ListError(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), dockerSession(), nil)
 	if err == nil {
 		t.Fatal("expected error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf("expected execution_failed, got %s", err.Code)

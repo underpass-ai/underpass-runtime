@@ -77,6 +77,7 @@ func TestArtifactUploadHandler_PathRequired(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"name":"x.txt"}`))
 	if err == nil {
 		t.Fatal("expected invalid_argument error")
+		return
 	}
 	if err.Code != "invalid_argument" {
 		t.Fatalf(testExpectedInvalidArgumentFmt, err.Code)
@@ -203,6 +204,7 @@ func TestArtifactDownloadHandler_KubernetesRequiresRunner(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"path":"a.txt","encoding":"base64"}`))
 	if err == nil {
 		t.Fatal("expected execution_failed without runner")
+		return
 	}
 	if err.Code != "execution_failed" {
 		t.Fatalf("expected execution_failed, got %s", err.Code)
@@ -328,8 +330,20 @@ func TestCollectFlatArtifactEntries_NonExistentDirectory(t *testing.T) {
 	_, err := collectFlatArtifactEntries(workspace, nonExistent, "", 10)
 	if err == nil {
 		t.Fatal("expected error for non-existent directory")
+		return
 	}
 	if err.Code != "execution_failed" {
 		t.Fatalf("expected execution_failed, got %s", err.Code)
+	}
+}
+
+func TestCollectRecursiveArtifactEntries_WalkErrorIsSkipped(t *testing.T) {
+	workspace := t.TempDir()
+	nonExistent := filepath.Join(workspace, "does-not-exist")
+
+	entries := make([]artifactListEntry, 0, 4)
+	collectRecursiveArtifactEntries(&entries, workspace, nonExistent, "", 10)
+	if len(entries) != 0 {
+		t.Fatalf("expected no entries when walk root is unreadable, got %d", len(entries))
 	}
 }

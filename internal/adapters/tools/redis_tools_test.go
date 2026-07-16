@@ -119,6 +119,7 @@ func TestRedisGetHandler_DeniesKeyOutsideProfileScopes(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.redis","key":"prod:secret"}`))
 	if err == nil {
 		t.Fatal(testErrMsgKeyDenial)
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -166,6 +167,7 @@ func TestRedisScanHandler_DeniesShortWideningPrefix(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.redis","prefix":"s"}`))
 	if err == nil {
 		t.Fatal("expected redis.scan to deny a widening prefix")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -185,6 +187,7 @@ func TestRedisExistsHandler_MapsExecutionErrors(t *testing.T) {
 	_, err := handler.Invoke(context.Background(), session, json.RawMessage(`{"profile_id":"dev.redis","keys":["sandbox:todo:1"]}`))
 	if err == nil {
 		t.Fatal("expected execution error")
+		return
 	}
 	if err.Code != app.ErrorCodeExecutionFailed {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -238,6 +241,7 @@ func TestRedisSetHandler_RequiresTTL(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected invalid ttl error")
+		return
 	}
 	if err.Code != app.ErrorCodeInvalidArgument {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -255,6 +259,7 @@ func TestRedisSetHandler_DeniesKeyOutsideProfileScopes(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal(testErrMsgKeyDenial)
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -274,6 +279,7 @@ func TestRedisSetHandler_DeniesReadOnlyProfile(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected read_only policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -325,6 +331,7 @@ func TestRedisDelHandler_DeniesKeyOutsideProfileScopes(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal(testErrMsgKeyDenial)
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -344,6 +351,7 @@ func TestRedisDelHandler_DeniesReadOnlyProfile(t *testing.T) {
 	)
 	if err == nil {
 		t.Fatal("expected read_only policy denial")
+		return
 	}
 	if err.Code != app.ErrorCodePolicyDenied {
 		t.Fatalf(testErrMsgUnexpectedCode, err.Code)
@@ -530,5 +538,36 @@ func TestRedisHelpers_ProfileResolutionAndValueCoercion(t *testing.T) {
 	}
 	if string(redisValueToBytes(123)) != "123" {
 		t.Fatal("unexpected redis numeric coercion")
+	}
+}
+
+func TestLiveRedisClientMethods_UnreachableEndpoint(t *testing.T) {
+	client := &liveRedisClient{}
+	// Port 1 is never bound; go-redis dials lazily, so each call opens the
+	// client, registers cleanup, and surfaces the dial error from the command.
+	endpoint := "127.0.0.1:1"
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	if _, err := client.Get(ctx, endpoint, "k"); err == nil {
+		t.Fatal("expected get dial error")
+	}
+	if _, err := client.MGet(ctx, endpoint, []string{"k"}); err == nil {
+		t.Fatal("expected mget dial error")
+	}
+	if _, _, err := client.Scan(ctx, endpoint, 0, "sandbox:*", 10); err == nil {
+		t.Fatal("expected scan dial error")
+	}
+	if _, err := client.TTL(ctx, endpoint, "k"); err == nil {
+		t.Fatal("expected ttl dial error")
+	}
+	if _, err := client.Exists(ctx, endpoint, []string{"k"}); err == nil {
+		t.Fatal("expected exists dial error")
+	}
+	if client.Set(ctx, endpoint, "k", []byte("v"), time.Second) == nil {
+		t.Fatal("expected set dial error")
+	}
+	if _, err := client.Del(ctx, endpoint, []string{"k"}); err == nil {
+		t.Fatal("expected del dial error")
 	}
 }

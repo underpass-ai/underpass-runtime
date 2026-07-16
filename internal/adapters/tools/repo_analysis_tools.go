@@ -790,7 +790,7 @@ func runRepoSymbolSearch(
 
 func summarizeChangedFiles(output, mode string, includeUntracked bool, maxFiles int) []repoChangedFile {
 	rawLines := strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n")
-	files := make([]repoChangedFile, 0, minInt(len(rawLines), maxFiles))
+	var files []repoChangedFile
 
 	resolvedMode := resolveChangedFilesMode(mode, rawLines)
 	if resolvedMode == repoAnalysisKeyWorkingTree {
