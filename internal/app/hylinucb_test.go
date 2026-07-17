@@ -209,7 +209,7 @@ func TestUpdateOnlineBandit_LearnsFromExecutions(t *testing.T) {
 
 	// Recommend derives the bandit instance key with an empty tool name, so
 	// updateOnlineBandit must target the same tool-independent signature.
-	banditSig := DeriveContextSignature(session, "", digest)
+	banditSig := DeriveContextSignature(session, digest)
 	if banditSig != "general:go:standard" {
 		t.Fatalf("unexpected bandit sig %q", banditSig)
 	}
@@ -250,7 +250,7 @@ func TestUpdateOnlineBandit_SkipsNonExecutions(t *testing.T) {
 	mgr := NewHyLinUCBManager()
 	session := domain.Session{}
 	digest := ContextDigest{RepoLanguage: "go"}
-	banditSig := DeriveContextSignature(session, "", digest)
+	banditSig := DeriveContextSignature(session, digest)
 	_ = mgr.GetScorer(banditSig)
 
 	policy := ToolPolicy{ToolID: "fs.edit", ContextSignature: banditSig, NSamples: 30}

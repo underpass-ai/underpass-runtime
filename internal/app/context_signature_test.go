@@ -6,40 +6,15 @@ import (
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
-func TestClassifyTaskFamily(t *testing.T) {
-	cases := []struct {
-		tool   string
-		family string
-	}{
-		{"fs.list", "io"},
-		{"fs.write_file", "io"},
-		{"git.status", "vcs"},
-		{"git.push", "vcs"},
-		{"docker.build", "build"},
-		{"k8s.apply", "deploy"},
-		{"api.call", "network"},
-		{"mongo.query", "data"},
-		{"shell.exec", "exec"},
-		{"test.run", "quality"},
-		{"unknown.tool", "general"},
-	}
-	for _, tc := range cases {
-		got := classifyTaskFamily(tc.tool)
-		if got != tc.family {
-			t.Errorf("classifyTaskFamily(%q) = %q, want %q", tc.tool, got, tc.family)
-		}
-	}
-}
-
 func TestDeriveContextSignature(t *testing.T) {
 	session := domain.Session{
 		Principal: domain.Principal{Roles: []string{"developer"}},
 	}
 	digest := ContextDigest{RepoLanguage: "go"}
 
-	sig := DeriveContextSignature(session, "fs.write_file", digest)
-	if sig != "io:go:standard" {
-		t.Errorf("got %q, want io:go:standard", sig)
+	sig := DeriveContextSignature(session, digest)
+	if sig != "general:go:standard" {
+		t.Errorf("got %q, want general:go:standard", sig)
 	}
 }
 
@@ -50,9 +25,21 @@ func TestDeriveContextSignature_HighConstraints(t *testing.T) {
 	}
 	digest := ContextDigest{RepoLanguage: "python"}
 
-	sig := DeriveContextSignature(session, "git.push", digest)
-	if sig != "vcs:python:constraints_high" {
-		t.Errorf("got %q, want vcs:python:constraints_high", sig)
+	sig := DeriveContextSignature(session, digest)
+	if sig != "general:python:constraints_high" {
+		t.Errorf("got %q, want general:python:constraints_high", sig)
+	}
+}
+
+func TestDeriveContextSignature_LowConstraints(t *testing.T) {
+	session := domain.Session{
+		Principal: domain.Principal{Roles: []string{"platform_admin"}},
+	}
+	digest := ContextDigest{RepoLanguage: "go"}
+
+	sig := DeriveContextSignature(session, digest)
+	if sig != "general:go:constraints_low" {
+		t.Errorf("got %q, want general:go:constraints_low", sig)
 	}
 }
 
@@ -62,8 +49,8 @@ func TestDeriveContextSignature_UnknownLanguage(t *testing.T) {
 	}
 	digest := ContextDigest{}
 
-	sig := DeriveContextSignature(session, "docker.build", digest)
-	if sig != "build:unknown:standard" {
-		t.Errorf("got %q, want build:unknown:standard", sig)
+	sig := DeriveContextSignature(session, digest)
+	if sig != "general:unknown:standard" {
+		t.Errorf("got %q, want general:unknown:standard", sig)
 	}
 }

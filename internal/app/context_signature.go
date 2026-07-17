@@ -1,48 +1,26 @@
 package app
 
 import (
-	"strings"
-
 	"github.com/underpass-ai/underpass-runtime/internal/domain"
 )
 
-// DeriveContextSignature computes a context grouping key from the session,
-// tool name, and workspace digest. This key maps to the same format used
-// by the tool-learning pipeline: "task_family:lang:constraints_class".
-func DeriveContextSignature(session domain.Session, toolName string, digest ContextDigest) string {
-	family := classifyTaskFamily(toolName)
+// DeriveContextSignature computes a context grouping key from the session and
+// workspace digest. This key maps to the same format used by the tool-learning
+// pipeline: "task_family:lang:constraints_class".
+//
+// The task-family slot is fixed to "general": the signature describes the
+// bandit context (environment + constraints), while the tool is the arm and
+// already identifies every policy key and telemetry record on its own.
+// Deriving the family from the invoked tool would shard write-side policies
+// across keys that the recommend path — which runs before any tool is chosen —
+// can never query. The slot is reserved for a task classifier (e.g. from
+// ceremony/task metadata) that can feed the write and read paths symmetrically.
+func DeriveContextSignature(session domain.Session, digest ContextDigest) string {
 	lang := digest.RepoLanguage
 	if lang == "" {
 		lang = "unknown"
 	}
-	constraints := classifyConstraints(session)
-	return family + ":" + lang + ":" + constraints
-}
-
-// classifyTaskFamily maps a tool name prefix to a canonical task family.
-// Mirrors the families used in tool-learning's context_signature.go.
-func classifyTaskFamily(toolName string) string {
-	prefix, _, _ := strings.Cut(toolName, ".")
-	switch prefix {
-	case "fs":
-		return "io"
-	case "git":
-		return "vcs"
-	case "docker", "container":
-		return "build"
-	case "k8s", "kubectl":
-		return "deploy"
-	case "api", "http":
-		return "network"
-	case "db", "mongo", "postgres", "sql":
-		return "data"
-	case "shell", "exec":
-		return "exec"
-	case "test", "lint", "check":
-		return "quality"
-	default:
-		return "general"
-	}
+	return "general:" + lang + ":" + classifyConstraints(session)
 }
 
 // classifyConstraints derives a constraints class from the session metadata.
