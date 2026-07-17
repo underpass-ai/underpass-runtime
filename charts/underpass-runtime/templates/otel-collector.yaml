@@ -120,6 +120,12 @@ data:
         verbosity: basic
         sampling_initial: 2
         sampling_thereafter: 100
+      {{- if (default (dict) .Values.otelCollector.tempo).enabled }}
+      otlp/tempo:
+        endpoint: {{ .Values.otelCollector.tempo.endpoint }}
+        tls:
+          insecure: {{ .Values.otelCollector.tempo.insecure }}
+      {{- end }}
     service:
       extensions: [health_check]
       pipelines:
@@ -130,7 +136,11 @@ data:
         traces:
           receivers: [otlp]
           processors: [batch]
+          {{- if (default (dict) .Values.otelCollector.tempo).enabled }}
+          exporters: [debug, otlp/tempo]
+          {{- else }}
           exporters: [debug]
+          {{- end }}
 ---
 {{- if $.Values.serviceMonitor.enabled }}
 apiVersion: monitoring.coreos.com/v1
