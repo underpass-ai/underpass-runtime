@@ -164,7 +164,12 @@ the workspace:
 context_signature = task_family:language:constraints_class
 ```
 
-- **task_family**: io, vcs, build, deploy, network, data, exec, quality, general
+- **task_family**: fixed to `general`. The signature describes the bandit
+  *context* (environment + constraints) while the tool is the *arm*, carried
+  separately by `tool_id`. The slot is reserved for a task classifier (e.g.
+  ceremony/task metadata) that can feed the write and read paths symmetrically —
+  deriving it from the invoked tool would shard policies under keys the
+  recommend path (which runs before any tool is chosen) never queries.
 - **language**: go, python, javascript, rust, java, unknown
 - **constraints_class**: standard, constraints_high (AllowedPaths set), constraints_low (platform_admin)
 

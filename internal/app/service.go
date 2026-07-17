@@ -1211,9 +1211,11 @@ func (s *Service) recordTelemetry(ctx context.Context, session domain.Session, i
 	if idx := strings.IndexByte(inv.ToolName, '.'); idx > 0 {
 		toolFamily = inv.ToolName[:idx]
 	}
-	// Derive context signal for learning pipeline consumption.
+	// Derive context signal for learning pipeline consumption. This MUST be
+	// the same signature Recommend queries (tool-independent): the tool is
+	// the bandit arm, carried by ToolName/ToolFamily, never by the context.
 	digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
-	contextSig := DeriveContextSignature(session, inv.ToolName, digest)
+	contextSig := DeriveContextSignature(session, digest)
 	approved := inv.Status != domain.InvocationStatusDenied
 
 	rec := TelemetryRecord{
@@ -1244,10 +1246,9 @@ func (s *Service) recordTelemetry(ctx context.Context, session domain.Session, i
 }
 
 // updateOnlineBandit feeds an invocation outcome to the online HyLinUCB
-// contextual bandit so it learns from real executions. It uses the
-// tool-independent context signature so the update targets the same instance
-// created during Recommend (which derives the signature with an empty tool
-// name). Only executed invocations (succeeded/failed) carry a reward signal;
+// contextual bandit so it learns from real executions. The context signature
+// is tool-independent, so the update targets the same instance created during
+// Recommend. Only executed invocations (succeeded/failed) carry a reward signal;
 // policy denials and in-flight invocations are skipped because they reflect
 // governance decisions, not tool efficacy. Missing policy data or a context
 // that was never recommended makes this a no-op — the loop only closes for
@@ -1259,7 +1260,7 @@ func (s *Service) updateOnlineBandit(ctx context.Context, session domain.Session
 	if inv.Status != domain.InvocationStatusSucceeded && inv.Status != domain.InvocationStatusFailed {
 		return
 	}
-	banditSig := DeriveContextSignature(session, "", digest)
+	banditSig := DeriveContextSignature(session, digest)
 	pol, found, err := s.policyLearned.ReadPolicy(ctx, banditSig, inv.ToolName)
 	if err != nil || !found {
 		return

@@ -98,11 +98,11 @@ func (s *Service) RecommendTools(ctx context.Context, sessionID string, taskHint
 			neuralWeights, _ = UnmarshalMLPWeights(warmModel)
 		}
 		digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
-		contextSig = DeriveContextSignature(session, "", digest)
+		contextSig = DeriveContextSignature(session, digest)
 	} else {
 		allStats, _ = s.telemetryQ.AllToolStats(ctx)
 		digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
-		contextSig = DeriveContextSignature(session, "", digest)
+		contextSig = DeriveContextSignature(session, digest)
 		if s.policyLearned != nil {
 			learnedPolicies, _ = s.policyLearned.ReadPoliciesForContext(ctx, contextSig)
 		}

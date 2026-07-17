@@ -70,7 +70,7 @@ func (svc *Service) prewarmSession(session domain.Session) {
 
 		// Derive context signature
 		digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
-		contextSig := DeriveContextSignature(session, "", digest)
+		contextSig := DeriveContextSignature(session, digest)
 
 		// Load policies
 		var policies map[string]ToolPolicy

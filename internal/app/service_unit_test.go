@@ -1066,6 +1066,40 @@ func TestDenyInvocation_RecordsTelemetryWithContextSignature(t *testing.T) {
 	}
 }
 
+func TestInvokeTool_TelemetryContextSignatureIsToolIndependent(t *testing.T) {
+	session := defaultSession()
+	capability := defaultCapability() // fs.read — a family-mapped prefix
+
+	telRec := &capturingTelemetryRecorder{}
+	svc := newServiceForTest(
+		&fakeWorkspaceManager{session: session, found: true},
+		&fakeCatalog{entries: map[string]domain.Capability{capability.Name: capability}},
+		&fakePolicyEngine{decision: PolicyDecision{Allow: true}},
+		&fakeToolEngine{result: ToolRunResult{Output: map[string]any{"ok": true}}},
+		&fakeArtifactStore{},
+	)
+	svc.SetTelemetry(telRec, noopTelemetryQuerier{})
+
+	_, svcErr := svc.InvokeTool(context.Background(), session.ID, capability.Name, InvokeToolRequest{Args: json.RawMessage(`{}`)})
+	if svcErr != nil {
+		t.Fatalf("invocation failed: %v", svcErr)
+	}
+	if len(telRec.records) == 0 {
+		t.Fatal("expected telemetry record")
+	}
+	rec := telRec.records[0]
+	// The signature is the bandit context and the tool is the arm: fs.read
+	// must NOT leak its family into the signature, or the learning pipeline
+	// stores policies under keys that Recommend — which runs before any tool
+	// is chosen — never queries.
+	if !strings.HasPrefix(rec.ContextSig, "general:") {
+		t.Fatalf("context signature leaked the tool family: %q", rec.ContextSig)
+	}
+	if rec.ToolFamily != "fs" {
+		t.Fatalf("expected tool family in its own column, got %q", rec.ToolFamily)
+	}
+}
+
 func TestDenyInvocation_RateLimit_RecordsTelemetry(t *testing.T) {
 	t.Setenv("WORKSPACE_RATE_LIMIT_PER_MINUTE", "1")
 

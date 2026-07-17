@@ -27,6 +27,11 @@ Colon-separated categorical dimensions:
 
 Full format: `{task_family}:{lang}:{constraints_class}`
 
+The runtime currently emits `general` for `task_family` on both the telemetry
+write path and the recommendation read path: no task classifier exists yet.
+This dimension describes the task being performed, never the invoked tool —
+the tool is already carried by the key's `tool_id`.
+
 ## Valkey Value Schema (JSON)
 
 ```json

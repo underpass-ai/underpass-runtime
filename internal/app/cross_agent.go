@@ -107,7 +107,7 @@ func (s *Service) GetCrossAgentInsight(ctx context.Context, sessionID string) (C
 	}
 
 	digest := BuildContextDigest(ctx, session.WorkspacePath, nil, nil)
-	contextSig := DeriveContextSignature(session, "", digest)
+	contextSig := DeriveContextSignature(session, digest)
 
 	allStats, _ := s.telemetryQ.AllToolStats(ctx)
 
