@@ -17,8 +17,11 @@ COPY e2e/gen                    /app/gen
 # The tool catalog drives the per-tool case matrix.
 COPY internal/adapters/tools/catalog_defaults.yaml /app/catalog_defaults.yaml
 
-# The per-tool matrix runner.
+# The per-tool matrix runner, its spec loader, and the adversarial spec matrix
+# (spec_runner resolves SPECS_DIR relative to its own location: /app/specs).
 COPY e2e/tests/00-tool-matrix/test_tool_matrix.py /app/tests/00/test.py
+COPY e2e/tests/00-tool-matrix/spec_runner.py      /app/spec_runner.py
+COPY e2e/tests/00-tool-matrix/specs               /app/specs
 
 RUN groupadd -r testuser && useradd -r -m -g testuser -u 1000 testuser && \
     chown -R testuser:testuser /app

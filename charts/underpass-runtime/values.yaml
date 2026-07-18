@@ -314,6 +314,14 @@ otelCollector:
   image:
     repository: docker.io/otel/opentelemetry-collector-contrib
     tag: "0.127.0"
+  # -- Optional OTLP/gRPC trace export to a Tempo distributor. When enabled,
+  # the collector adds an otlp/tempo exporter to the traces pipeline.
+  tempo:
+    enabled: false
+    # -- OTLP gRPC endpoint of the Tempo distributor
+    endpoint: tempo.monitoring.svc.cluster.local:4317
+    # -- Skip TLS for the Tempo connection (in-cluster plaintext)
+    insecure: true
   resources:
     requests:
       cpu: 100m

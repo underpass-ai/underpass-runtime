@@ -8,6 +8,9 @@ nameOverride: e2e
 # public images so the suite stays dependency-free.
 registry: ghcr.io/underpass-ai/underpass-runtime
 
+# -- Pull secrets for private registry images (e.g. the git fixture)
+imagePullSecrets: []
+
 # ── Stateful/stateless backends ─────────────────────────────────────────────
 # Generic deployment+service per backend (templates/backends.yaml). Each entry
 # becomes Deployment `e2e-<name>` + Service `e2e-<name>` on the listed port.
