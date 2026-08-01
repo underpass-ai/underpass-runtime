@@ -3,8 +3,8 @@
 # scanners/load tools it lacks (trivy, syft, k6) by copying prebuilt binaries
 # from their official images. Avoids re-running apt-get / re-downloading
 # toolchains, which failed on transient network errors.
-FROM docker.io/aquasec/trivy:0.71.1 AS trivy
-FROM docker.io/anchore/syft:v1.45.1 AS syft
+FROM docker.io/aquasec/trivy:0.72.0 AS trivy
+FROM docker.io/anchore/syft:v1.50.0 AS syft
 FROM docker.io/grafana/k6:0.53.0 AS k6
 
 FROM ghcr.io/underpass-ai/underpass-runtime/runner:gh-20260404235607
