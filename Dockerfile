@@ -7,7 +7,7 @@
 # backend) or in-process (local backend). Runner images with git, bash,
 # etc. live in runner-images/.
 
-FROM docker.io/library/golang:1.26-alpine AS builder
+FROM docker.io/library/golang:1.27-alpine AS builder
 WORKDIR /src
 
 RUN apk add --no-cache git ca-certificates
