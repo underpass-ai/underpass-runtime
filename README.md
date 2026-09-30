@@ -1,5 +1,9 @@
 # Underpass Runtime
 
+> **Historical project.** [AXLR](https://github.com/underpass-ai/AXLR) is the
+> current Underpass AI agentic execution runtime. This repository preserves the
+> earlier execution-plane implementation and its documentation.
+
 [![CI](https://github.com/underpass-ai/underpass-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/underpass-ai/underpass-runtime/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/underpass-ai/underpass-runtime/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/underpass-ai/underpass-runtime/security/code-scanning)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
