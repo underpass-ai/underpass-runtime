@@ -161,7 +161,7 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
       - name: Run govulncheck
         # Non-blocking until Go 1.25.8 lands in CI (GO-2026-4601, GO-2026-4602)
